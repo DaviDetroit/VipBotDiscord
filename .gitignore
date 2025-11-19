@@ -1,2 +1,6 @@
 .env
 BancoDadosVip/
+musicas_temp/
+.vscode/
+Jupyter/
+.ipynb_checkpoints/
