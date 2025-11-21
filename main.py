@@ -182,8 +182,7 @@ async def on_ready():
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
 
-    if not verificar_jogos.is_running():
-        verificar_jogos.start()
+    
 
     # ===== Verificador de gols =====
     if await jogos_ao_vivo():
@@ -1480,86 +1479,20 @@ EMOJI_TIMES = {
     "japao":"<:imagem_20251111_092122937:1437779251729272903>",
     "eua":"<:imagem_20251111_092151751:1437779372940464138>",
     "senegal":"<:imagem_20251111_092227325:1437779522157281290>",
-    "tunisia":"<:imagem_20251111_092254095:1437779634191208518>"
+    "tunisia":"<:imagem_20251111_092254095:1437779634191208518>",
+    "lanus":"<:Lanus:1441436509281718383>"
+
+
+
 }
 
-JOGOS_AGENDADOS = []
-
-@bot.command()
-async def jogo(ctx, time1: str, time2: str, horario: str):
-    """
-    Agendar jogo sem banco de dados.
-    """
-
-    # Normaliza times
-    t1 = time1.lower()
-    t2 = time2.lower()
-
-    # Verifica se existem no dicionário
-    if t1 not in EMOJI_TIMES or t2 not in EMOJI_TIMES:
-        return await ctx.send("❌ Time não encontrado no dicionário de emojis!")
-
-    emoji1 = EMOJI_TIMES[t1]
-    emoji2 = EMOJI_TIMES[t2]
-
-    # --- Converte horário ---
-    try:
-        tz = pytz.timezone("America/Sao_Paulo")
-        dt = datetime.strptime(horario, "%H:%M")
-        dt = tz.localize(dt)
-        hora_formatada = dt.strftime("%H:%M")
-    except:
-        return await ctx.send("❌ Horário inválido! Use HH:MM")
-
-    # Salva apenas em memória
-    JOGOS_AGENDADOS.append({
-        "time1": time1.upper(),
-        "time2": time2.upper(),
-        "emoji1": emoji1,
-        "emoji2": emoji2,
-        "horario": hora_formatada,
-        "user_id": ctx.author.id
-    })
-
-    # Mensagem no canal
-    await ctx.send(
-        f"📅 **Jogo agendado!**\n"
-        f"{emoji1} **{time1.upper()}** vs {emoji2} **{time2.upper()}**\n"
-        f"🕒 Horário: **{hora_formatada}**"
-    )
-
-    # DM de confirmação
-    try:
-        dm = await ctx.author.create_dm()
-        await dm.send(
-            f"🔔 **Jogo agendado com sucesso!**\n"
-            f"{emoji1} **{time1.upper()}** vs {emoji2} **{time2.upper()}**\n"
-            f"🕒 Horário: **{hora_formatada}**"
-        )
-    except:
-        await ctx.send("⚠️ Não consegui mandar DM.")
 
 
-@tasks.loop(seconds=30)
-async def verificar_jogos():
-    if not JOGOS_AGENDADOS:
-        return
 
-    tz = pytz.timezone("America/Sao_Paulo")
-    agora = datetime.now(tz).strftime("%H:%M")
+     
 
-    for jogo in JOGOS_AGENDADOS.copy():  # copia para permitir remoção
-        if jogo["horario"] == agora:
-            user = await bot.fetch_user(jogo["user_id"])
 
-            # Envia a notificação
-            await user.send(
-                f"⏰ **O jogo vai começar agora!**\n"
-                f"{jogo['emoji1']} **{jogo['time1']}** vs {jogo['emoji2']} **{jogo['time2']}**"
-            )
 
-            # Remove para não notificar de novo
-            JOGOS_AGENDADOS.remove(jogo)
 
 
 acompanhando = False
@@ -1812,8 +1745,14 @@ MAPEAMENTO_TIMES = {
         "mirassol sp": "mirassol",
         "juventude rs": "juventude",
         "vitoria ba": "vitoria",
-        "sport recife": "sport"
+        "sport recife": "sport",
+        "lanús": "lanus"
+        
     }
+
+
+
+LIGAS_PERMITIDAS = [71, 73, 11, 13]
 # ---------- Integração com verificar_gols 
 @tasks.loop(minutes=5)
 async def verificar_gols():
@@ -1870,7 +1809,7 @@ async def verificar_gols():
     # 5) Loop pelos jogos
     # --------------------------------------------------------------------
     for partida in jogos:
-        if partida["league"]["id"] != 71:
+        if partida["league"]["id"] not in LIGAS_PERMITIDAS:
             continue
 
         fixture_id = partida["fixture"]["id"]
@@ -2371,7 +2310,7 @@ async def info(ctx):
     )
 
 
-    
+
 
     await ctx.send(embed=embed)
 
