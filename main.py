@@ -1775,14 +1775,17 @@ async def verificar_gols():
     # --------------------------------------------------------------------
     # 2) Requisição de jogos finalizados (FT) — para processar apostas pendentes
     # --------------------------------------------------------------------
+    data_ft = {"response": []}
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(URL, headers=HEADERS, params={"league": 71, "season": 2025, "status": "FT"}) as response:
-                data_ft = await response.json()
-        print("✅ Request de jogos finalizados concluída com sucesso!")
+            for liga in LIGAS_PERMITIDAS:
+                async with session.get(URL,headers=HEADERS,params={"league":liga,"season":2025,"status":"FT"}) as response:
+                    ft_data = await response.json()
+                    data_ft["response"].extend(ft_data.get("response",[]))
+        print("✅ Request de jogos finalizados concluída (todas as ligas)!")
     except Exception as e:
         print(f"❌ Erro ao buscar dados da API (finalizados): {e}")
-        data_ft = {"response": []}  # evita crash se der erro
+        data_ft = {"response": []}
 
     # --------------------------------------------------------------------
     # 3) Canal de jogos
@@ -1934,13 +1937,13 @@ async def verificar_gols():
 
                     if acertou:
                         mensagens_pv.append(
-                            (user_id, f"🎉 Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+15 pontos**")
+                            (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+15 pontos**")
                         )
                     else:
                         mensagens_pv.append(
                             (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **-7 pontos**")
                         )
-
+                cursor.close()
                 conn.commit()
                 conn.close()
                 print(f"✔️ Pontuação processada para fixture {fixture_id}")
@@ -2023,7 +2026,7 @@ async def comprar_item(ctx, item_nome: str):
         pontos = resultado[0] if resultado else 0
 
         if pontos < preco:
-            await ctx.send(f"❌ Você precisa de {preco} pontos para comprar este item. Você tem {pontos} pontos.")
+            await ctx.send(f"<:Jinxsip1:1390638945565671495> Você precisa de {preco} pontos para comprar este item. Você tem {pontos} pontos.")
             return
 
         # Descontar pontos
