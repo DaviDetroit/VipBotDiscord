@@ -337,11 +337,11 @@ async def on_reaction_add(reaction, user):
         elif palpite == "away":
             time_escolhido = away
         else:
-            time_escolhido == "draw"
+            time_escolhido = "draw"
         await user.send(
-            f"📌 Você apostou em **{home} x {away}**\n"
-            f"➡️ Palpite: **{time_escolhido}**\n"
-            f"Boa sorte!"
+            f"🏟️ Partida: **{home} x {away}**\n"
+            f"<:Jinx:1390379001515872369> Palpite escolhido: **{time_escolhido}**\n"
+            "🍀 Boa sorte!"
         )
     except:
         pass
@@ -641,7 +641,7 @@ async def on_raw_reaction_add(payload):
         elif emoji == aposta["emoji_away"]:
             escolha = aposta["away"]
         elif emoji == aposta["emoji_empate"]:
-            escolha = "empate"
+            escolha = "draw"
         else:
             return  # Reação irrelevante
 
@@ -662,10 +662,10 @@ async def on_raw_reaction_add(payload):
 
             # 2) Salva aposta com modo_clown
             sql = """
-                INSERT INTO apostas (user_id, fixture_id, aposta, modo_clown)
+                INSERT INTO apostas (user_id, fixture_id, palpite, modo_clown)
                 VALUES (%s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
-                    aposta = VALUES(aposta),
+                    palpite = VALUES(palpite),
                     modo_clown = VALUES(modo_clown)
             """
 
@@ -1582,6 +1582,7 @@ def garantir_tabelas():
             bet_deadline DATETIME,
             betting_open TINYINT DEFAULT 0,
             finalizado TINYINT DEFAULT 0,
+            processado TINYINT DEFAULT 0,
             canal_id BIGINT,
             data DATE,
             horario TIME,
@@ -1597,9 +1598,20 @@ def garantir_tabelas():
             fixture_id BIGINT NOT NULL,
             palpite VARCHAR(20) NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            modo_clown TINYINT(1) DEFAULT 0
+            modo_clown TINYINT(1) DEFAULT 0,
+            UNIQUE KEY uniq_aposta (user_id, fixture_id)
         )
     """)
+
+    try:
+        cur.execute("ALTER TABLE jogos ADD COLUMN processado TINYINT DEFAULT 0")
+    except Exception:
+        pass
+
+    try:
+        cur.execute("ALTER TABLE apostas ADD UNIQUE KEY uniq_aposta (user_id, fixture_id)")
+    except Exception:
+        pass
 
     # Tabela pontuacoes
     cur.execute("""
@@ -1725,7 +1737,8 @@ garantir_tabelas()
 
 MAPEAMENTO_TIMES = {
         "atlético mineiro": "galo",
-        "atletico mineiro": "galo",
+        "atletico-mg": "galo",
+        "atlético-mg":"galo",
         "são paulo": "sao paulo",
         "sao paulo fc": "sao paulo",
         "flamengo rj": "flamengo",
@@ -1741,7 +1754,7 @@ MAPEAMENTO_TIMES = {
         "fortaleza ce": "fortaleza ec",
         "vasco da gama": "vasco",
         "ceará": "ceara",
-        "red bull bragantino": "bragantino",
+        "rb bragantino": "bragantino",
         "mirassol sp": "mirassol",
         "juventude rs": "juventude",
         "vitoria ba": "vitoria",
@@ -1753,6 +1766,7 @@ MAPEAMENTO_TIMES = {
 
 
 LIGAS_PERMITIDAS = [71, 73, 11, 13]
+
 # ---------- Integração com verificar_gols 
 @tasks.loop(minutes=5)
 async def verificar_gols():
@@ -1770,22 +1784,29 @@ async def verificar_gols():
         print("✅ Request de jogos ao vivo concluída com sucesso!")
     except Exception as e:
         print(f"❌ Erro ao buscar dados da API (ao vivo): {e}")
-        return
+        data_vivo = {"response": []}
 
     # --------------------------------------------------------------------
-    # 2) Requisição de jogos finalizados (FT) — para processar apostas pendentes
+    # 2) Requisição de jogos finalizados (FT) — TODAS AS LIGAS PERMITIDAS
     # --------------------------------------------------------------------
     data_ft = {"response": []}
+
     try:
         async with aiohttp.ClientSession() as session:
             for liga in LIGAS_PERMITIDAS:
-                async with session.get(URL,headers=HEADERS,params={"league":liga,"season":2025,"status":"FT"}) as response:
-                    ft_data = await response.json()
-                    data_ft["response"].extend(ft_data.get("response",[]))
-        print("✅ Request de jogos finalizados concluída (todas as ligas)!")
+                async with session.get(
+                    URL,
+                    headers=HEADERS,
+                    params={"league": liga, "season": 2025, "status": "FT"}
+                ) as response:
+                    ft_liga = await response.json()
+
+                if "response" in ft_liga and ft_liga["response"]:
+                    data_ft["response"].extend(ft_liga["response"])
+
+        print("✅ Request de jogos finalizados (todas ligas) concluída!")
     except Exception as e:
-        print(f"❌ Erro ao buscar dados da API (finalizados): {e}")
-        data_ft = {"response": []}
+        print(f"❌ Erro ao buscar dados FT de ligas permitidas: {e}")
 
     # --------------------------------------------------------------------
     # 3) Canal de jogos
@@ -1796,11 +1817,13 @@ async def verificar_gols():
         return
 
     # --------------------------------------------------------------------
-    # 4) Combina jogos ao vivo e finalizados
+    # 4) Combina jogos
     # --------------------------------------------------------------------
     jogos = []
+
     if "response" in data_vivo and data_vivo["response"]:
         jogos.extend(data_vivo["response"])
+
     if "response" in data_ft and data_ft["response"]:
         jogos.extend(data_ft["response"])
 
@@ -1830,19 +1853,18 @@ async def verificar_gols():
         emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
         emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
 
-        # Converter horário
         utc_time = datetime.fromisoformat(partida['fixture']['date'].replace("Z", "+00:00"))
         br_time = utc_time.astimezone(pytz.timezone("America/Sao_Paulo"))
         horario_br = br_time.strftime("%H:%M")
 
         # --------------------------------------------------------------------
-        # 5.1) ABRIR APOSTAS (inicio 1H)
+        # 5.1) ABRIR APOSTAS (1H)
         # --------------------------------------------------------------------
         if status == "1h" and anterior["status"] != "1h":
             deadline_utc = datetime.utcnow() + timedelta(minutes=10)
             try:
                 embed = discord.Embed(
-                    title="🏆 Apostas Abertas — Brasileirão",
+                    title="🏆 Apostas Abertas Agora! ",
                     description=f"⏰ Horário: {horario_br} (BR)\n\nReaja para apostar:",
                     color=discord.Color.blue()
                 )
@@ -1907,7 +1929,25 @@ async def verificar_gols():
         # 5.3) PROCESSAR FIM DE JOGO + APOSTAS
         # --------------------------------------------------------------------
         try:
-            if status == "ft" and anterior["status"] != "ft":
+            if status == "ft":
+
+                # 🔎 Checar se já foi processado
+                conn = conectar_futebol()
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fixture_id,))
+                row = cursor.fetchone()
+
+                if row and row["processado"] == 1:
+                    print(f"⚠️ Jogo {fixture_id} já foi processado anteriormente. Pulando.")
+                    cursor.close()
+                    conn.close()
+                    placares[fixture_id] = {
+                        "home": gols_casa,
+                        "away": gols_fora,
+                        "status": status
+                    }
+                    continue
+
                 # Determinar vencedor
                 if gols_casa > gols_fora:
                     resultado_final = "home"
@@ -1917,8 +1957,6 @@ async def verificar_gols():
                     resultado_final = "draw"
 
                 # Buscar apostas
-                conn = conectar_futebol()
-                cursor = conn.cursor(dictionary=True)
                 cursor.execute("SELECT * FROM apostas WHERE fixture_id = %s", (fixture_id,))
                 apostas = cursor.fetchall()
 
@@ -1943,12 +1981,16 @@ async def verificar_gols():
                         mensagens_pv.append(
                             (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **-7 pontos**")
                         )
-                cursor.close()
-                conn.commit()
-                conn.close()
-                print(f"✔️ Pontuação processada para fixture {fixture_id}")
 
-                # Embed final do jogo
+                # 🔥 Marca como processado
+                cursor.execute("UPDATE jogos SET processado = 1 WHERE fixture_id = %s", (fixture_id,))
+                conn.commit()
+                cursor.close()
+                conn.close()
+
+                print(f"✔️ Pontuação processada e jogo {fixture_id} marcado como processado.")
+
+                # Embed final
                 embed_final = discord.Embed(
                     title=f"🏁 Fim de jogo — {casa} x {fora}",
                     description=f"Placar final: {emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
