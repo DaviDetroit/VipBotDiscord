@@ -15,8 +15,16 @@ import time as time_module
 from discord.ui import Button, View
 import pytz
 import requests
+import logging
 import aiohttp
 load_dotenv()
+
+logging.basicConfig(
+    level = logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S' 
+)
+
 
 
 def conectar(database_name: str):
@@ -82,7 +90,16 @@ def pegar_pontos(user_id: int):
     con.close()
     return resultado[0] if resultado else 0
 
+def pegar_torcedores(time):
+    conn = conectar_futebol()
+    cursor = conn.cursor(dictionary=True)
 
+    cursor.execute("SELECT user_id FROM times_usuarios WHERE time_normalizado = %s", (time,))
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+    return [row["user_id"] for row in rows]
 
 
 
@@ -163,7 +180,7 @@ mensagens_bom_dia = [
 ]
 @bot.event
 async def on_ready():
-    print(f"Bot conectado como {bot.user}")
+    logging.info(f"Bot conectado como {bot.user}")
     jogos_pendentes = buscar_jogos_pendentes()
 
     # ===== Evita iniciar 2 vezes =====
@@ -188,9 +205,9 @@ async def on_ready():
     if await jogos_ao_vivo():
         if not verificar_gols.is_running():
             verificar_gols.start()
-            print("✅ Verificador de gols iniciado!")
+            logging.info("✅ Verificador de gols iniciado!")
     else:
-        print("⚠️ Nenhum jogo ao vivo no momento.")
+        logging.info("⚠️ Nenhum jogo ao vivo no momento.")
 
     # ===== BOM DIA =====
     agora = datetime.now(timezone.utc) - timedelta(hours=3)
@@ -413,9 +430,9 @@ async def verificar_posts():
 
                 cursor.execute("UPDATE posts SET removed=TRUE WHERE id=%s", (post["id"],))
                 conexao.commit()
-                print(f"Mensagem {post['id']} excluída por votos negativos.")
+                logging.info(f"Mensagem {post['id']} excluída por votos negativos.")
             except Exception as e:
-                print(f"Erro ao excluir mensagem {post['id']}: {e}")
+                logging.error(f"Erro ao excluir mensagem {post['id']}: {e}")
 
     cursor.close()
     conexao.close()
@@ -676,7 +693,7 @@ async def on_raw_reaction_add(payload):
             con.close()
 
         except Exception as e:
-            print("Erro ao salvar aposta:", e)
+            logging.error("Erro ao salvar aposta:", e)
             return
 
         # Envia confirmação no DM
@@ -728,7 +745,7 @@ async def dar_vip(ctx, membro: discord.Member):
 
     except Exception as e:
         await ctx.send("❌ Erro ao salvar VIP no banco de dados.")
-        print(f"Erro dar_vip: {e}")
+        logging.error(f"Erro dar_vip: {e}")
 
 
 @bot.command()
@@ -762,7 +779,7 @@ async def remover_vip(ctx, membro: discord.Member):
 
     except Exception as e:
         await ctx.send("❌ Erro ao remover VIP do banco de dados.")
-        print(f"Erro ao remover VIP: {e}")
+        logging.error(f"Erro ao remover VIP: {e}")
 
 
 
@@ -814,7 +831,7 @@ async def verificar_vips():
                     conexao.commit()
 
     except Exception as e:
-        print(f"Erro ao verificar VIPs: {e}")
+        logging.error(f"Erro ao verificar VIPs: {e}")
 
     finally:
         if conexao.is_connected():
@@ -1115,7 +1132,7 @@ async def vip_list(ctx):
 
     except Exception as e:
         await ctx.send("❌ Erro ao acessar o banco de dados.")
-        print(f"Erro vip_list: {e}")
+        logging.error(f"Erro vip_list: {e}")
 
  
         #----------------------------Anime--------------------------
@@ -1163,7 +1180,7 @@ async def tocar_proxima(ctx, voz):
                 if os.path.exists(arquivo):
                     os.remove(arquivo)
             except Exception as e:
-                print(f"Erro ao remover arquivo: {e}")
+                logging.error(f"Erro ao remover arquivo: {e}")
             # Toca a próxima música
             asyncio.run_coroutine_threadsafe(tocar_proxima(ctx, voz), bot.loop)
 
@@ -1182,7 +1199,7 @@ async def tocar_proxima(ctx, voz):
                     await voz.disconnect()
                     await ctx.send("<a:489897catfistbump:1414720257720848534> Esperei 1 minuto e nada de música, então fui!")
             except Exception as e:
-                print(f"Erro no timer de desconexão: {e}")
+                logging.error(f"Erro no timer de desconexão: {e}")
 
         timers_desconectar[ctx.guild.id] = bot.loop.create_task(desconectar_apos_espera())
 
@@ -1533,7 +1550,7 @@ async def apistart(ctx):
     if not verificar_gols.is_running():
         verificar_gols.start()
 
-    print("Monitoramento iniciado com sucesso, jogos ao vivo em andamento!")
+    logging.info("Monitoramento iniciado com sucesso, jogos ao vivo em andamento!")
 
     await ctx.send("🔵 **Monitoramento iniciado manualmente!**")
 
@@ -1634,9 +1651,9 @@ def adicionar_pontos_db(user_id: int, pontos: int):
             ON DUPLICATE KEY UPDATE pontos = pontos + %s
         """, (user_id, pontos, pontos))
         con.commit()
-        print(f"✅ Pontos adicionados: user_id={user_id}, pontos={pontos}")
+        logging.info(f"✅ Pontos adicionados: user_id={user_id}, pontos={pontos}")
     except Exception as e:
-        print(f"❌ Erro ao adicionar pontos: {e}")
+        logging.error(f"❌ Erro ao adicionar pontos: {e}")
     finally:
         cur.close()
         con.close()
@@ -1781,9 +1798,9 @@ async def verificar_gols():
         async with aiohttp.ClientSession() as session:
             async with session.get(URL, headers=HEADERS, params={"live": "all"}) as response:
                 data_vivo = await response.json()
-        print("✅ Request de jogos ao vivo concluída com sucesso!")
+        logging.info("✅ Request de jogos ao vivo concluída com sucesso!")
     except Exception as e:
-        print(f"❌ Erro ao buscar dados da API (ao vivo): {e}")
+        logging.error(f"❌ Erro ao buscar dados da API (ao vivo): {e}")
         data_vivo = {"response": []}
 
     # --------------------------------------------------------------------
@@ -1804,16 +1821,16 @@ async def verificar_gols():
                 if "response" in ft_liga and ft_liga["response"]:
                     data_ft["response"].extend(ft_liga["response"])
 
-        print("✅ Request de jogos finalizados (todas ligas) concluída!")
+        logging.info("✅ Request de jogos finalizados (todas ligas) concluída!")
     except Exception as e:
-        print(f"❌ Erro ao buscar dados FT de ligas permitidas: {e}")
+        logging.error(f"❌ Erro ao buscar dados FT de ligas permitidas: {e}")
 
     # --------------------------------------------------------------------
     # 3) Canal de jogos
     # --------------------------------------------------------------------
     canal = bot.get_channel(CANAL_JOGOS_ID)
     if not canal:
-        print("❌ Canal de jogos não encontrado.")
+        logging.error("❌ Canal de jogos não encontrado.")
         return
 
     # --------------------------------------------------------------------
@@ -1863,11 +1880,15 @@ async def verificar_gols():
         if status == "1h" and anterior["status"] != "1h":
             deadline_utc = datetime.utcnow() + timedelta(minutes=10)
             try:
+                cargo_futebol = "<@&1437851100878344232>" 
                 embed = discord.Embed(
-                    title="🏆 Apostas Abertas Agora! ",
-                    description=f"⏰ Horário: {horario_br} (BR)\n\nReaja para apostar:",
-                    color=discord.Color.blue()
-                )
+                title="🏆 Apostas Abertas Agora!",
+                description=(
+                    f"⏰ Horário: {horario_br} (BR)\n\n"
+                    f"📢 {cargo_futebol} reaja para apostar:"
+                ),
+                color=discord.Color.blue()
+            )
                 embed.add_field(name=f"{emoji_casa} {casa}", value="Casa", inline=True)
                 embed.add_field(name=f"{emoji_fora} {fora}", value="Visitante", inline=True)
                 embed.add_field(name=f"{EMOJI_EMPATE} Empate", value="Empate", inline=True)
@@ -1889,7 +1910,7 @@ async def verificar_gols():
                     horario_jogo=br_time.time().strftime("%H:%M:%S")
                 )
             except Exception as e:
-                print(f"❌ Erro ao abrir apostas: {e}")
+                logging.error(f"❌ Erro ao abrir apostas: {e}")
 
         # --------------------------------------------------------------------
         # 5.2) NOTIFICAÇÃO DE GOLS
@@ -1908,7 +1929,10 @@ async def verificar_gols():
                     value=f"{emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
                     inline=False
                 )
-                await canal.send(embed=embed)
+                role_home_name = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower())
+                role_home = discord.utils.get(canal.guild.roles, name=role_home_name)
+                mention_home = role_home.mention if role_home else f"@{role_home_name}"
+                await canal.send(content=f"{mention_home} ⚽ GOOOOOOOOL DO {casa.upper()}!", embed=embed)
 
             if gols_fora > gols_anteriores_fora:
                 embed = discord.Embed(
@@ -1920,10 +1944,13 @@ async def verificar_gols():
                     value=f"{emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
                     inline=False
                 )
-                await canal.send(embed=embed)
+                role_away_name = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower())
+                role_away = discord.utils.get(canal.guild.roles, name=role_away_name)
+                mention_away = role_away.mention if role_away else f"@{role_away_name}"
+                await canal.send(content=f"{mention_away} ⚽ GOOOOOOOOL DO {fora.upper()}!", embed=embed)
 
         except Exception as e:
-            print(f"❌ Erro ao enviar notificação de gol: {e}")
+            logging.error(f"❌ Erro ao enviar notificação de gol: {e}")
 
         # --------------------------------------------------------------------
         # 5.3) PROCESSAR FIM DE JOGO + APOSTAS
@@ -1938,7 +1965,7 @@ async def verificar_gols():
                 row = cursor.fetchone()
 
                 if row and row["processado"] == 1:
-                    print(f"⚠️ Jogo {fixture_id} já foi processado anteriormente. Pulando.")
+                    logging.warning(f"⚠️ Jogo {fixture_id} já foi processado anteriormente. Pulando.")
                     cursor.close()
                     conn.close()
                     placares[fixture_id] = {
@@ -1988,7 +2015,7 @@ async def verificar_gols():
                 cursor.close()
                 conn.close()
 
-                print(f"✔️ Pontuação processada e jogo {fixture_id} marcado como processado.")
+                logging.info(f"✔️ Pontuação processada e jogo {fixture_id} marcado como processado.")
 
                 # Embed final
                 embed_final = discord.Embed(
@@ -2009,7 +2036,7 @@ async def verificar_gols():
                             pass
 
         except Exception as e:
-            print(f"❌ Erro ao processar apostas do fim de jogo: {e}")
+            logging.error(f"❌ Erro ao processar apostas do fim de jogo: {e}")
 
         # --------------------------------------------------------------------
         # 5.4) Atualizar placares
@@ -2165,8 +2192,12 @@ async def verificar_vips_expirados():
     conn.commit()
     conn.close()
 
+CANAL_PERMITIDO_ID = 1380564680774385724
+
 @bot.command()
 async def loja(ctx):
+    if ctx.channel.id != CANAL_PERMITIDO_ID:
+        return await ctx.send(f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.")  
     embed = discord.Embed(
         title="🛒 Loja de Pontos",
         description="Use seus pontos para comprar benefícios!",
@@ -2200,10 +2231,16 @@ async def loja(ctx):
     embed.set_footer(text="Use: !comprar <item>")
     await ctx.send(embed=embed)
 
+
+
 @bot.command()
 async def comprar(ctx, item_nome: str):
     user_id = ctx.author.id
     item = item_nome.lower()
+
+    # Verifica se o comando foi usado no canal permitido
+    if ctx.channel.id != CANAL_PERMITIDO_ID:
+        return await ctx.send(f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.")
 
     if item not in PRECOS:
         return await ctx.send("❌ Item não encontrado na loja! Use `!loja` para ver os itens.")
@@ -2213,7 +2250,7 @@ async def comprar(ctx, item_nome: str):
     # Verifica saldo
     pontos = pegar_pontos(user_id)
     if pontos < preco:
-        return await ctx.send(f"❌ Você precisa de {preco} pontos. Você tem {pontos} pontos.")
+        return await ctx.send(f"<:Jinxsip1:1390638945565671495> Você precisa de {preco} pontos para comprar este item. Você tem {pontos} pontos.")
 
     # Desconta pontos
     adicionar_pontos_db(user_id, -preco)
@@ -2295,13 +2332,13 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
         # Consumir clown (marcando como usado)
         cursor.execute("UPDATE apostas SET modo_clown = 0 WHERE user_id = %s AND fixture_id = %s",
                        (user_id, fixture_id))
-        print(f"Usuário {user_id} usou Clown Bet! Multiplicador aplicado.")
+        logging.info(f"Usuário {user_id} usou Clown Bet! Multiplicador aplicado.")
 
     # 3️⃣ Calcular pontos ganhos ou perdidos
     if aposta_usuario == resultado:
         pontos_final = pontos_base * multiplicador
         adicionar_pontos_db(user_id, pontos_final)
-        print(f"Usuário {user_id} acertou! Ganhou {pontos_final} pontos.")
+        logging.info(f"Usuário {user_id} acertou! Ganhou {pontos_final} pontos.")
     else:
         # 4️⃣ Verificar Segunda Chance
         cursor.execute(
@@ -2313,11 +2350,11 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
             # Consumir Segunda Chance
             cursor.execute("UPDATE loja_pontos SET ativo = 0 WHERE id = %s", (row_chance[0],))
             adicionar_pontos_db(user_id, pontos_base)  # devolve os pontos
-            print(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: {pontos_base}")
+            logging.info(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: {pontos_base}")
         else:
             pontos_final = -pontos_base * multiplicador
             adicionar_pontos_db(user_id, pontos_final)
-            print(f"Usuário {user_id} perdeu! Perdeu {abs(pontos_final)} pontos.")
+            logging.info(f"Usuário {user_id} perdeu! Perdeu {abs(pontos_final)} pontos.")
 
     conn.commit()
     conn.close()
@@ -2359,7 +2396,34 @@ async def info(ctx):
 
     await ctx.send(embed=embed)
 
+@bot.commands()
+async def time(ctx, *, nome_time: str):
+    nome = nome_time.lower().strip()
+    if nome not in MAPEAMENTO_TIMES:
+        return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas eu não reconheço esse time")
 
+    time_normalizado = MAPEAMENTO_TIMES[nome]
+
+    #------Banco------
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO times_usuarios (user_id, time_normalizado)
+        VALUES (%s, %s)
+        ON DUPLICATE KEY UPDATE time_normalizado = VALUES(time_normalizado)
+    """, (ctx.author.id, time_normalizado))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    #------Cargo------
+    cargo = discord.utils.get(ctx.guild.roles, name=time_normalizado)
+    if not cargo:
+        cargo = await ctx.guild.create_role(name=time_normalizado)
+
+    await ctx.author.add_roles(cargo)
+
+    await ctx.send(f"✅ {ctx.author.mention}, agora você está registrado como torcedor do **{time_normalizado.upper()}**!")
 
 
 
