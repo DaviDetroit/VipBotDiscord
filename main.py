@@ -794,7 +794,7 @@ async def verificar_vips():
             host=os.getenv("DB_HOST"),
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME_VIPS")
+            database=os.getenv("DB_VIPS")
         )
 
         with conexao.cursor(dictionary=True) as cursor:
@@ -1457,7 +1457,7 @@ async def enviar_mensagem():
 
 #--------------------FUTEBOL PALPITE---------------------
 
-CANAL_JOGOS_ID = 1380564680552091789
+
 
 EMOJI_TIMES = {
     "sport": "<:Sport:1425992405227671593>",
@@ -1574,6 +1574,11 @@ async def meuspontos(ctx):
     pontos = pegar_pontos(ctx.author.id)
     await ctx.send(f"💳 {ctx.author.mention}, você tem **{pontos} pontos**!")
 
+
+
+CANAL_JOGOS_ID = 1380564680552091789
+
+CANAL_APOSTAS_ID = 1442495893365330138
 # ---------- CONFIG ----------
 
 URL = "https://v3.football.api-sports.io/fixtures"
@@ -1848,11 +1853,23 @@ async def verificar_gols():
         placares.clear()
         return
 
+    tracked_ids = set()
+    try:
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute("SELECT fixture_id FROM jogos WHERE finalizado=0")
+        rows = cur.fetchall()
+        tracked_ids = {r[0] for r in rows} if rows else set()
+        con.close()
+    except Exception as e:
+        logging.error(f"Erro ao buscar jogos rastreados: {e}")
+
     # --------------------------------------------------------------------
     # 5) Loop pelos jogos
     # --------------------------------------------------------------------
     for partida in jogos:
-        if partida["league"]["id"] not in LIGAS_PERMITIDAS:
+        fixture_id = partida["fixture"]["id"]
+        if partida["league"]["id"] not in LIGAS_PERMITIDAS and fixture_id not in tracked_ids:
             continue
 
         fixture_id = partida["fixture"]["id"]
@@ -1877,6 +1894,10 @@ async def verificar_gols():
         # --------------------------------------------------------------------
         # 5.1) ABRIR APOSTAS (1H)
         # --------------------------------------------------------------------
+        canal_apostas = bot.get_channel(CANAL_APOSTAS_ID)
+        if not canal_apostas:
+            logging.error("❌ Canal de apostas não encontrado.")
+            continue
         if status == "1h" and anterior["status"] != "1h":
             deadline_utc = datetime.utcnow() + timedelta(minutes=10)
             try:
@@ -1956,7 +1977,7 @@ async def verificar_gols():
         # 5.3) PROCESSAR FIM DE JOGO + APOSTAS
         # --------------------------------------------------------------------
         try:
-            if status == "ft":
+            if status in ("ft", "aet", "pen"):
 
                 # 🔎 Checar se já foi processado
                 conn = conectar_futebol()
@@ -2010,7 +2031,7 @@ async def verificar_gols():
                         )
 
                 # 🔥 Marca como processado
-                cursor.execute("UPDATE jogos SET processado = 1 WHERE fixture_id = %s", (fixture_id,))
+                cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fixture_id,))
                 conn.commit()
                 cursor.close()
                 conn.close()
@@ -2361,6 +2382,127 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
 
 
 @bot.command()
+@commands.has_permissions(administrator=True)
+async def terminar_jogo(ctx, fixture_id: int):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(URL, headers=HEADERS, params={"id": fixture_id}) as response:
+                data = await response.json()
+
+        if not data.get("response"):
+            await ctx.send(f"❌ Jogo {fixture_id} não encontrado na API.")
+            return
+
+        partida = data["response"][0]
+        casa = partida["teams"]["home"]["name"]
+        fora = partida["teams"]["away"]["name"]
+        gols_casa = partida["goals"]["home"] or 0
+        gols_fora = partida["goals"]["away"] or 0
+        status = partida["fixture"]["status"]["short"].lower()
+
+        utc_time = datetime.fromisoformat(partida['fixture']['date'].replace("Z", "+00:00"))
+        br_time = utc_time.astimezone(pytz.timezone("America/Sao_Paulo"))
+
+        if status not in ("ft", "aet", "pen"):
+            await ctx.send(f"⚠️ Jogo {fixture_id} ainda não finalizou (status: {status}).")
+            return
+
+        if gols_casa > gols_fora:
+            resultado_final = "home"
+        elif gols_fora > gols_casa:
+            resultado_final = "away"
+        else:
+            resultado_final = "draw"
+
+        conn = conectar_futebol()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fixture_id,))
+        row = cursor.fetchone()
+
+        if row and row.get("processado") == 1:
+            await ctx.send(f"⚠️ Jogo {fixture_id} já foi processado.")
+            conn.close()
+            return
+
+        cursor.execute("SELECT * FROM apostas WHERE fixture_id = %s", (fixture_id,))
+        apostas = cursor.fetchall()
+
+        mensagens_pv = []
+        for aposta in apostas:
+            user_id = aposta["user_id"]
+            palpite = aposta["palpite"]
+            acertou = (palpite == resultado_final)
+            pontos = 15 if acertou else -7
+            cursor.execute(
+                """
+                INSERT INTO pontuacoes (user_id, pontos)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos)
+                """,
+                (user_id, pontos)
+            )
+            if acertou:
+                mensagens_pv.append(
+                    (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+15 pontos**")
+                )
+            else:
+                mensagens_pv.append(
+                    (user_id, f"<:Jinxsip1:1390638945565671495> Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **-7 pontos**")
+                )
+
+        if not row:
+            cursor.execute(
+                """
+                INSERT INTO jogos (fixture_id, home, away, bet_deadline, betting_open, finalizado, canal_id, data, horario, processado)
+                VALUES (%s, %s, %s, NULL, 0, 1, %s, %s, %s, 1)
+                """,
+                (
+                    fixture_id,
+                    casa,
+                    fora,
+                    CANAL_JOGOS_ID,
+                    br_time.date(),
+                    br_time.time().strftime("%H:%M:%S")
+                )
+            )
+        else:
+            cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fixture_id,))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
+        nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
+        emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
+        emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
+
+        embed_final = discord.Embed(
+            title=f"🏁 Fim de jogo — {casa} x {fora}",
+            description=f"Placar final: {emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
+            color=discord.Color.orange()
+        )
+        embed_final.set_footer(text="Obrigado por participar das apostas!")
+
+        canal = bot.get_channel(CANAL_JOGOS_ID)
+        if canal:
+            await canal.send(embed=embed_final)
+
+        for user_id, msg in mensagens_pv:
+            usuario = bot.get_user(int(user_id))
+            if usuario:
+                try:
+                    await usuario.send(msg)
+                except:
+                    pass
+        
+
+        await ctx.send(f"✅ Jogo {fixture_id} finalizado manualmente. Pontuações aplicadas.")
+
+    except Exception as e:
+        await ctx.send(f"❌ Erro ao finalizar jogo {fixture_id}: {e}")
+
+@bot.command()
 async def info(ctx):
     embed = discord.Embed(
         title="📜 Lista de Comandos",
@@ -2396,8 +2538,10 @@ async def info(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.commands()
+@bot.command()
 async def time(ctx, *, nome_time: str):
+    if nome_time is None:
+        return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas você precisa informar o nome do time")
     nome = nome_time.lower().strip()
     if nome not in MAPEAMENTO_TIMES:
         return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas eu não reconheço esse time")
