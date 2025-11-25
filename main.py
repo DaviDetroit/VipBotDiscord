@@ -845,6 +845,8 @@ CANAL_TOP_ID = 1380564680552091789
 CARGO_IGNORADO = 1380564679243333852
 COOLDOWN = 40
 ultimo_reagir = 0  
+BOT_MUSICA_PROIBIDO = 411916947773587456
+CANAIS_MUSICAS_LIBERADO = [1380564681093156940,1380564681093156941]
 
 
 @bot.event
@@ -852,9 +854,18 @@ async def on_message(message):
     global ultimo_reagir
 
     # Ignorar bots
+    
+    if message.author.id == BOT_MUSICA_PROIBIDO:
+        if message.channel.id not in CANAIS_MUSICAS_LIBERADO:
+            try:
+                await message.delete()
+                await message.channel.send(f"{message.author.mention} você não tem vip para poder colocar o bot de música em qualquer lugar!")
+                logging.info(f"Tentativa de colocar o bot de música em {message.channel.mention} por {message.author.mention}")
+            except:
+                pass
+            return
     if message.author.bot:
         return
-    
     # ============================
     #  SISTEMA DE MURAL (REAÇÃO + DB)
     # ============================
@@ -1430,6 +1441,12 @@ async def enviar_mensagem():
 
 
 
+
+
+   
+    
+
+
 @tasks.loop(hours=4)
 async def enviar_mensagem():
     canal = bot.get_channel(Envio_mensagem)
@@ -1909,6 +1926,11 @@ async def verificar_gols():
                     f"📢 {cargo_futebol} reaja para apostar:"
                 ),
                 color=discord.Color.blue()
+            )
+                await canal_apostas.send(
+                content = cargo_futebol,
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions(roles=True)
             )
                 embed.add_field(name=f"{emoji_casa} {casa}", value="Casa", inline=True)
                 embed.add_field(name=f"{emoji_fora} {fora}", value="Visitante", inline=True)
