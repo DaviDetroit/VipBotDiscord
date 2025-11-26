@@ -71,13 +71,20 @@ def buscar_jogos_pendentes():
 
 
 
-def adicionar_pontos_db(user_id: int, pontos: int):
+def adicionar_pontos_db(user_id: int, pontos: int, nome_discord: str = None):
     con = conectar_futebol()
     cur = con.cursor()
-    cur.execute("""
-        INSERT INTO pontuacoes (user_id, pontos) VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE pontos = pontos + %s
-    """, (user_id, pontos, pontos))
+    if nome_discord is None:
+        u = bot.get_user(int(user_id))
+        nome_discord = f"{u.name}#{u.discriminator}" if u else str(user_id)
+    cur.execute(
+        """
+        INSERT INTO pontuacoes (user_id, nome_discord, pontos)
+        VALUES (%s, %s, %s)
+        ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos), nome_discord = VALUES(nome_discord)
+        """,
+        (user_id, nome_discord, pontos)
+    )
     con.commit()
     con.close()
 
@@ -848,7 +855,18 @@ COOLDOWN = 40
 ultimo_reagir = 0  
 BOT_MUSICA_PROIBIDO = 411916947773587456
 CANAIS_MUSICAS_LIBERADO = [1380564681093156940,1380564681093156941]
-
+BOT_REACTION = {
+    "Achando que eu vou falar com você docinho?",
+    "Sabia que mencionar bot e nada são a mesma coisa? HAHAHAAHHA",
+    "Imagina ser tão feio a ponto de me mencionar",
+    "Mencionar não adianta de nada docinho",
+    "Oque você pensa sobre mencionar um bot? Tem ninguém pra conversar não?",
+    "Para de me mencionar, obrigada",
+    "Vai corinthiaaaans",
+    "Meu Deus, você está mencionando um bot? Isso não é bom para a saúde do servidor!",
+    "Nada de me mencionar por aqui, se quiser conversar, seja apenas SOCIAL!",
+    
+}
 
 @bot.event
 async def on_message(message):
@@ -969,10 +987,9 @@ async def on_message(message):
     #  RESPOSTA QUANDO MENCIONADO
     # ============================
     if bot.user in message.mentions:
-        await message.channel.send(
-            "Me mencionando achando que eu vou te dar um bom dia ou moeda? "
-            "Não vai adiantar de nada **docinho** 💋"
-        )
+        reacao = random.choice(BOT_REACTION)
+        await message.channel.send(reacao)
+        
 
     # ============================
     #  IGNORAR CARGO ESPECÍFICO
@@ -1658,23 +1675,35 @@ def garantir_tabelas():
     # Tabela pontuacoes
     cur.execute("""
         CREATE TABLE IF NOT EXISTS pontuacoes (
+            nome_discord VARCHAR(50) NOT NULL,
             user_id BIGINT PRIMARY KEY,
             pontos INT NOT NULL DEFAULT 0
         )
     """)
 
+    try:
+        cur.execute("ALTER TABLE pontuacoes ADD COLUMN nome_discord VARCHAR(50) NOT NULL")
+    except Exception:
+        pass
+
     con.commit()
     con.close()
 
-def adicionar_pontos_db(user_id: int, pontos: int):
+def adicionar_pontos_db(user_id: int, pontos: int, nome_discord: str = None):
     con = conectar_futebol()
     cur = con.cursor()
     try:
-        cur.execute("""
-            INSERT INTO pontuacoes (user_id, pontos)
-            VALUES (%s, %s)
-            ON DUPLICATE KEY UPDATE pontos = pontos + %s
-        """, (user_id, pontos, pontos))
+        if nome_discord is None:
+            u = bot.get_user(int(user_id))
+            nome_discord = f"{u.name}#{u.discriminator}" if u else str(user_id)
+        cur.execute(
+            """
+            INSERT INTO pontuacoes (user_id, nome_discord, pontos)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos), nome_discord = VALUES(nome_discord)
+            """,
+            (user_id, nome_discord, pontos)
+        )
         con.commit()
         logging.info(f"✅ Pontos adicionados: user_id={user_id}, pontos={pontos}")
     except Exception as e:
@@ -2041,11 +2070,16 @@ async def verificar_gols():
                     acertou = (palpite == resultado_final)
                     pontos = 15 if acertou else -7
 
-                    cursor.execute("""
-                        INSERT INTO pontuacoes (user_id, pontos)
-                        VALUES (%s, %s)
-                        ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos)
-                    """, (user_id, pontos))
+                    usuario_dm = bot.get_user(int(user_id))
+                    nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
+                    cursor.execute(
+                        """
+                        INSERT INTO pontuacoes (user_id, nome_discord, pontos)
+                        VALUES (%s, %s, %s)
+                        ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos), nome_discord = VALUES(nome_discord)
+                        """,
+                        (user_id, nome_discord, pontos)
+                    )
 
                     if acertou:
                         mensagens_pv.append(
@@ -2103,18 +2137,23 @@ PRECOS = {
     "badge_perfil": 500,
     "limite_apostas_extra": 350,
     "caixa_misteriosa": 250,
+    "caixinha": 250,
+    "segunda_chance": 200,
     "clown_bet": 500
 }
 #LOJA DE PONTOS----------------------------------
 
 
-def atualizar_pontos(user_id: int, valor: int):
+def atualizar_pontos(user_id: int, valor: int, nome_discord: str = None):
     conn = conectar_futebol()
     cursor = conn.cursor()
+    if nome_discord is None:
+        u = bot.get_user(int(user_id))
+        nome_discord = f"{u.name}#{u.discriminator}" if u else str(user_id)
     cursor.execute(
-        "INSERT INTO pontuacoes (user_id, pontos) VALUES (%s, %s) "
-        "ON DUPLICATE KEY UPDATE pontos = pontos + %s",
-        (user_id, valor, valor)
+        "INSERT INTO pontuacoes (user_id, nome_discord, pontos) VALUES (%s, %s, %s) "
+        "ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos), nome_discord = VALUES(nome_discord)",
+        (user_id, nome_discord, valor)
     )
     conn.commit()
     conn.close()
@@ -2252,16 +2291,17 @@ async def loja(ctx):
     )
 
     embed.add_field(
-        name="🎭 Modo Clown — 150 pontos",
+        name="🎭 Modo Clown — 500 pontos",
         value="• Multiplica pontos por 4 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use **clown_bet**  ",
         inline=False
     )
 
     embed.add_field(
-        name="🎁 Caixa Surpresa — 120 pontos",
+        name="🎁 Caixa Surpresa — 250 pontos",
         value="• Ganha pontos aleatórios de 20 a 120\n• Pode vir até negativo 👀\n• Use **caixinha** ",
         inline=False
     )
+
 
     embed.add_field(
         name="👑 Jinxed VIP — 1000 pontos",
@@ -2468,21 +2508,37 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                 palpite = aposta["palpite"]
                 acertou = (palpite == resultado_final)
                 pontos = 15 if acertou else -7
-                cursor.execute(
-                    """
-                    INSERT INTO pontuacoes (user_id, pontos)
-                    VALUES (%s, %s)
-                    ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos)
-                    """,
-                    (user_id, pontos)
-                )
-                if acertou:
+            usuario_dm = bot.get_user(int(user_id))
+            nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
+            cursor.execute(
+                """
+                INSERT INTO pontuacoes (user_id, nome_discord, pontos)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos), nome_discord = VALUES(nome_discord)
+                """,
+                (user_id, nome_discord, pontos)
+            )
+            if acertou:
                     mensagens_pv.append(
-                        (user_id, f"🎉 Você acertou a aposta! Você ganhou **+15 pontos**!\n🏟️ Jogo: **{casa} x {fora}**\n<:apchikabounce:1408193721907941426> Use !meuspontos para ver quantos pontos você tem e visite !loja")
+                        (
+                            user_id,
+                            f"<a:270795discodance:1419694558945476760> **APOSTA CERTA!**\n"
+                            f"✨ Você garantiu **+15 pontos**!\n\n"
+                            f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
+                            f"<:apchikabounce:1408193721907941426> Confira seus pontos com **!meuspontos**\n"
+                            f"📘 Veja mais comandos em **!info**"
+                        )
                     )
-                else:
+            else:
                     mensagens_pv.append(
-                        (user_id, f"😬 Aaah, você errou a aposta... **-7 pontos**.\n🏟️ Jogo: **{casa} x {fora}**")
+                        (
+                            user_id,
+                            f"😬 **Que pena... você errou a aposta!**\n"
+                            f"Você perdeu **-7 pontos**.\n\n"
+                            f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
+                            f"ℹ️ Veja seus pontos com **!meuspontos**\n"
+                            f"📘 Mais informações: **!info**"
+                        )
                     )
 
             cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fx,))
@@ -2528,6 +2584,32 @@ async def terminar_jogo(ctx, fixture_id: int = None):
         await ctx.send(f"❌ Erro ao finalizar jogos: {e}")
         logging.error(f"Erro ao finalizar jogos: {e}")
 
+@commands.has_permissions(administrator=True)
+async def ver_fixture_id(ctx):
+    try:
+        conn = conectar_futebol()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT fixture_id, home, away, data_jogo, horario_jogo FROM jogos WHERE finalizado = 0")
+        jogos = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        if not jogos:
+            await ctx.send("⚠️ Nenhum jogo pendente encontrado.")
+            return
+
+        mensagem = "🏟️ **Jogos Pendentes:**\n"
+        for jogo in jogos:
+            fixture_id, home, away, data_jogo, horario_jogo = jogo
+            mensagem += f"- ID: `{fixture_id}` | {home} x {away} | Data: {data_jogo} | Horário: {horario_jogo}\n"
+
+        await ctx.send(mensagem)
+    except Exception as e:
+        await ctx.send(f"❌ Erro ao buscar jogos pendentes: {e}")
+        logging.error(f"Erro ao buscar jogos pendentes: {e}")
+
+
 @commands.has_permissions(administrator= True)
 @bot.command()
 async def resetar_jogo(ctx):
@@ -2564,33 +2646,78 @@ async def info(ctx):
         inline=False
     )
 
-    # Comandos de apostas/loja (novos)
+    # Comandos de apostas/loja
     embed.add_field(
         name="🎲 Apostas, Pontos e Loja",
         value=(
             "`!comprar_item <nome>` - Compra um item da loja usando seus pontos.\n"
             "`!meuspontos` - Mostra quantos pontos você tem.\n"
             "`!loja` - Indica a loja para compra."
+        ),
+        inline=False
+    )
+
+    # Comandos de Time
+    embed.add_field(
+        name="⚽ Times de Futebol",
+        value=(
+            "`!time <nome>` - Seleciona o time e recebe o cargo correspondente.\n"
+            "`!lista_times` - Mostra todos os times disponíveis para escolha."
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎰 Melhores apostadores",
+        value=(
+            "`!top_apostas` - Mostra os 5 melhores apostadores do servidor."
             
         ),
         inline=False
     )
 
-
-
-
     await ctx.send(embed=embed)
+    logging.info(f"Usuário {ctx.author} solicitou a lista de comandos.")
+
+#LISTAR OS 5 MAIORES COM PONTUACOES DE APOSTAS
+@bot.command()
+async def top_apostas(ctx):
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC LIMIT 5")
+    top = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    if not top:
+        return await ctx.send("⚠️ Nenhum usuário possui pontos.")
+
+    # Formata a mensagem
+    mensagem = "🏆 **Top 5 Usuários com Mais Pontos:**\n"
+    for pos, (nome, pontos) in enumerate(top, start=1):
+        mensagem += f"{pos}. **{nome}** - {pontos} pontos\n"
+
+    await ctx.send(mensagem)
+    logging.info(f"Usuário {ctx.author} solicitou ver os 5 melhores apostadores.")
+
+
+
 
 
 @bot.command()
 async def time(ctx, *, nome_time: str):
     if nome_time is None:
         return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas você precisa informar o nome do time")
+    
+
     nome = nome_time.lower().strip()
     if nome not in MAPEAMENTO_TIMES:
         return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas eu não reconheço esse time")
 
     time_normalizado = MAPEAMENTO_TIMES[nome]
+
+    # Nome do cargo bonito (primeira letra maiúscula)
+    cargo_nome = time_normalizado.title()
 
     #------Banco------
     conn = conectar_futebol()
@@ -2605,17 +2732,34 @@ async def time(ctx, *, nome_time: str):
     conn.close()
 
     #------Cargo------
-    cargo = discord.utils.get(ctx.guild.roles, name=time_normalizado)
+    cargo = discord.utils.get(ctx.guild.roles, name=cargo_nome)
     if not cargo:
-        cargo = await ctx.guild.create_role(name=time_normalizado)
+        cargo = await ctx.guild.create_role(name=cargo_nome)
 
     await ctx.author.add_roles(cargo)
 
-    await ctx.send(f"✅ {ctx.author.mention}, agora você está registrado como torcedor do **{time_normalizado.upper()}**!")
+    await ctx.send(f"✅ {ctx.author.mention}, agora você está registrado como torcedor do **{cargo_nome}**!")
 
+@bot.command()
+async def lista_times(ctx):
+    # Pega todos os valores únicos do dicionário (nomes normalizados)
+    times = sorted(set(MAPEAMENTO_TIMES.values()))
 
-    await ctx.send("✅ Parando de acompanhar jogos de vôlei!") 
+    # Deixa todos em Title Case (ex.: "galo" → "Galo")
+    times_formatados = [t.title() for t in times]
+
     
+    lista = "\n".join(f"- **{t}**" for t in times_formatados)
+
+    embed = discord.Embed(
+        title="📋 Times Disponíveis",
+        description=lista,
+        color=discord.Color.blue()
+    )
+
+    await ctx.send(embed=embed)
+    
+ 
 
 
 
