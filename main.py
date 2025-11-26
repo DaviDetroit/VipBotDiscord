@@ -199,6 +199,7 @@ async def on_ready():
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
 
+
     
 
     # ===== Verificador de gols =====
@@ -1579,6 +1580,7 @@ async def apistop(ctx):
 
     global acompanhando
     acompanhando = False
+    logging.info("Monitoramento pausado manualmente.")
 
     await ctx.send("🔴 **Monitoramento pausado. Nenhum request será feito.**")
           
@@ -1590,12 +1592,13 @@ async def apistop(ctx):
 async def meuspontos(ctx):
     pontos = pegar_pontos(ctx.author.id)
     await ctx.send(f"💳 {ctx.author.mention}, você tem **{pontos} pontos**!")
+    logging.info(f"Usuário {ctx.author.name} ({ctx.author.id}) solicitou os pontos.")
 
 
 
 CANAL_JOGOS_ID = 1380564680552091789
 
-CANAL_APOSTAS_ID = 1442495893365330138
+CANAL_APOSTAS_ID = 1442495893365330138 
 # ---------- CONFIG ----------
 
 URL = "https://v3.football.api-sports.io/fixtures"
@@ -1927,17 +1930,18 @@ async def verificar_gols():
                 ),
                 color=discord.Color.blue()
             )
-                await canal_apostas.send(
-                content = cargo_futebol,
-                embed=embed,
-                allowed_mentions=discord.AllowedMentions(roles=True)
-            )
+                
                 embed.add_field(name=f"{emoji_casa} {casa}", value="Casa", inline=True)
                 embed.add_field(name=f"{emoji_fora} {fora}", value="Visitante", inline=True)
                 embed.add_field(name=f"{EMOJI_EMPATE} Empate", value="Empate", inline=True)
                 embed.set_footer(text="Apostas abertas por 10 minutos!")
 
-                mensagem = await canal.send(embed=embed)
+                mensagem = await canal_apostas.send(
+                    content = cargo_futebol,
+                    embed=embed,
+                    allowed_mentions=discord.AllowedMentions(roles=True)
+                )
+                
                 await mensagem.add_reaction(emoji_casa)
                 await mensagem.add_reaction(emoji_fora)
                 await mensagem.add_reaction(EMOJI_EMPATE)
@@ -2405,124 +2409,141 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def terminar_jogo(ctx, fixture_id: int):
+async def terminar_jogo(ctx, fixture_id: int = None):
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(URL, headers=HEADERS, params={"id": fixture_id}) as response:
-                data = await response.json()
-
-        if not data.get("response"):
-            await ctx.send(f"❌ Jogo {fixture_id} não encontrado na API.")
-            return
-
-        partida = data["response"][0]
-        casa = partida["teams"]["home"]["name"]
-        fora = partida["teams"]["away"]["name"]
-        gols_casa = partida["goals"]["home"] or 0
-        gols_fora = partida["goals"]["away"] or 0
-        status = partida["fixture"]["status"]["short"].lower()
-
-        utc_time = datetime.fromisoformat(partida['fixture']['date'].replace("Z", "+00:00"))
-        br_time = utc_time.astimezone(pytz.timezone("America/Sao_Paulo"))
-
-        if status not in ("ft", "aet", "pen"):
-            await ctx.send(f"⚠️ Jogo {fixture_id} ainda não finalizou (status: {status}).")
-            return
-
-        if gols_casa > gols_fora:
-            resultado_final = "home"
-        elif gols_fora > gols_casa:
-            resultado_final = "away"
-        else:
-            resultado_final = "draw"
-
         conn = conectar_futebol()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fixture_id,))
-        row = cursor.fetchone()
 
-        if row and row.get("processado") == 1:
-            await ctx.send(f"⚠️ Jogo {fixture_id} já foi processado.")
-            conn.close()
-            return
-
-        cursor.execute("SELECT * FROM apostas WHERE fixture_id = %s", (fixture_id,))
-        apostas = cursor.fetchall()
-
-        mensagens_pv = []
-        for aposta in apostas:
-            user_id = aposta["user_id"]
-            palpite = aposta["palpite"]
-            acertou = (palpite == resultado_final)
-            pontos = 15 if acertou else -7
-            cursor.execute(
-                """
-                INSERT INTO pontuacoes (user_id, pontos)
-                VALUES (%s, %s)
-                ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos)
-                """,
-                (user_id, pontos)
-            )
-            if acertou:
-                mensagens_pv.append(
-                    (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+15 pontos**")
-                )
-            else:
-                mensagens_pv.append(
-                    (user_id, f"<:Jinxsip1:1390638945565671495> Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **-7 pontos**")
-                )
-
-        if not row:
-            cursor.execute(
-                """
-                INSERT INTO jogos (fixture_id, home, away, bet_deadline, betting_open, finalizado, canal_id, data, horario, processado)
-                VALUES (%s, %s, %s, NULL, 0, 1, %s, %s, %s, 1)
-                """,
-                (
-                    fixture_id,
-                    casa,
-                    fora,
-                    CANAL_JOGOS_ID,
-                    br_time.date(),
-                    br_time.time().strftime("%H:%M:%S")
-                )
-            )
+        alvos = []
+        if fixture_id is None:
+            cursor.execute("SELECT fixture_id FROM jogos WHERE finalizado = 0")
+            alvos = [r["fixture_id"] for r in cursor.fetchall()] if cursor.rowcount else []
+            if not alvos:
+                await ctx.send("⚠️ Nenhum jogo pendente encontrado. Use `!terminar_jogo <fixture_id>`.")
+                conn.close()
+                return
         else:
-            cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fixture_id,))
+            alvos = [fixture_id]
 
-        conn.commit()
+        processados = 0
+        for fx in alvos:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(URL, headers=HEADERS, params={"id": fx}) as response:
+                    data = await response.json()
+
+            if not data.get("response"):
+                await ctx.send(f"❌ Jogo {fx} não encontrado na API.")
+                continue
+
+            partida = data["response"][0]
+            casa = partida["teams"]["home"]["name"]
+            fora = partida["teams"]["away"]["name"]
+            gols_casa = partida["goals"]["home"] or 0
+            gols_fora = partida["goals"]["away"] or 0
+            status = partida["fixture"]["status"]["short"].lower()
+
+            if status not in ("ft", "aet", "pen"):
+                await ctx.send(f"⚠️ Jogo {fx} ainda não finalizou (status: {status}).")
+                continue
+
+            if gols_casa > gols_fora:
+                resultado_final = "home"
+            elif gols_fora > gols_casa:
+                resultado_final = "away"
+            else:
+                resultado_final = "draw"
+
+            cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fx,))
+            row = cursor.fetchone()
+            if row and row.get("processado") == 1:
+                await ctx.send(f"⚠️ Jogo {fx} já foi processado.")
+                continue
+
+            cursor.execute("SELECT * FROM apostas WHERE fixture_id = %s", (fx,))
+            apostas = cursor.fetchall()
+
+            mensagens_pv = []
+            for aposta in apostas:
+                user_id = aposta["user_id"]
+                palpite = aposta["palpite"]
+                acertou = (palpite == resultado_final)
+                pontos = 15 if acertou else -7
+                cursor.execute(
+                    """
+                    INSERT INTO pontuacoes (user_id, pontos)
+                    VALUES (%s, %s)
+                    ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos)
+                    """,
+                    (user_id, pontos)
+                )
+                if acertou:
+                    mensagens_pv.append(
+                        (user_id, f"🎉 Você acertou a aposta! Você ganhou **+15 pontos**!\n🏟️ Jogo: **{casa} x {fora}**\n<:apchikabounce:1408193721907941426> Use !meuspontos para ver quantos pontos você tem e visite !loja")
+                    )
+                else:
+                    mensagens_pv.append(
+                        (user_id, f"😬 Aaah, você errou a aposta... **-7 pontos**.\n🏟️ Jogo: **{casa} x {fora}**")
+                    )
+
+            cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fx,))
+            conn.commit()
+
+            nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
+            nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
+            emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
+            emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
+
+            embed_final = discord.Embed(
+                title=f"🏁 Fim de jogo — {casa} x {fora}",
+                description=f"Placar final: {emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
+                color=discord.Color.orange()
+            )
+            embed_final.set_footer(text="Obrigado por participar das apostas!")
+
+            canal = bot.get_channel(CANAL_JOGOS_ID)
+            if canal:
+                await canal.send(embed=embed_final)
+
+            for user_id, msg in mensagens_pv:
+                usuario = bot.get_user(int(user_id))
+                if usuario:
+                    try:
+                        await usuario.send(msg)
+                    except:
+                        pass
+
+            processados += 1
+
         cursor.close()
         conn.close()
 
-        nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
-        nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
-        emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
-        emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
-
-        embed_final = discord.Embed(
-            title=f"🏁 Fim de jogo — {casa} x {fora}",
-            description=f"Placar final: {emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
-            color=discord.Color.orange()
-        )
-        embed_final.set_footer(text="Obrigado por participar das apostas!")
-
-        canal = bot.get_channel(CANAL_JOGOS_ID)
-        if canal:
-            await canal.send(embed=embed_final)
-
-        for user_id, msg in mensagens_pv:
-            usuario = bot.get_user(int(user_id))
-            if usuario:
-                try:
-                    await usuario.send(msg)
-                except:
-                    pass
-        
-
-        await ctx.send(f"✅ Jogo {fixture_id} finalizado manualmente. Pontuações aplicadas.")
+        if processados == 0:
+            await ctx.send("⚠️ Nenhum jogo foi processado.")
+        elif processados == 1:
+            await ctx.send("✅ 1 jogo finalizado manualmente. Pontuações aplicadas.")
+        else:
+            await ctx.send(f"✅ {processados} jogos finalizados manualmente. Pontuações aplicadas.")
 
     except Exception as e:
-        await ctx.send(f"❌ Erro ao finalizar jogo {fixture_id}: {e}")
+        await ctx.send(f"❌ Erro ao finalizar jogos: {e}")
+        logging.error(f"Erro ao finalizar jogos: {e}")
+
+@commands.has_permissions(administrator= True)
+@bot.command()
+async def resetar_jogo(ctx):
+    try:
+        conn = conectar_futebol()
+        cursor = conn.cursor()
+
+        cursor.execute("TRUNCATE TABLE jogos")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        await ctx.send("🧼 Todos os jogos foram resetados com sucesso! Tabela limpa e preparada para novos eventos.")
+        logging.info("Todos os jogos foram resetados com sucesso! Tabela limpa e preparada para novos eventos.")
+    except Exception as e:
+        await ctx.send(f"❌ Erro ao resetar jogos: {e}")
+        logging.error(f"Erro ao resetar jogos: {e}")
 
 @bot.command()
 async def info(ctx):
@@ -2560,6 +2581,7 @@ async def info(ctx):
 
     await ctx.send(embed=embed)
 
+
 @bot.command()
 async def time(ctx, *, nome_time: str):
     if nome_time is None:
@@ -2590,6 +2612,14 @@ async def time(ctx, *, nome_time: str):
     await ctx.author.add_roles(cargo)
 
     await ctx.send(f"✅ {ctx.author.mention}, agora você está registrado como torcedor do **{time_normalizado.upper()}**!")
+
+
+    await ctx.send("✅ Parando de acompanhar jogos de vôlei!") 
+    
+
+
+
+
 
 
 
