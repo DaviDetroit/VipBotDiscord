@@ -1532,7 +1532,10 @@ EMOJI_TIMES = {
     "eua":"<:imagem_20251111_092151751:1437779372940464138>",
     "senegal":"<:imagem_20251111_092227325:1437779522157281290>",
     "tunisia":"<:imagem_20251111_092254095:1437779634191208518>",
-    "lanus":"<:Lanus:1441436509281718383>"
+    "lanus":"<:Lanus:1441436509281718383>",
+    "atletico paranaense":"<:atlpr:1443398482516775055>",
+    "Coritiba" : "<:Coritibaa:1443398813820784660>",
+    "Remo" : "<:Remo:1443399201655492708>"
 
 
 
@@ -1822,7 +1825,6 @@ MAPEAMENTO_TIMES = {
         "bahia ba": "bahia",
         "botafogo rj": "botafogo",
         "cruzeiro mg": "cruzeiro",
-        "fortaleza ce": "fortaleza ec",
         "vasco da gama": "vasco",
         "ceará": "ceara",
         "rb bragantino": "bragantino",
@@ -1830,7 +1832,15 @@ MAPEAMENTO_TIMES = {
         "juventude rs": "juventude",
         "vitoria ba": "vitoria",
         "sport recife": "sport",
-        "lanús": "lanus"
+        "lanús": "lanus",
+        "fortaleza ec" :"fortaleza",
+        "atlético paranaense": "atletico paranaense",
+        "atletico pr": "atletico paranaense",
+        "athletico pr": "atletico paranaense",
+        "athletico paranaense": "atletico paranaense",
+        "coritiba": "coritiba",
+        "remo": "remo"
+
         
     }
 
@@ -2508,9 +2518,9 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                 palpite = aposta["palpite"]
                 acertou = (palpite == resultado_final)
                 pontos = 15 if acertou else -7
-            usuario_dm = bot.get_user(int(user_id))
-            nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
-            cursor.execute(
+                usuario_dm = bot.get_user(int(user_id))
+                nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
+                cursor.execute(
                 """
                 INSERT INTO pontuacoes (user_id, nome_discord, pontos)
                 VALUES (%s, %s, %s)
@@ -2518,7 +2528,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                 """,
                 (user_id, nome_discord, pontos)
             )
-            if acertou:
+                if acertou:
                     mensagens_pv.append(
                         (
                             user_id,
@@ -2529,7 +2539,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                             f"📘 Veja mais comandos em **!info**"
                         )
                     )
-            else:
+                else:
                     mensagens_pv.append(
                         (
                             user_id,
@@ -2585,7 +2595,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
         logging.error(f"Erro ao finalizar jogos: {e}")
 
 @commands.has_permissions(administrator=True)
-async def ver_fixture_id(ctx):
+async def fixtureid(ctx):
     try:
         conn = conectar_futebol()
         cursor = conn.cursor()
@@ -2608,6 +2618,7 @@ async def ver_fixture_id(ctx):
     except Exception as e:
         await ctx.send(f"❌ Erro ao buscar jogos pendentes: {e}")
         logging.error(f"Erro ao buscar jogos pendentes: {e}")
+
 
 
 @commands.has_permissions(administrator= True)
@@ -2758,8 +2769,55 @@ async def lista_times(ctx):
     )
 
     await ctx.send(embed=embed)
-    
- 
+# ----- CÓDIGO PARA VER TODOS OS COMANDOS ADMIN -----
+@bot.command() 
+@commands.has_permissions(administrator=True)
+async def admin(ctx):
+    embed = discord.Embed(
+        title="🛠️ Painel de Comandos Administrativos",
+        description="Aqui estão todos os comandos disponíveis para administradores:",
+        color=discord.Color.red()
+    )
+
+    embed.add_field(
+        name="🔧 Administração Geral",
+        value=(
+            "**!top_apostas** — mostra top jogadores nas apostas\n"
+            "**!resetar_jogo** — limpa as apostas de um jogo\n"
+            "**!fixtureid** — busca informações de uma partida\n"
+            "**!terminar_jogo** — finaliza e processa resultados\n"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="👑 Sistema VIP",
+        value=(
+            "**!dar_vip** — concede VIP ao usuário\n"
+            "**!remover_vip** — remove VIP do usuário\n"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛰️ API",
+        value=(
+            "**!apistart** — inicia a sincronização com a API\n"
+            "**!apistop** — para a sincronização\n"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="📨 Utilidades",
+        value="**!enviar_mensagem** — envia uma mensagem para um canal",
+        inline=False
+    )
+
+    embed.set_footer(text="Use com responsabilidade. 😉")
+
+    await ctx.send(embed=embed)
+
 
 
 
