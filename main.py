@@ -1575,35 +1575,102 @@ async def jogos_ao_vivo():
 
 
 
-#   COMANDO PARA LIGAR O LOOP
+#   Ligar o loop e agendar
+tz_br = pytz.timezone("America/Sao_Paulo")
+
+
+@commands.has_permissions(administrator=True)
 @bot.command()
-async def apistart(ctx):
+async def apistart(ctx, horario: int = None):
     if ctx.author.id != ADM_BRABO:
         return await ctx.send("Só amorreba the gostoso pode usar este comando! <:Galo:1425991683690074212>")
 
     global acompanhando, placares
-    acompanhando = True
-    placares.clear()   # 🔥 IMPORTANTE!!
 
-    if not verificar_gols.is_running():
-        verificar_gols.start()
+    # -----------------------------------------------------
+    # MODO 1 — SEM PARÂMETRO (INÍCIO MANUAL)
+    # -----------------------------------------------------
+    if horario is None:
+        acompanhando = True
+        placares.clear()
 
-    logging.info("Monitoramento iniciado com sucesso, jogos ao vivo em andamento!")
+        if not verificar_gols.is_running():
+            verificar_gols.start()
 
-    await ctx.send("🔵 **Monitoramento iniciado manualmente!**")
+        logging.info("Monitoramento iniciado MANUALMENTE.")
+        return await ctx.send("🔵 **Monitoramento iniciado manualmente! Jogos ao vivo em andamento!**")
 
+    # -----------------------------------------------------
+    # MODO 2 — COM PARÂMETRO (AGENDADO)
+    # -----------------------------------------------------
+    agora = datetime.now(tz_br)
+    horario_agendado = agora.replace(hour=horario, minute=0, second=0, microsecond=0)
 
+    # Se o horário já passou → agenda para o próximo dia
+    if horario_agendado <= agora:
+        horario_agendado += timedelta(days=1)
+
+    await ctx.send(f"🟡 **Monitoramento será iniciado às {horario_agendado.strftime('%H:%M')} (horário de Brasília).**")
+    logging.info(f"Monitoramento AGENDADO para {horario_agendado.strftime('%H:%M:%S')}")
+
+    async def iniciar_no_horario():
+        await discord.utils.sleep_until(horario_agendado)
+
+        global acompanhando, placares
+        acompanhando = True
+        placares.clear()
+
+        if not verificar_gols.is_running():
+            verificar_gols.start()
+
+        logging.info("Monitoramento iniciado AUTOMATICAMENTE no horário agendado.")
+        await ctx.send(f"🟢 **Monitoramento iniciado automaticamente às {horario_agendado.strftime('%H:%M')}!**")
+
+    bot.loop.create_task(iniciar_no_horario())
+
+        
+
+          
+@commands.has_permissions(administrator=True)
 @bot.command()
-async def apistop(ctx):
+async def apistop(ctx, horario: int = None):
     if ctx.author.id != ADM_BRABO:
         return await ctx.send("Só amorreba the gostoso pode usar este comando! <:Galo:1425991683690074212>")
 
     global acompanhando
-    acompanhando = False
-    logging.info("Monitoramento pausado manualmente.")
 
-    await ctx.send("🔴 **Monitoramento pausado. Nenhum request será feito.**")
-          
+    # -----------------------------------------------------
+    # MODO 1 — SEM PARÂMETRO (PARADA MANUAL)
+    # -----------------------------------------------------
+    if horario is None:
+        acompanhando = False
+
+        logging.info("Monitoramento PARADO manualmente.")
+        return await ctx.send("🔴 **Monitoramento pausado manualmente! Nenhum request será feito.**")
+
+    # -----------------------------------------------------
+    # MODO 2 — PARADA AGENDADA
+    # -----------------------------------------------------
+    agora = datetime.now(tz_br)
+    horario_agendado = agora.replace(hour=horario, minute=0, second=0, microsecond=0)
+
+    if horario_agendado <= agora:
+        horario_agendado += timedelta(days=1)
+
+    await ctx.send(f"🟡 **Monitoramento será pausado às {horario_agendado.strftime('%H:%M')} (horário de Brasília).**")
+    logging.info(f"Pausa AGENDADA para {horario_agendado.strftime('%H:%M:%S')}")
+
+    async def parar_no_horario():
+        await discord.utils.sleep_until(horario_agendado)
+        global acompanhando
+        acompanhando = False
+        logging.info("Monitoramento pausado AUTOMATICAMENTE no horário agendado.")
+        await ctx.send("🔴 **Monitoramento pausado automaticamente. Nenhum request será feito.**")
+
+    bot.loop.create_task(parar_no_horario())
+
+    
+
 
 
 
@@ -2594,8 +2661,9 @@ async def terminar_jogo(ctx, fixture_id: int = None):
         await ctx.send(f"❌ Erro ao finalizar jogos: {e}")
         logging.error(f"Erro ao finalizar jogos: {e}")
 
+@bot.command()
 @commands.has_permissions(administrator=True)
-async def fixtureid(ctx):
+async def fixture_id(ctx):
     try:
         conn = conectar_futebol()
         cursor = conn.cursor()
@@ -2663,7 +2731,8 @@ async def info(ctx):
         value=(
             "`!comprar_item <nome>` - Compra um item da loja usando seus pontos.\n"
             "`!meuspontos` - Mostra quantos pontos você tem.\n"
-            "`!loja` - Indica a loja para compra."
+            "`!loja` - Indica a loja para compra.\n"
+            "`!top_apostas` - Mostra os 5 melhores apostadores do servidor."
         ),
         inline=False
     )
@@ -2784,7 +2853,7 @@ async def admin(ctx):
         value=(
             "**!top_apostas** — mostra top jogadores nas apostas\n"
             "**!resetar_jogo** — limpa as apostas de um jogo\n"
-            "**!fixtureid** — busca informações de uma partida\n"
+            "**!fixture_id** — busca informações de uma partida\n"
             "**!terminar_jogo** — finaliza e processa resultados\n"
         ),
         inline=False
