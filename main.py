@@ -340,6 +340,10 @@ async def on_reaction_add(reaction, user):
             con.close()
 
         try:
+            await user.send("⏰ Já se passaram os 10 minutos para apostar nesta partida.")
+        except:
+            pass
+        try:
             await reaction.remove(user)
         except:
             pass
@@ -656,6 +660,11 @@ async def on_raw_reaction_add(payload):
         # Se passou do tempo → ignora
         from datetime import datetime
         if datetime.utcnow() > aposta["tempo_fechamento"]:
+            try:
+                user = await bot.fetch_user(user_id)
+                await user.send("⏰ Já se passaram os 10 minutos para apostar nesta partida.")
+            except:
+                pass
             return
 
         escolha = None
@@ -750,6 +759,7 @@ async def dar_vip(ctx, membro: discord.Member):
 
         
         await ctx.send(f"<a:1b09ea8103ca4e519e8ff2c2ecb0b7f3:1409880647677378671> Cargo VIP concedido a {membro.mention}! Seu vip acabará em {data_fim.date()}! Veja o canal seja vip para mais detalhes dos seus benefícios <:jinxedheart:1390359964765261824>")
+        logging.info(f"Cargo VIP concedido a {membro.mention} até {data_fim.date()}")
 
     except Exception as e:
         await ctx.send("❌ Erro ao salvar VIP no banco de dados.")
@@ -855,7 +865,7 @@ COOLDOWN = 40
 ultimo_reagir = 0  
 BOT_MUSICA_PROIBIDO = 411916947773587456
 CANAIS_MUSICAS_LIBERADO = [1380564681093156940,1380564681093156941]
-BOT_REACTION = {
+BOT_REACTION = [
     "Achando que eu vou falar com você docinho?",
     "Sabia que mencionar bot e nada são a mesma coisa? HAHAHAAHHA",
     "Imagina ser tão feio a ponto de me mencionar",
@@ -865,8 +875,7 @@ BOT_REACTION = {
     "Vai corinthiaaaans",
     "Meu Deus, você está mencionando um bot? Isso não é bom para a saúde do servidor!",
     "Nada de me mencionar por aqui, se quiser conversar, seja apenas SOCIAL!",
-    
-}
+]
 
 @bot.event
 async def on_message(message):
@@ -1581,7 +1590,7 @@ tz_br = pytz.timezone("America/Sao_Paulo")
 
 @commands.has_permissions(administrator=True)
 @bot.command()
-async def apistart(ctx, horario: int = None):
+async def apistart(ctx, horario: str = None):
     if ctx.author.id != ADM_BRABO:
         return await ctx.send("Só amorreba the gostoso pode usar este comando! <:Galo:1425991683690074212>")
 
@@ -1604,7 +1613,19 @@ async def apistart(ctx, horario: int = None):
     # MODO 2 — COM PARÂMETRO (AGENDADO)
     # -----------------------------------------------------
     agora = datetime.now(tz_br)
-    horario_agendado = agora.replace(hour=horario, minute=0, second=0, microsecond=0)
+    try:
+        if ":" in horario:
+            h, m = horario.split(":", 1)
+            hour = int(h)
+            minute = int(m)
+        else:
+            hour = int(horario)
+            minute = 0
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
+    except Exception:
+        return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
+    horario_agendado = agora.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     # Se o horário já passou → agenda para o próximo dia
     if horario_agendado <= agora:
@@ -1633,7 +1654,7 @@ async def apistart(ctx, horario: int = None):
           
 @commands.has_permissions(administrator=True)
 @bot.command()
-async def apistop(ctx, horario: int = None):
+async def apistop(ctx, horario: str = None):
     if ctx.author.id != ADM_BRABO:
         return await ctx.send("Só amorreba the gostoso pode usar este comando! <:Galo:1425991683690074212>")
 
@@ -1652,7 +1673,19 @@ async def apistop(ctx, horario: int = None):
     # MODO 2 — PARADA AGENDADA
     # -----------------------------------------------------
     agora = datetime.now(tz_br)
-    horario_agendado = agora.replace(hour=horario, minute=0, second=0, microsecond=0)
+    try:
+        if ":" in horario:
+            h, m = horario.split(":", 1)
+            hour = int(h)
+            minute = int(m)
+        else:
+            hour = int(horario)
+            minute = 0
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
+    except Exception:
+        return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
+    horario_agendado = agora.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     if horario_agendado <= agora:
         horario_agendado += timedelta(days=1)
@@ -1880,19 +1913,32 @@ MAPEAMENTO_TIMES = {
         "atlético mineiro": "galo",
         "atletico-mg": "galo",
         "atlético-mg":"galo",
+        "galo": "galo",
         "são paulo": "sao paulo",
         "sao paulo fc": "sao paulo",
+        "sao paulo": "sao paulo",
         "flamengo rj": "flamengo",
+        "flamengo": "flamengo",
         "fluminense rj": "fluminense",
+        "fluminense": "fluminense",
         "corinthians sp": "corinthians",
+        "corinthians": "corinthians",
         "palmeiras sp": "palmeiras",
+        "palmeiras": "palmeiras",
+        "palemeiras": "palmeiras",
         "internacional rs": "internacional",
+        "internacional": "internacional",
         "grêmio": "gremio",
         "gremio rs": "gremio",
+        "gremio": "gremio",
         "bahia ba": "bahia",
+        "bahia": "bahia",
         "botafogo rj": "botafogo",
+        "botafogo": "botafogo",
         "cruzeiro mg": "cruzeiro",
+        "cruzeiro": "cruzeiro",
         "vasco da gama": "vasco",
+        "vasco": "vasco",
         "ceará": "ceara",
         "rb bragantino": "bragantino",
         "mirassol sp": "mirassol",
@@ -1901,6 +1947,7 @@ MAPEAMENTO_TIMES = {
         "sport recife": "sport",
         "lanús": "lanus",
         "fortaleza ec" :"fortaleza",
+        "fortaleza" :"fortaleza",
         "atlético paranaense": "atletico paranaense",
         "atletico pr": "atletico paranaense",
         "athletico pr": "atletico paranaense",
@@ -2042,8 +2089,13 @@ async def verificar_gols():
                 embed.add_field(name=f"{EMOJI_EMPATE} Empate", value="Empate", inline=True)
                 embed.set_footer(text="Apostas abertas por 10 minutos!")
 
+                if partida["league"]["id"] == 13:
+                    await canal_apostas.send(
+                        "🏆 **APOSTAS ABERTAS PARA A LIBERTADORES!**\n"
+                        "https://tenor.com/view/libertadores-copa-libertadores-conmebol-libertadores-a-gl%C3%B3ria-eterna-gif-26983587"
+                    )
                 mensagem = await canal_apostas.send(
-                    content = cargo_futebol,
+                    content=cargo_futebol,
                     embed=embed,
                     allowed_mentions=discord.AllowedMentions(roles=True)
                 )
@@ -2527,6 +2579,7 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def terminar_jogo(ctx, fixture_id: int = None):
+    logging.info(f"Administrador {ctx.author} solicitou o término de jogo(s) com fixture_id {fixture_id}.")
     try:
         conn = conectar_futebol()
         cursor = conn.cursor(dictionary=True)
@@ -2606,6 +2659,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                             f"📘 Veja mais comandos em **!info**"
                         )
                     )
+                    
                 else:
                     mensagens_pv.append(
                         (
@@ -2616,6 +2670,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                             f"ℹ️ Veja seus pontos com **!meuspontos**\n"
                             f"📘 Mais informações: **!info**"
                         )
+                        
                     )
 
             cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fx,))
@@ -2654,8 +2709,10 @@ async def terminar_jogo(ctx, fixture_id: int = None):
             await ctx.send("⚠️ Nenhum jogo foi processado.")
         elif processados == 1:
             await ctx.send("✅ 1 jogo finalizado manualmente. Pontuações aplicadas.")
+            logging.info("1 jogo finalizado manualmente. Pontuações aplicadas.")
         else:
             await ctx.send(f"✅ {processados} jogos finalizados manualmente. Pontuações aplicadas.")
+            logging.info(f"{processados} jogos finalizados manualmente. Pontuações aplicadas.")
 
     except Exception as e:
         await ctx.send(f"❌ Erro ao finalizar jogos: {e}")
@@ -2664,11 +2721,13 @@ async def terminar_jogo(ctx, fixture_id: int = None):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def fixture_id(ctx):
+    logging.info(f"Administrador {ctx.author} solicitou o painel de comandos administrativos.")
     try:
         conn = conectar_futebol()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT fixture_id, home, away, data_jogo, horario_jogo FROM jogos WHERE finalizado = 0")
+        cursor.execute("SELECT fixture_id, home, away, data, horario FROM jogos WHERE finalizado = 0")
+        logging.info("Executando consulta para buscar jogos pendentes.")
         jogos = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -2683,15 +2742,20 @@ async def fixture_id(ctx):
             mensagem += f"- ID: `{fixture_id}` | {home} x {away} | Data: {data_jogo} | Horário: {horario_jogo}\n"
 
         await ctx.send(mensagem)
+        logging.info(f"Enviado para {ctx.author}: {mensagem}")
     except Exception as e:
         await ctx.send(f"❌ Erro ao buscar jogos pendentes: {e}")
         logging.error(f"Erro ao buscar jogos pendentes: {e}")
 
-
+ID_AMORREBA = 428006047630884864
 
 @commands.has_permissions(administrator= True)
 @bot.command()
 async def resetar_jogo(ctx):
+    if ctx.author.id != ID_AMORREBA:
+        await ctx.send("❌ Você não tem permissão para usar este comando.")
+        logging.info(f"Alguém ({ctx.author}) tentou usar o comando resetar_jogo sem permissão.")
+        return
     try:
         conn = conectar_futebol()
         cursor = conn.cursor()
@@ -2781,18 +2845,20 @@ async def top_apostas(ctx):
     logging.info(f"Usuário {ctx.author} solicitou ver os 5 melhores apostadores.")
 
 
-
-
+CANAL_COMANDOS = 1380564680774385724
 
 @bot.command()
 async def time(ctx, *, nome_time: str):
+    if ctx.channel.id != CANAL_COMANDOS:
+        return await ctx.send("<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.")
+    logging.info(f"Alguém ({ctx.author}) tentou usar o comando time em um canal diferente ({ctx.channel.id}).")
     if nome_time is None:
         return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas você precisa informar o nome do time")
     
 
     nome = nome_time.lower().strip()
     if nome not in MAPEAMENTO_TIMES:
-        return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas eu não reconheço esse time")
+        return await ctx.send("<:3894307:1443956354698969149> Desculpa, mas eu não reconheço esse time")
 
     time_normalizado = MAPEAMENTO_TIMES[nome]
 
@@ -2812,24 +2878,79 @@ async def time(ctx, *, nome_time: str):
     conn.close()
 
     #------Cargo------
-    cargo = discord.utils.get(ctx.guild.roles, name=cargo_nome)
+    ROLE_IDS_TIMES = {
+        "fluminense": 1442482502311739442,
+        "vasco": 1442482275546697860,
+        "gremio": 1442482642942689323,
+        "fortaleza": 1442482777894293624,
+        "galo": 1443224658710364190,
+        "internacional": 1443226517219049512,
+        "cruzeiro": 1443226573116538950,
+        "flamengo": 1443226719572988077,
+        "palmeiras": 1443227045332123648,
+        "bahia": 1443227115561685033,
+        "sao paulo": 1443227353412014081,
+        "corinthians": 1443227525458165903,
+        "santos": 1443227595935187025,
+        "botafogo": 1443759934054469703
+    }
+
+    role_id = ROLE_IDS_TIMES.get(time_normalizado)
+    cargo = None
+    if role_id:
+        cargo = discord.utils.get(ctx.guild.roles, id=role_id)
+    if not cargo:
+        cargo = discord.utils.get(ctx.guild.roles, name=cargo_nome)
     if not cargo:
         cargo = await ctx.guild.create_role(name=cargo_nome)
 
     await ctx.author.add_roles(cargo)
+    
+    logging.info(f"Usuário {ctx.author} se registrou como torcedor do time {cargo_nome} (ID: {cargo.id}).")
 
-    await ctx.send(f"✅ {ctx.author.mention}, agora você está registrado como torcedor do **{cargo_nome}**!")
+
+    await ctx.send(f"<a:995589misathumb:1443956356846719119> {ctx.author.mention}, agora você está registrado como torcedor do **{cargo_nome}**!")
+
+
 
 @bot.command()
 async def lista_times(ctx):
-    # Pega todos os valores únicos do dicionário (nomes normalizados)
+    def emoji_do_time(nome: str) -> str:
+        base = nome.strip().lower()
+        e = EMOJI_TIMES.get(base)
+        if e:
+            return e
+        e = EMOJI_TIMES.get(base.replace(" ", "_"))
+        if e:
+            return e
+        for k, v in EMOJI_TIMES.items():
+            if k.replace("_", " ").lower() == base:
+                return v
+        return "❓"
+
     times = sorted(set(MAPEAMENTO_TIMES.values()))
+    linhas = []
 
-    # Deixa todos em Title Case (ex.: "galo" → "Galo")
-    times_formatados = [t.title() for t in times]
+    # Define largura fixa para coluna (emoji + barra + espaço + nome)
+    largura_coluna = 20
 
-    
-    lista = "\n".join(f"- **{t}**" for t in times_formatados)
+    for i in range(0, len(times), 2):
+        t1 = times[i]
+        e1 = emoji_do_time(t1)
+        c1 = f"{e1} | {t1.title()}"
+
+        if i+1 < len(times):
+            t2 = times[i+1]
+            e2 = emoji_do_time(t2)
+            c2 = f"{e2} | {t2.title()}"
+        else:
+            c2 = ""
+
+        # Alinha cada coluna com largura fixa
+        linha = f"{c1:<{largura_coluna}} {c2}"
+        linhas.append(linha)
+
+    lista = "```\n" + "\n".join(linhas) + "\n```"
 
     embed = discord.Embed(
         title="📋 Times Disponíveis",
@@ -2838,6 +2959,8 @@ async def lista_times(ctx):
     )
 
     await ctx.send(embed=embed)
+    logging.info(f"Usuário {ctx.author} solicitou a lista de times.")
+
 # ----- CÓDIGO PARA VER TODOS OS COMANDOS ADMIN -----
 @bot.command() 
 @commands.has_permissions(administrator=True)
@@ -2884,12 +3007,9 @@ async def admin(ctx):
     )
 
     embed.set_footer(text="Use com responsabilidade. 😉")
+    logging.info(f"Administrador {ctx.author} solicitou o painel de comandos administrativos.")
 
     await ctx.send(embed=embed)
-
-
-
-
 
 
 
