@@ -2265,10 +2265,10 @@ PRECOS = {
     "cor_personalizada": 250,
     "badge_perfil": 500,
     "limite_apostas_extra": 350,
-    "caixa_misteriosa": 250,
-    "caixinha": 250,
-    "segunda_chance": 200,
-    "clown_bet": 500
+    "caixa_misteriosa": 50,
+    "caixinha": 50,
+    "segunda_chance": 30,
+    "clown_bet": 20
 }
 #LOJA DE PONTOS----------------------------------
 
@@ -2347,6 +2347,16 @@ async def comprar_item(ctx, item_nome: str):
         # ITEM CAIXINHA DE SURPRESA
         # ===========================
         elif item == "caixinha":
+            cursor.execute(
+                "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'caixinha' AND DATE(data_compra) = UTC_DATE()",
+                (user_id,)
+            )
+            limite_hoje = cursor.fetchone()[0]
+            if limite_hoje >= 3:
+                atualizar_pontos(user_id, preco)
+                await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes hoje. Tente novamente amanhã.")
+                return
+
             pontos_sorteados = random.randint(10, 100)
             atualizar_pontos(user_id, pontos_sorteados)
             cursor.execute(
@@ -2420,14 +2430,14 @@ async def loja(ctx):
     )
 
     embed.add_field(
-        name="🎭 Modo Clown — 500 pontos",
+        name="🎭 Modo Clown — 20 pontos",
         value="• Multiplica pontos por 4 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use **clown_bet**  ",
         inline=False
     )
 
     embed.add_field(
-        name="🎁 Caixa Surpresa — 250 pontos",
-        value="• Ganha pontos aleatórios de 20 a 120\n• Pode vir até negativo 👀\n• Use **caixinha** ",
+        name="🎁 Caixa Surpresa — 50 pontos",
+        value="• Ganha pontos aleatórios de 10 a 100\n• Pode vir até negativo 👀\n• Use **caixinha** ",
         inline=False
     )
 
@@ -2439,7 +2449,7 @@ async def loja(ctx):
     )
 
     embed.add_field(
-        name="⏪ Segunda Chance — 200 pontos",
+        name="⏪ Segunda Chance — 30 pontos",
         value="• Recupera a última aposta perdida\n• Uso único\n• Use **segunda_chance**",
         inline=False
     )
@@ -2502,10 +2512,21 @@ async def comprar(ctx, item_nome: str):
         await ctx.send("🎯 Você comprou **Segunda Chance**! Pode recuperar pontos na próxima aposta perdida.")
 
     elif item == "caixinha":
-        pontos_sorteados = random.randint(10, 100)
-        adicionar_pontos_db(user_id, pontos_sorteados)
         con = conectar_futebol()
         cur = con.cursor()
+        cur.execute(
+            "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'caixinha' AND DATE(data_compra) = UTC_DATE()",
+            (user_id,)
+        )
+        limite_hoje = cur.fetchone()[0]
+        if limite_hoje >= 3:
+            adicionar_pontos_db(user_id, preco)
+            con.close()
+            await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes hoje. Tente novamente amanhã.")
+            return
+
+        pontos_sorteados = random.randint(10, 100)
+        adicionar_pontos_db(user_id, pontos_sorteados)
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
             (user_id, item, preco, datetime.utcnow())
@@ -2795,8 +2816,7 @@ async def info(ctx):
         value=(
             "`!comprar_item <nome>` - Compra um item da loja usando seus pontos.\n"
             "`!meuspontos` - Mostra quantos pontos você tem.\n"
-            "`!loja` - Indica a loja para compra.\n"
-            "`!top_apostas` - Mostra os 5 melhores apostadores do servidor."
+            "`!loja` - Indica a loja para compra."
         ),
         inline=False
     )
@@ -2806,7 +2826,10 @@ async def info(ctx):
         name="⚽ Times de Futebol",
         value=(
             "`!time <nome>` - Seleciona o time e recebe o cargo correspondente.\n"
-            "`!lista_times` - Mostra todos os times disponíveis para escolha."
+            "`!lista_times` - Mostra todos os times disponíveis para escolha.\n"
+            "`!torcedores` - Mostra os torcedores do time informado."
+            
+
         ),
         inline=False
     )
@@ -2960,6 +2983,47 @@ async def lista_times(ctx):
 
     await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou a lista de times.")
+
+#Mostrar os torcedores do servidor
+@bot.command()
+async def torcedores(ctx):
+    try:
+        conn = conectar_futebol()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT user_id, time_normalizado FROM times_usuarios")
+        rows = cursor.fetchall()
+        if not rows:
+            return await ctx.send("Nenhum torcedor registrado no servidor.")
+        
+        torcedores = {}
+
+        for user_id, time_normalizado in rows:
+            if time_normalizado not in torcedores:
+                torcedores[time_normalizado] = []
+            torcedores[time_normalizado].append(user_id)
+        embed = discord.Embed(
+            title="🏟️ Torcedores por Time",
+            color=discord.Color.blue()
+        )
+        for time, usuarios in torcedores.items():
+            mencoes = "\n".join(f"<@{uid}>" for uid in usuarios)
+            embed.add_field(
+                name=f"**{time.title()}**",
+                value=mencoes,
+                inline=False
+
+            )
+        await ctx.send(embed=embed)
+        logging.info(f"Usuário {ctx.author} solicitou a lista de torcedores.")
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logging.info(f"Ocorreu um erro ao listar os torcedores: {e}")
+        await ctx.send(f"Ocorreu um erro ao listar os torcedores: {e}")
+
+
 
 # ----- CÓDIGO PARA VER TODOS OS COMANDOS ADMIN -----
 @bot.command() 
