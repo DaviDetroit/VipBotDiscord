@@ -113,17 +113,6 @@ def pegar_torcedores(time):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
@@ -185,6 +174,30 @@ mensagens_bom_dia = [
     "🆘 **Curiosidade:** Para qualquer dúvida sobre funções do servidor, você pode chamar o **ChicoBento** no canal 🆘┃ajuda, economizando tempo e evitando confusão com outros membros.",
     "🤩 **Curiosidade:** Servidores que usam bots de gerenciamento como o **ChicoBento** geralmente têm comunidades mais organizadas, porque automatizam tarefas repetitivas e mantêm tudo funcionando de forma fluida."
 ]
+
+
+mensagens_boa_tarde = [
+    "Opa, boa tarde! Fala aí 😎",
+    "Boa tarde! E aí, como tá a vida?",
+    "Boa tarde! Cheguei, sentiu minha falta? 😏",
+    "Boa tarde! Suave por aí?",
+    "Boa tarde! E aí, o que manda?",
+    "Boa tarde! Tudo certo ou só quase?",
+    "Boa tarde! Bora fazer essa tarde render?",
+    "Boa tarde! E aí, firmeza?",
+    "Boa tarde! Passando pra lembrar que você é brabo 😌",
+    "Boa tarde! Tarde boa é tarde com você online 😂",
+    "Boa tarde! E aí, tá de boas ou no caos?",
+    "Boa tarde! Fala comigo, não me ignora 👀",
+    "Boa tarde! Chega mais, bora trocar ideia!",
+    "Boa tarde! Tá on? Bora movimentar isso aqui 😎",
+    "Boa tarde! Força aí, que o dia ainda não acabou 💪",
+    "Boa tarde! Tô só observando a galera… 👀",
+    "Boa tarde! Hoje tá com cara de dia bom, hein?",
+    "Boa tarde! Só passando pra deixar aquele salve ✌️",
+    "Boa tarde! E aí, aprontando o quê?",
+    "Boa tarde! Se anima aí que a tarde tá só começando!"
+]
 @bot.event
 async def on_ready():
     logging.info(f"Bot conectado como {bot.user}")
@@ -227,6 +240,11 @@ async def on_ready():
         canal = bot.get_channel(1380564680552091789)
         if canal:
             mensagem = random.choice(mensagens_bom_dia)
+            await canal.send(mensagem)
+    if 12 <= hora < 18:
+        canal = bot.get_channel(1380564680552091789)
+        if canal:
+            mensagem = random.choice(mensagens_boa_tarde)
             await canal.send(mensagem)
 
     # ===== TOP ATIVOS DOMINGO =====
@@ -560,8 +578,8 @@ async def vip_mensagem(ctx):
     embed = discord.Embed(
         title="<:Jinx:1390379001515872369> Bem-vindo ao Sistema VIP e Boost!",
         description=(
-            "<:bigstar:1387225494394769408> **SEJA VIP OU BOOSTER!**\n\n"
-            "<:cifraopng:1387223251943424131> O VIP custa **R$5,00 mensal** e oferece os mesmos benefícios do Booster.\n\n"
+            "<:discotoolsxyzicon_6:1444750406763679764> | <:discotoolsxyzicon_5:1444750402061991956> **SEJA VIP OU BOOSTER!**\n\n"
+            "<:discotoolsxyzicon_6:1444750406763679764> O VIP custa **R$5,00 mensal** e oferece os mesmos benefícios do Booster.\n\n"
             "<:Stars:1387223064227348591> **Benefícios:**\n"
             "<:jinxedsignal:1387222975161434246> Cargo personalizado\n"
             "<:jinxedsignal:1387222975161434246> Permissão para streamar em qualquer canal\n"
@@ -571,25 +589,29 @@ async def vip_mensagem(ctx):
             "<:jinxedsignal:1387222975161434246> Jesus vai te amar\n"
             "<:jinxedsignal:1387222975161434246> Vai estar me ajudando\n"
             "<:jinxedsignal:1387222975161434246> Novos benefícios futuramente! <:JinxKissu:1408843869784772749>\n\n"
-            "<a:heart_glitch:1408844002647740437> Clique em 👑 abaixo para solicitar o VIP.\n"
+            "<a:heart_glitch:1408844002647740437> Clique em <:discotoolsxyzicon_6:1444750406763679764> abaixo para solicitar o VIP.\n"
             "<:notification:1390647107316355165> Após o clique, um administrador será notificado para continuar o processo.\n"
             "_Acesso válido por 30 dias._ 🗓️"
         ),
-        color=discord.Color.pink()
+        color=discord.Color(0xfb3060)
     )
 
     # Banner maior no topo
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1254450666873688084/1387064274832064702/Inserir_um_titulo_16.png?ex=68ab15c5&is=68a9c445&hm=1936d3de41b2e878a5e415be833fc81ef87f5db4ce3782f7d4d300dbf870e19b&")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749215669424218/JINXEDd1.png?ex=692dd70f&is=692c858f&hm=8fdcc6669a7e1435ff7e1f4ab8617848326eab3e094f3d0b01fc970d59f7fa9c&")
 
     # Thumbnail à direita
-    embed.set_thumbnail(url="https://media.discordapp.net/attachments/1380564680552091789/1381066491205779518/tl.png?ex=68ab04a6&is=68a9b326&hm=f66a377fdde73cc6d4abedc33fc74605f781eae350c28a852fdd2843b47fdf78&format=webp&quality=lossless&")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749579605119148/discotools-xyz-icon.png?ex=692dd765&is=692c85e5&hm=a631e3a40d1f2fb68a0ed37614387aaf3946950d31e4aa91fcf35005f568717a&")
 
     # Mensagem menor embaixo
     embed.set_footer(text="VIP exclusivo para os jogadores mais dedicados!")
 
     # Envia a mensagem e adiciona reação
     mensagem = await ctx.send(embed=embed)
-    await mensagem.add_reaction("👑")
+    emoji_coroa = discord.utils.get(ctx.guild.emojis, id=1444750406763679764)
+    if emoji_coroa:
+        await mensagem.add_reaction(emoji_coroa)
+    else:
+        await mensagem.add_reaction("<:discotoolsxyzicon_6:1444750406763679764>")
 
     # Salva o ID da mensagem para persistência após restart
     vip_message_id = mensagem.id
@@ -635,16 +657,16 @@ async def on_raw_reaction_add(payload):
         except:
             pass  # Sem problema, pode ficar vazio
 
-    if payload.message_id == vip_message_id and str(payload.emoji) == "👑":
+    if payload.message_id == vip_message_id and getattr(payload.emoji, "id", None) == 1444750406763679764:
         member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
         dono = await bot.fetch_user(614476239683584004)
 
         try:
-            await dono.send(f"👑 {member.name}#{member.discriminator} quer ser VIP!")
+            await dono.send(f"<:discotoolsxyzicon_6:1444750406763679764> {member.name}#{member.discriminator} quer ser VIP!")
         except:
             canal_fallback = discord.utils.get(guild.text_channels, name="⚠️┃avisos")
             if canal_fallback:
-                await canal_fallback.send(f"👑 {member.mention} quer ser VIP!")
+                await canal_fallback.send(f"<:discotoolsxyzicon_6:1444750406763679764> {member.mention} quer ser VIP!")
 
 
 
@@ -974,6 +996,7 @@ async def on_message(message):
         "vini jr": "<:65748vinijrfootball:1437441624173973634>",
         "vini malvadeza": "<:65748vinijrfootball:1437441624173973634>",
         "repo": "<:8814repo:1437442117717856428>",
+        "67\n" : "<a:42642667:1444748898592755764>",
     }
 
     # ============================
@@ -1148,7 +1171,7 @@ async def vip_list(ctx):
             return
 
         embed = discord.Embed(
-            title="<:cifraopng:1387223251943424131> Lista de VIPs Ativos",
+            title="<:discotoolsxyzicon_6:1444750406763679764> Lista de VIPs Ativos",
             color=discord.Color.gold()
         )
         from datetime import datetime, timezone
@@ -1553,7 +1576,23 @@ EMOJI_TIMES = {
 
 
 
-     
+ROLE_IDS_TIMES = {
+    "fluminense": 1442482502311739442,
+    "vasco": 1442482275546697860,
+    "gremio": 1442482642942689323,
+    "fortaleza": 1442482777894293624,
+    "galo": 1443224658710364190,
+    "internacional": 1443226517219049512,
+    "cruzeiro": 1443226573116538950,
+    "flamengo": 1443226719572988077,
+    "palmeiras": 1443227045332123648,
+    "bahia": 1443227115561685033,
+    "sao paulo": 1443227353412014081,
+    "corinthians": 1443227525458165903,
+    "santos": 1443227595935187025,
+    "botafogo": 1443759934054469703,
+    "vitoria": 1444483144270086267
+}
 
 
 
@@ -1944,6 +1983,10 @@ MAPEAMENTO_TIMES = {
         "mirassol sp": "mirassol",
         "juventude rs": "juventude",
         "vitoria ba": "vitoria",
+        "vitoria": "vitoria",
+        "vitória": "vitoria",
+        "esporte clube vitoria": "vitoria",
+        "ec vitoria": "vitoria",
         "sport recife": "sport",
         "lanús": "lanus",
         "fortaleza ec" :"fortaleza",
@@ -1957,6 +2000,33 @@ MAPEAMENTO_TIMES = {
 
         
     }
+
+
+PALAVRAS_GOL = {
+    "galo":        "🐓 GOOOOOOOOOOL É DO GALO DOIDO!!! 🔥",
+    "flamengo":    "🦅 GOOOOOOOL DO MENGÃO",
+    "palmeiras":   "🐷 GOOOOOOOOOL DO VERDÃO",
+    "corinthians": "🦅 GOOOOOOOL DO TIMÃO!",
+    "cruzeiro":    "🦊 GOOOOOOOOOL DO CRUZEIRÃO CABULOSO!!!",
+    "sao paulo":   "👑 GOOOOOL DO TRICOLOR!",
+    "fortaleza":   "🦁 GOOOOOOOOL DO LEÃO DO PICI!!!",
+    "vitoria":     "🦁 GOOOOOOOOOL DO LEÃO DA BARRA!!!",
+    "sport":       "🦁 GOOOOOOOOOL DO LEÃO DA ILHA!!!",
+    "mirassol":    "🦁 GOOOOOOOOOL DO LEÃO DE MIRASSOL!!!",
+    "bahia":       "🔵⚪🔴 GOOOOOOOL DO BAHÊA, ESQUADRÃO!!!",
+    "gremio":      "🤺 GOOOOOOOL DO IMORTAL TRICOLOR!!!",
+    "juventude":   "🟢⚪ GOOOOOOOL DO JU!!!",
+    "botafogo":    "⭐ GOOOOOOOOOL DO GLORIOSO!!!",
+    "vasco":       "⚓ GOOOOOOOOL DO GIGANTE DA COLINA!!!",
+    "bragantino":  "🐂 GOOOOOOOL DO MASSA BRUTA!!!",
+    "ceara":       "🦅 GOOOOOOOL DO VOZÃO!!!",
+    "atletico paranaense": "🌪️ GOOOOOOOL DO FURACÃO!!!",
+    "fluminense":  "🍃❤️💚 GOOOOOOOL DO FLUZÃO",
+    "internacional": "🎩 GOOOOOOOL DO COLORADO!!!",
+    "coritiba":    "🍀 GOOOOOOOL DO COXA!!!",
+    "remo":        "🦁 GOOOOOOOL DO LEÃO AZUL!!!",
+    "lanus":       "🟤 GOOOOOOOL DO GRANATE!!!"
+}
 
 
 
@@ -2101,8 +2171,11 @@ async def verificar_gols():
                 )
                 
                 await mensagem.add_reaction(emoji_casa)
+                logging.info(f"✅ Reação {emoji_casa} adicionada à mensagem {mensagem.id}")
                 await mensagem.add_reaction(emoji_fora)
+                logging.info(f"✅ Reação {emoji_fora} adicionada à mensagem {mensagem.id}")
                 await mensagem.add_reaction(EMOJI_EMPATE)
+                logging.info(f"✅ Reação {EMOJI_EMPATE} adicionada à mensagem {mensagem.id}")
 
                 marcar_jogo_como_open(
                     fixture_id=fixture_id,
@@ -2125,8 +2198,10 @@ async def verificar_gols():
             gols_anteriores_fora = anterior["away"]
 
             if gols_casa > gols_anteriores_casa:
+                key_home = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower())
+                frase_home = PALAVRAS_GOL.get(key_home, f"⚽ GOOOOOOOL DO {casa.upper()}!")
                 embed = discord.Embed(
-                    title=f"⚽ GOOOOOOOL DO {casa.upper()}!",
+                    title=frase_home,
                     color=discord.Color.green()
                 )
                 embed.add_field(
@@ -2134,14 +2209,16 @@ async def verificar_gols():
                     value=f"{emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
                     inline=False
                 )
-                role_home_name = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower())
+                role_home_name = key_home
                 role_home = discord.utils.get(canal.guild.roles, name=role_home_name)
                 mention_home = role_home.mention if role_home else f"@{role_home_name}"
-                await canal.send(content=f"{mention_home} ⚽ GOOOOOOOOL DO {casa.upper()}!", embed=embed)
+                await canal.send(content=f"{mention_home} {frase_home}", embed=embed)
 
             if gols_fora > gols_anteriores_fora:
+                key_away = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower())
+                frase_away = PALAVRAS_GOL.get(key_away, f"⚽ GOOOOOOOL DO {fora.upper()}!")
                 embed = discord.Embed(
-                    title=f"⚽ GOOOOOOOL DO {fora.upper()}!",
+                    title=frase_away,
                     color=discord.Color.green()
                 )
                 embed.add_field(
@@ -2149,10 +2226,10 @@ async def verificar_gols():
                     value=f"{emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
                     inline=False
                 )
-                role_away_name = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower())
+                role_away_name = key_away
                 role_away = discord.utils.get(canal.guild.roles, name=role_away_name)
                 mention_away = role_away.mention if role_away else f"@{role_away_name}"
-                await canal.send(content=f"{mention_away} ⚽ GOOOOOOOOL DO {fora.upper()}!", embed=embed)
+                await canal.send(content=f"{mention_away} {frase_away}", embed=embed)
 
         except Exception as e:
             logging.error(f"❌ Erro ao enviar notificação de gol: {e}")
@@ -2189,15 +2266,26 @@ async def verificar_gols():
                     resultado_final = "draw"
 
                 # Buscar apostas
-                cursor.execute("SELECT * FROM apostas WHERE fixture_id = %s", (fixture_id,))
+                cursor.execute("SELECT user_id, palpite FROM apostas WHERE fixture_id = %s", (fixture_id,))
                 apostas = cursor.fetchall()
+
+                # Contagem por palpite para bônus de minoria
+                contagem = {"home": 0, "away": 0, "draw": 0}
+                for a in apostas:
+                    p = a["palpite"]
+                    if p in contagem:
+                        contagem[p] += 1
+                votos_vencedor = contagem.get(resultado_final, 0)
+                votos_max = max(contagem.values()) if contagem else 0
+                bonus_minoria = votos_vencedor > 0 and votos_vencedor < votos_max
 
                 mensagens_pv = []
                 for aposta in apostas:
                     user_id = aposta["user_id"]
                     palpite = aposta["palpite"]
                     acertou = (palpite == resultado_final)
-                    pontos = 15 if acertou else -7
+                    pontos_base = 30 if (acertou and bonus_minoria) else 15
+                    pontos = pontos_base if acertou else -7
 
                     usuario_dm = bot.get_user(int(user_id))
                     nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
@@ -2212,7 +2300,7 @@ async def verificar_gols():
 
                     if acertou:
                         mensagens_pv.append(
-                            (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+15 pontos**")
+                            (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+{pontos} pontos**" + (" (bônus de minoria)" if bonus_minoria else ""))
                         )
                     else:
                         mensagens_pv.append(
@@ -2373,7 +2461,7 @@ async def comprar_item(ctx, item_nome: str):
                 "INSERT INTO clown_bet (user_id, ativo) VALUES (%s, 1) ON DUPLICATE KEY UPDATE ativo = 1",
                 (user_id,)
             )
-            await ctx.send("🤡 Você ativou a **Clown Bet**! Sua próxima aposta terá multiplicador 4x (positiva ou negativa).")
+            await ctx.send("🤡 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
 
         # Commit e fechar
         conn.commit()
@@ -2431,7 +2519,7 @@ async def loja(ctx):
 
     embed.add_field(
         name="🎭 Modo Clown — 20 pontos",
-        value="• Multiplica pontos por 4 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use **clown_bet**  ",
+        value="• Multiplica pontos por 6 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use **clown_bet**  ",
         inline=False
     )
 
@@ -2443,7 +2531,7 @@ async def loja(ctx):
 
 
     embed.add_field(
-        name="👑 Jinxed VIP — 1000 pontos",
+        name="<:discotoolsxyzicon_6:1444750406763679764> Jinxed VIP — 1000 pontos",
         value="• Garante 15 dias do cargo VIP\n• Use **jinxed_vip**",
         inline=False
     )
@@ -2496,7 +2584,8 @@ async def comprar(ctx, item_nome: str):
             con.commit()
             con.close()
             await ctx.author.add_roles(cargo)
-            await ctx.send("👑 Parabéns! Você comprou o cargo **Jinxed Vip** por 15 dias!")
+            await ctx.send(f"<:discotoolsxyzicon_6:1444750406763679764> Parabéns! Você comprou o cargo **Jinxed Vip** por 15 dias!")
+            logging.info(f"{ctx.author.name} comprou o cargo Jinxed Vip por 15 dias.")
         else:
             await ctx.send("⚠️ Cargo 'Jinxed Vip' não encontrado no servidor.")
 
@@ -2544,7 +2633,7 @@ async def comprar(ctx, item_nome: str):
         )
         con.commit()
         con.close()
-        await ctx.send("🤡 Você ativou a **Clown Bet**! Sua próxima aposta terá multiplicador 4x.")
+        await ctx.send("🤡 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
 
 def processar_aposta(user_id, fixture_id, resultado, pontos_base):
     conn = conectar_futebol()
@@ -2562,18 +2651,18 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
 
     aposta_usuario, modo_clown = row
 
-    # 2️⃣ Multiplicador
-    multiplicador = 1
+    multiplicador_vitoria = 1
+    multiplicador_derrota = 1
     if modo_clown == 1:
-        multiplicador = 4
-        # Consumir clown (marcando como usado)
+        multiplicador_vitoria = 6
+        multiplicador_derrota = 4
         cursor.execute("UPDATE apostas SET modo_clown = 0 WHERE user_id = %s AND fixture_id = %s",
                        (user_id, fixture_id))
-        logging.info(f"Usuário {user_id} usou Clown Bet! Multiplicador aplicado.")
+        logging.info(f"Usuário {user_id} usou Clown Bet!")
 
     # 3️⃣ Calcular pontos ganhos ou perdidos
     if aposta_usuario == resultado:
-        pontos_final = pontos_base * multiplicador
+        pontos_final = pontos_base * multiplicador_vitoria
         adicionar_pontos_db(user_id, pontos_final)
         logging.info(f"Usuário {user_id} acertou! Ganhou {pontos_final} pontos.")
     else:
@@ -2589,7 +2678,7 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
             adicionar_pontos_db(user_id, pontos_base)  # devolve os pontos
             logging.info(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: {pontos_base}")
         else:
-            pontos_final = -pontos_base * multiplicador
+            pontos_final = -pontos_base * multiplicador_derrota
             adicionar_pontos_db(user_id, pontos_final)
             logging.info(f"Usuário {user_id} perdeu! Perdeu {abs(pontos_final)} pontos.")
 
@@ -2650,15 +2739,25 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                 await ctx.send(f"⚠️ Jogo {fx} já foi processado.")
                 continue
 
-            cursor.execute("SELECT * FROM apostas WHERE fixture_id = %s", (fx,))
+            cursor.execute("SELECT user_id, palpite FROM apostas WHERE fixture_id = %s", (fx,))
             apostas = cursor.fetchall()
+
+            contagem = {"home": 0, "away": 0, "draw": 0}
+            for a in apostas:
+                p = a["palpite"]
+                if p in contagem:
+                    contagem[p] += 1
+            votos_vencedor = contagem.get(resultado_final, 0)
+            votos_max = max(contagem.values()) if contagem else 0
+            bonus_minoria = votos_vencedor > 0 and votos_vencedor < votos_max
 
             mensagens_pv = []
             for aposta in apostas:
                 user_id = aposta["user_id"]
                 palpite = aposta["palpite"]
                 acertou = (palpite == resultado_final)
-                pontos = 15 if acertou else -7
+                pontos_base = 30 if (acertou and bonus_minoria) else 15
+                pontos = pontos_base if acertou else -7
                 usuario_dm = bot.get_user(int(user_id))
                 nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
                 cursor.execute(
@@ -2674,7 +2773,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                         (
                             user_id,
                             f"<a:270795discodance:1419694558945476760> **APOSTA CERTA!**\n"
-                            f"✨ Você garantiu **+15 pontos**!\n\n"
+                            f"✨ Você garantiu **+{pontos} pontos**" + (" (bônus de minoria)" if bonus_minoria else "") + "!\n\n"
                             f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
                             f"<:apchikabounce:1408193721907941426> Confira seus pontos com **!meuspontos**\n"
                             f"📘 Veja mais comandos em **!info**"
@@ -2900,24 +2999,6 @@ async def time(ctx, *, nome_time: str):
     cursor.close()
     conn.close()
 
-    #------Cargo------
-    ROLE_IDS_TIMES = {
-        "fluminense": 1442482502311739442,
-        "vasco": 1442482275546697860,
-        "gremio": 1442482642942689323,
-        "fortaleza": 1442482777894293624,
-        "galo": 1443224658710364190,
-        "internacional": 1443226517219049512,
-        "cruzeiro": 1443226573116538950,
-        "flamengo": 1443226719572988077,
-        "palmeiras": 1443227045332123648,
-        "bahia": 1443227115561685033,
-        "sao paulo": 1443227353412014081,
-        "corinthians": 1443227525458165903,
-        "santos": 1443227595935187025,
-        "botafogo": 1443759934054469703
-    }
-
     role_id = ROLE_IDS_TIMES.get(time_normalizado)
     cargo = None
     if role_id:
@@ -2940,10 +3021,7 @@ async def time(ctx, *, nome_time: str):
 async def lista_times(ctx):
     def emoji_do_time(nome: str) -> str:
         base = nome.strip().lower()
-        e = EMOJI_TIMES.get(base)
-        if e:
-            return e
-        e = EMOJI_TIMES.get(base.replace(" ", "_"))
+        e = EMOJI_TIMES.get(base) or EMOJI_TIMES.get(base.replace(" ", "_"))
         if e:
             return e
         for k, v in EMOJI_TIMES.items():
@@ -2951,36 +3029,9 @@ async def lista_times(ctx):
                 return v
         return "❓"
 
-    times = sorted(set(MAPEAMENTO_TIMES.values()))
-    linhas = []
-
-    # Define largura fixa para coluna (emoji + barra + espaço + nome)
-    largura_coluna = 20
-
-    for i in range(0, len(times), 2):
-        t1 = times[i]
-        e1 = emoji_do_time(t1)
-        c1 = f"{e1} | {t1.title()}"
-
-        if i+1 < len(times):
-            t2 = times[i+1]
-            e2 = emoji_do_time(t2)
-            c2 = f"{e2} | {t2.title()}"
-        else:
-            c2 = ""
-
-        # Alinha cada coluna com largura fixa
-        linha = f"{c1:<{largura_coluna}} {c2}"
-        linhas.append(linha)
-
-    lista = "```\n" + "\n".join(linhas) + "\n```"
-
-    embed = discord.Embed(
-        title="📋 Times Disponíveis",
-        description=lista,
-        color=discord.Color.blue()
-    )
-
+    times = sorted(ROLE_IDS_TIMES.keys())
+    linhas = [f"{emoji_do_time(t)} | {t.title()}" for t in times]
+    embed = discord.Embed(title="📋 Times Disponíveis", description="\n".join(linhas), color=discord.Color.blue())
     await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou a lista de times.")
 
@@ -3006,14 +3057,25 @@ async def torcedores(ctx):
             title="🏟️ Torcedores por Time",
             color=discord.Color.blue()
         )
+        DISPLAY_NOMES = {
+            "galo": "Atlético-MG",
+            "sao paulo": "São Paulo",
+            "gremio": "Grêmio",
+            "ceara": "Ceará",
+            "vitoria": "Vitória",
+            "atletico paranaense": "Athletico-PR",
+            "lanus": "Lanús",
+        }
+        itens = []
         for time, usuarios in torcedores.items():
+            base = time.strip().lower()
+            display = DISPLAY_NOMES.get(base, time.title())
+            emoji = EMOJI_TIMES.get(base) or EMOJI_TIMES.get(base.replace(" ", "_")) or "⚽"
             mencoes = "\n".join(f"<@{uid}>" for uid in usuarios)
-            embed.add_field(
-                name=f"**{time.title()}**",
-                value=mencoes,
-                inline=False
-
-            )
+            itens.append((display, emoji, mencoes))
+        itens.sort(key=lambda x: x[0])
+        for display, emoji, mencoes in itens:
+            embed.add_field(name=f"{emoji} | {display}", value=mencoes, inline=False)
         await ctx.send(embed=embed)
         logging.info(f"Usuário {ctx.author} solicitou a lista de torcedores.")
 
@@ -3047,7 +3109,7 @@ async def admin(ctx):
     )
 
     embed.add_field(
-        name="👑 Sistema VIP",
+        name="<:discotoolsxyzicon_6:1444750406763679764> Sistema VIP",
         value=(
             "**!dar_vip** — concede VIP ao usuário\n"
             "**!remover_vip** — remove VIP do usuário\n"
