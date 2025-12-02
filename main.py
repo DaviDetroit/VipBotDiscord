@@ -1,3 +1,4 @@
+from calendar import c
 import discord
 from discord.ext import commands, tasks
 import os
@@ -252,6 +253,61 @@ async def on_ready():
         canal = bot.get_channel(CANAL_TOP_ID)
         if canal:
             await enviar_top_ativos_semanal_once(semana_atual, canal)
+
+    conn = conectar_vips()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS moderador_alertas (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                denunciante_id BIGINT,
+                moderador_id BIGINT,
+                data_denuncia TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        try:
+            c.execute("ALTER TABLE moderador_alertas ADD COLUMN denunciante_id BIGINT")
+        except Exception:
+            pass
+        try:
+            c.execute("ALTER TABLE moderador_alertas ADD COLUMN moderador_id BIGINT")
+        except Exception:
+            pass
+        try:
+            c.execute("ALTER TABLE moderador_alertas ADD COLUMN data_denuncia TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+
+        sql = "SELECT moderador_id, COUNT(DISTINCT denunciante_id) as total FROM moderador_alertas GROUP BY moderador_id HAVING total >= 3"
+        c.execute(sql)
+        rows = c.fetchall()
+        for moderador_id, total in rows:
+            await enviar_alerta(moderador_id, total)
+    except Exception as e:
+        logging.error(f"Falha ao reconstruir contadores/alertas: {e}")
+    finally:
+        try:
+            c.close()
+            conn.close()
+        except Exception:
+            pass
+    try:
+        if not limpar_canal_tickets.is_running():
+            limpar_canal_tickets.start()
+    except Exception as e:
+        logging.error(f"Falha ao iniciar limpeza de canal de tickets: {e}")
+
+@tasks.loop(minutes=3)
+async def limpar_canal_tickets():
+    channel = bot.get_channel(ID_CANAL_TICKET)
+    if not channel:
+        return
+    try:
+        def check(m):
+            return (TICKET_EMBED_MESSAGE_ID is None) or (m.id != TICKET_EMBED_MESSAGE_ID)
+        await channel.purge(check=check, limit=100)
+    except Exception:
+        pass
 
 
 @bot.event
@@ -579,7 +635,7 @@ async def vip_mensagem(ctx):
         title="<:Jinx:1390379001515872369> Bem-vindo ao Sistema VIP e Boost!",
         description=(
             "<:discotoolsxyzicon_6:1444750406763679764> | <:discotoolsxyzicon_5:1444750402061991956> **SEJA VIP OU BOOSTER!**\n\n"
-            "<:discotoolsxyzicon_6:1444750406763679764> O VIP custa **R$5,00 mensal** e oferece os mesmos benefícios do Booster.\n\n"
+            "<:240586sly:1445364127987142656> O VIP custa **R$5,00 mensal** e oferece os mesmos benefícios do Booster.\n\n"
             "<:Stars:1387223064227348591> **Benefícios:**\n"
             "<:jinxedsignal:1387222975161434246> Cargo personalizado\n"
             "<:jinxedsignal:1387222975161434246> Permissão para streamar em qualquer canal\n"
@@ -898,7 +954,7 @@ BOT_REACTION = [
     "Meu Deus, você está mencionando um bot? Isso não é bom para a saúde do servidor!",
     "Nada de me mencionar por aqui, se quiser conversar, seja apenas SOCIAL!",
 ]
-
+ID_CARGO_MUTE = 1445066766144376934
 @bot.event
 async def on_message(message):
     global ultimo_reagir
@@ -916,6 +972,54 @@ async def on_message(message):
             return
     if message.author.bot:
         return
+    # ============================
+    #  SISTEMA MONITORAMENTO
+    # ============================
+    conn = conectar_vips()
+    c = conn.cursor()
+    user_id = message.author.id
+    c.execute("SELECT denunciante_id FROM avisados WHERE user_id = %s", (user_id,))
+    result = c.fetchone()
+
+    if result:
+        denunciante_id = result[0]
+        if any(m.id == int(denunciante_id) for m in message.mentions):
+            c.execute("SELECT mensagens FROM atividade WHERE user_id = %s", (user_id,))
+            row = c.fetchone()
+            if row:
+                warnings = row[0]
+            else:
+                warnings = 0
+
+            #Primeiro aviso
+            if warnings == 0:
+                await message.channel.send(
+                    f"{message.author.mention} ⚠️ Aviso: você mencionou a pessoa que te denunciou. "
+                    "Se repetir, receberá mute automático de 3 horas."
+                )
+                semana_atual = datetime.now(timezone.utc).isocalendar()[1]
+                c.execute(
+                    "INSERT INTO atividade (user_id, nome_discord, mensagens, semana) VALUES (%s, %s, %s, %s) "
+                    "ON DUPLICATE KEY UPDATE mensagens = mensagens + 1",
+                    (user_id, f"{message.author.name}#{message.author.discriminator}", 1, semana_atual)
+                )
+                conn.commit()
+                # Segundo aviso → Mute automático
+            else:
+                mute_role = message.guild.get_role(ID_CARGO_MUTE)
+
+                await message.author.add_roles(
+                    mute_role,
+                    reason="Perturbação reincidente — mute automático"
+                )
+                await message.channel.send(
+                    f"{message.author.mention} 🔇 Você recebeu mute automático de **3 horas**."
+                )
+                asyncio.create_task(remover_mute_apos_3h(message.author))
+    c.close()
+    conn.close()
+    
+
     # ============================
     #  SISTEMA DE MURAL (REAÇÃO + DB)
     # ============================
@@ -1026,8 +1130,9 @@ async def on_message(message):
     # ============================
     #  IGNORAR CARGO ESPECÍFICO
     # ============================
-    if any(r.id == CARGO_IGNORADO for r in message.author.roles):
-        return
+    if message.guild and hasattr(message.author, "roles"):
+        if any(r.id == CARGO_IGNORADO for r in message.author.roles):
+            return
 
     # ============================
     #  CONTAGEM DE MENSAGENS SEMANAIS
@@ -1054,6 +1159,17 @@ async def on_message(message):
     conexao.close()
 
     await bot.process_commands(message)
+
+    try:
+        if message.channel.id == ID_CANAL_TICKET:
+            if 'TICKET_EMBED_MESSAGE_ID' in globals():
+                if (globals().get('TICKET_EMBED_MESSAGE_ID') is not None) and (message.id != globals().get('TICKET_EMBED_MESSAGE_ID')) and (not message.author.bot):
+                    try:
+                        await message.delete()
+                    except:
+                        pass
+    except:
+        pass
 
 
 
@@ -1137,22 +1253,56 @@ async def on_presence_update(before, after):
             )
             ultimo_envio[jogo_atual] = agora
 
+ 
 
 
+
+
+@commands.has_permissions(administrator=True)
+@bot.command()
+async def resetar_mensagens (ctx):
+    if ctx.author.id != ADM_BRABO:
+        return await ctx.send("❌ Você não tem permissão para usar este comando.")
+    
+    conn = conectar_vips()
+    cursor = conn.cursor()
+
+    cursor.execute("TRUNCATE TABLE atividade")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    await ctx.send("✅ Mensagens de atividade foram resetadas.")
+    logging.info("Comando resetar_mensagens executado por %s", ctx.author)
     
 
+async def remover_mute_apos_3h(member):
+    await asyncio.sleep(10800)
+    mute_role = member.guild.get_role(ID_CARGO_MUTE)
+    await member.remove_roles(mute_role, reason="Mute finalizado automaticamente")
+ID_DO_SERVIDOR = 1380564679084081175
 
+@tasks.loop(hours=24)
+async def limpar_avisados():
+    conn = conectar_vips()
+    c = conn.cursor()
 
+    c.execute("""
+        SELECT user_id FROM avisados
+        WHERE data_aviso < DATE_SUB(NOW(), INTERVAL 30 DAY)
+    """)
 
+    rows = c.fetchall()
 
+    guild = bot.get_guild(ID_DO_SERVIDOR)
+    cargo_avisado = guild.get_role(CARGO_AVISADO)
 
+    for (user_id,) in rows:
+        membro = guild.get_member(user_id)
+        if membro:
+            await membro.remove_roles(cargo_avisado, reason="Aviso expirado")
 
-
-
-
-
-
-
+        c.execute("DELETE FROM avisados WHERE user_id = %s", (user_id,))
+        conn.commit()
 
 
 @bot.command()
@@ -1172,7 +1322,7 @@ async def vip_list(ctx):
 
         embed = discord.Embed(
             title="<:discotoolsxyzicon_6:1444750406763679764> Lista de VIPs Ativos",
-            color=discord.Color.gold()
+            color=discord.Color.blue()
         )
         from datetime import datetime, timezone
 
@@ -1263,6 +1413,234 @@ async def tocar_proxima(ctx, voz):
                 logging.error(f"Erro no timer de desconexão: {e}")
 
         timers_desconectar[ctx.guild.id] = bot.loop.create_task(desconectar_apos_espera())
+
+#COMANDO TICKET
+CARGO_AVISADO = 1445063169973424239
+ID_CANAL_TICKET = 1386766363749781504
+TICKET_EMBED_MESSAGE_ID = None
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def ticket_mensagem(ctx):
+    if ctx.channel.id != ID_CANAL_TICKET:
+        return await ctx.send("❌ Use este comando no canal de tickets.")
+    embed = discord.Embed(
+        title="🎫 Abra seu Ticket",
+        description=(
+            "Use o comando **!ticket** neste canal e siga as instruções na DM.\n\n"
+            "Opções disponíveis:\n"
+            "1️⃣ Ajuda do servidor\n"
+            "2️⃣ Recuperar cargo perdido\n"
+            "3️⃣ Denúncia"
+        ),
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="Use o comando !ticket para abrir um ticket.")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1380564680552091789/1445202774756298752/JINXED_7.png?ex=692f7d78&is=692e2bf8&hm=23728dc10a7f583a4a4210f09c6cf5ec4555ee640fedd190de239bb5639b06f8&")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749579605119148/discotools-xyz-icon.png?ex=692fd1a5&is=692e8025&hm=c5bc7e74adbb2ea7dfa4f3340d48d94cc51818dcfb936f9ebb56aaaccd44bb8f&")
+    try:
+        msg = await ctx.send(embed=embed)
+        global TICKET_EMBED_MESSAGE_ID
+        TICKET_EMBED_MESSAGE_ID = msg.id
+        await ctx.message.delete()
+    except Exception as e:
+        logging.error(f"Falha ao enviar ticket_mensagem: {e}")
+        return await ctx.send("❌ Não foi possível enviar a mensagem de ticket.")
+
+    return
+
+@bot.command()
+async def ticket (ctx):
+    if ctx.channel.id != ID_CANAL_TICKET:
+        return await ctx.send("❌ Este comando só pode ser usado no canal de tickets.")
+    logging.info("Comando ticket executado por %s", ctx.author)
+    if ctx.channel.id == ID_CANAL_TICKET:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+
+    user = ctx.author
+    try:
+        dm = await user.create_dm()
+        await dm.send(
+            "Olá! Vi que você solicitou o seu ticket.\n\n"
+            "O que você deseja?\n"
+            "Digite o número da opção:\n"
+            "1️⃣ Ajuda do servidor\n"
+            "2️⃣ Recuperar cargo perdido\n"
+            "3️⃣ Denúncia"
+        )
+    except:
+        return await ctx.send("❌ Não consegui enviar DM. Ative sua DM para continuar.")
+
+    def check (m):
+        return m.author.id == user.id and isinstance (m.channel, discord.DMChannel)
+    try:
+        msg = await bot.wait_for("message", check=check, timeout=120)
+        opcao = msg.content.strip()
+        if opcao not in {"1", "2", "3"}:
+            await dm.send("⚠️ Opção inválida. Use 1, 2 ou 3.")
+            return
+    except asyncio.TimeoutError:
+        return await ctx.send("❌ Você demorou muito para responder.")
+    logging.info("Opção escolhida por %s: %s", ctx.author, opcao)
+
+    conn = conectar_vips()
+    c = conn.cursor()
+    sql = "INSERT INTO tickets (user_id, nome_discord, tipo) VALUES (%s, %s, %s)"
+    c.execute(sql, (user.id, f"{ctx.author.name}#{ctx.author.discriminator}", int(opcao)))
+    conn.commit()
+    ticket_id = c.lastrowid
+    
+    if opcao == "1":
+        await dm.send("Seu pedido de ajuda foi registrado! Em breve um staff irá te atender.")
+        try:
+            admins = [428006047630884864, 614476239683584004]
+            for admin_id in admins:
+                admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
+                if admin:
+                    await admin.send(
+                        "📩 Novo ticket de ajuda\n\n"
+                        f"🧑 Solicitante: <@{user.id}> ({ctx.author.name}#{ctx.author.discriminator})\n"
+                        f"🆔 Ticket: #{ticket_id}\n"
+                        "✅ Verifique no painel/banco e atenda quando possível."
+                    )
+            logging.info("Notificação de ticket de ajuda enviada aos admins: %s", admins)
+        except Exception as e:
+            logging.error("Falha ao notificar admins sobre ticket de ajuda: %s", e)
+    elif opcao == "2":
+        await dm.send("Seu pedido de recuperação de cargo foi registrado! Em breve um staff irá te atender.")
+        try:
+            admins = [428006047630884864, 614476239683584004, 1102837164863148062]
+            for admin_id in admins:
+                admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
+                if admin:
+                    await admin.send(
+                        "📩 Novo ticket de ajuda\n\n"
+                        f"🧑 Solicitante: <@{user.id}> ({ctx.author.name}#{ctx.author.discriminator}) pediu ajuda com cargo\n"
+                        f"🆔 Ticket: #{ticket_id}\n"
+                        "✅ Verifique no painel/banco e atenda quando possível."
+                    )
+
+                    logging.info("Notificação de ticket de recuperação de cargo enviada aos admins: %s", admins)
+        except Exception as e:
+            logging.error("Falha ao notificar admins sobre ticket de recuperação de cargo: %s", e)
+    elif opcao == "3":
+        await dm.send(
+            "Qual o tipo de denúncia?\n"
+            "1️⃣ Abuso de moderação\n"
+            "2️⃣ Perturbação / Cyberbullying"
+        )
+        msg2 = await bot.wait_for("message", check=check)
+        tipo_denuncia = msg2.content.strip()
+    
+    if opcao == "3" and tipo_denuncia == "1":
+        await dm.send("Envie o ID exato do moderador que abusou da moderação:")
+
+        msg3 = await bot.wait_for("message", check=check)
+        id_moderador = msg3.content.strip()
+        guild = ctx.guild
+        membro = guild.get_member(int(id_moderador))
+
+        if not membro:
+            return await dm.send("<:3894307:1443956354698969149> ID do moderador inválido.")
+        if user.id == membro.id:
+            await dm.send("❌ Você não pode denunciar a si mesmo.")
+            c.close(); conn.close(); return
+        if not (membro.guild_permissions.kick_members or membro.guild_permissions.ban_members or membro.guild_permissions.manage_messages or membro.guild_permissions.administrator):
+            await dm.send("⚠️ O ID informado não pertence a um moderador.")
+            c.close(); conn.close(); return
+
+        # salvar denúncia antes de qualquer lógica (atomicidade)
+        c.execute(
+            "SELECT 1 FROM denuncias WHERE denunciante_id=%s AND denunciado_id=%s AND tipo_denuncia=1 LIMIT 1",
+            (user.id, membro.id)
+        )
+        if c.fetchone():
+            await dm.send("⚠️ Denúncia já registrada anteriormente para este moderador.")
+            c.close(); conn.close(); return
+        c.execute(
+            "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, 1)",
+            (ticket_id, user.id, membro.id)
+        )
+        conn.commit()
+
+        cargo_avisado = guild.get_role(CARGO_AVISADO)
+        if cargo_avisado:
+            await membro.add_roles(cargo_avisado, reason="Denunciado por abuso de moderação")
+            logging.info("Cargo avisado adicionado a %s", membro)
+
+        try:
+            dm_denunciado = await membro.create_dm()
+            await dm_denunciado.send(
+                "⚠️ Você recebeu uma denúncia de perturbação. "
+                "Estamos monitorando seu comportamento durante 30 dias."
+            )
+        except:
+            pass
+        sql = "INSERT INTO avisados (user_id, denunciante_id) VALUES (%s, %s) ON DUPLICATE KEY UPDATE denunciante_id=VALUES(denunciante_id)"
+        c.execute(sql, (membro.id, user.id))
+        conn.commit()
+
+        # evita duplicidade de alerta ativo
+        c.execute(
+            "SELECT 1 FROM moderador_alertas WHERE denunciante_id=%s AND moderador_id=%s LIMIT 1",
+            (ctx.author.id, int(id_moderador))
+        )
+        if not c.fetchone():
+            sql = "INSERT INTO moderador_alertas (denunciante_id, moderador_id) VALUES (%s, %s)"
+            c.execute(sql, (ctx.author.id, int(id_moderador)))
+        conn.commit()
+
+        c.execute(
+            "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, 1)",
+            (ticket_id, user.id, int(id_moderador))
+        )
+        conn.commit()
+
+        sql = """
+            SELECT COUNT(DISTINCT denunciante_id)
+            FROM moderador_alertas
+            WHERE moderador_id = %s
+            """
+        c.execute(sql, (int(id_moderador),))
+        qtd = c.fetchone()[0]
+        if qtd >= 3:
+            alertar = [428006047630884864, 614476239683584004]
+            for admin_id in alertar:
+                admin = bot.get_user(admin_id)
+                if admin:
+                    await admin.send(
+                        "⚠️ Alerta de possível abuso de moderação\n\n"
+                        f"O moderador <@{id_moderador}> recebeu denúncias de 3 usuários diferentes.\n"
+                        "Verifique o caso no painel / banco de dados."
+                    )
+                    logging.info("Alerta enviado para %s sobre %s denúncias de abuso de moderação", admin, qtd)
+
+
+
+        
+        await dm.send("Sua denúncia foi enviada. A equipe será notificada.")
+    elif opcao == "3" and tipo_denuncia == "2":
+        await dm.send("Envie os IDs das pessoas que te perturbam (separados por espaço):")
+
+        msg3 = await bot.wait_for("message", check=check)
+        ids = msg3.content.strip().split()
+
+        for denunciado_id in ids:
+            sql = "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, 2)"
+            c.execute(sql, (ticket_id, user.id, int(denunciado_id)))
+        
+        conn.commit()
+
+    c.close()
+    conn.close()
+
+
+    
+
+
+
 
 
 
@@ -3141,3 +3519,23 @@ async def admin(ctx):
 
 
 bot.run(TOKEN)
+async def enviar_alerta(moderador_id: int, total: int):
+    try:
+        admins = [428006047630884864, 614476239683584004]
+        for admin_id in admins:
+            admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
+            if admin:
+                await admin.send(
+                    "⚠️ Alerta de possível abuso de moderação\n\n"
+                    f"O moderador <@{moderador_id}> recebeu denúncias de {total} usuários diferentes.\n"
+                    "Verifique o caso no painel / banco de dados."
+                )
+        conn = conectar_vips()
+        c = conn.cursor()
+        c.execute("DELETE FROM moderador_alertas WHERE moderador_id = %s", (moderador_id,))
+        conn.commit()
+        c.close()
+        conn.close()
+        logging.info(f"Contador de denúncias zerado para moderador {moderador_id}")
+    except Exception as e:
+        logging.error(f"Erro ao enviar alerta/zerar contador: {e}")
