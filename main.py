@@ -402,10 +402,11 @@ async def on_reaction_add(reaction, user):
     else:
         return  # não é emoji de aposta
 
-    # --- Verifica prazo ---
-    agora = datetime.utcnow()
+    # --- Verifica prazo (baseado na hora da mensagem) ---
+    agora = datetime.now(timezone.utc)
+    deadline_msg = message.created_at.replace(tzinfo=timezone.utc) + timedelta(minutes=10)
 
-    if betting_open == 0 or agora > bet_deadline:
+    if betting_open == 0 or agora > deadline_msg:
         if betting_open == 1:
             con = conectar_futebol()
             cur = con.cursor()
@@ -801,33 +802,49 @@ async def on_raw_reaction_add(payload):
 
 
 
-
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def dar_vip(ctx, membro: discord.Member):
+async def dar_vip(ctx, membro: discord.Member, duracao: str):
     cargo_vip = discord.utils.get(ctx.guild.roles, name="Jinxed Vip")
     if not cargo_vip:
         await ctx.send("❌ Cargo 'Jinxed Vip' não encontrado.")
         return
 
+    duracao = duracao.strip().lower()
+    if len(duracao) < 2 or not duracao[:-1].isdigit() or duracao[-1] not in {"d", "m", "y"}:
+        await ctx.send("❌ Formato inválido! Use 30d, 2m ou 1y.")
+        return
+
+    valor = int(duracao[:-1])
+    unidade = duracao[-1]
+    if unidade == "d":
+        delta = timedelta(days=valor)
+    elif unidade == "m":
+        delta = timedelta(days=30 * valor)
+    else:
+        delta = timedelta(days=365 * valor)
+
     if cargo_vip in membro.roles:
         await ctx.send(f"❌ {membro.display_name} já possui o cargo VIP.")
         return
 
-    await membro.add_roles(cargo_vip)
+    await membro.add_roles(cargo_vip, reason="Concessão de VIP")
 
     try:
-        # usa sua conexão segura
         conexao = conectar_vips()
         cursor = conexao.cursor()
 
         data_inicio = datetime.now(timezone.utc)
-        data_fim = data_inicio + timedelta(days=30)  
+        data_fim = data_inicio + delta
 
         cursor.execute(
             """
-            REPLACE INTO vips (id, nome_discord, data_inicio, data_fim)
+            INSERT INTO vips (id, nome_discord, data_inicio, data_fim)
             VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                nome_discord = VALUES(nome_discord),
+                data_inicio = VALUES(data_inicio),
+                data_fim = VALUES(data_fim)
             """,
             (membro.id, f"{membro.name}#{membro.discriminator}", data_inicio, data_fim)
         )
@@ -835,13 +852,17 @@ async def dar_vip(ctx, membro: discord.Member):
         cursor.close()
         conexao.close()
 
-        
-        await ctx.send(f"<a:1b09ea8103ca4e519e8ff2c2ecb0b7f3:1409880647677378671> Cargo VIP concedido a {membro.mention}! Seu vip acabará em {data_fim.date()}! Veja o canal seja vip para mais detalhes dos seus benefícios <:jinxedheart:1390359964765261824>")
-        logging.info(f"Cargo VIP concedido a {membro.mention} até {data_fim.date()}")
-
+        try:
+            await membro.send(f"<:Jinx_Watching:1390380695712694282> Você recebeu VIP por {duracao}!")
+        except:
+            pass
+        await ctx.send(f"<:Jinx_Watching:1390380695712694282> {membro.display_name} agora é VIP por {duracao}.")
     except Exception as e:
         await ctx.send("❌ Erro ao salvar VIP no banco de dados.")
         logging.error(f"Erro dar_vip: {e}")
+
+    
+
 
 
 @bot.command()
@@ -1100,7 +1121,7 @@ async def on_message(message):
         "vini jr": "<:65748vinijrfootball:1437441624173973634>",
         "vini malvadeza": "<:65748vinijrfootball:1437441624173973634>",
         "repo": "<:8814repo:1437442117717856428>",
-        "67\n" : "<a:42642667:1444748898592755764>",
+        "67" : "<a:42642667:1444748898592755764>"
     }
 
     # ============================
@@ -1170,6 +1191,30 @@ async def on_message(message):
                         pass
     except:
         pass
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member and member.id == BOT_MUSICA_PROIBIDO:
+        if after and after.channel:
+            canal_id = after.channel.id
+            if canal_id not in CANAIS_MUSICAS_LIBERADO:
+                try:
+                    canais_permitidos = [bot.get_channel(cid) for cid in CANAIS_MUSICAS_LIBERADO]
+                    destino = next((c for c in canais_permitidos if c and c.guild.id == member.guild.id), None)
+                    if destino:
+                        await member.move_to(destino, reason="Mover bot de música para canal permitido")
+                        try:
+                            await after.channel.send(f"{member.mention} foi movido para {destino.mention}.")
+                        except:
+                            pass
+                    else:
+                        await member.edit(mute=True, deafen=True, reason="Bot de música restrito a canais permitidos")
+                        try:
+                            await after.channel.send(f"{member.mention} está silenciado fora dos canais permitidos.")
+                        except:
+                            pass
+                except Exception as e:
+                    logging.error(f"Falha ao aplicar restrição ao bot de música: {e}")
 
 
 
@@ -1311,7 +1356,7 @@ async def vip_list(ctx):
     try:
         conn = conectar_vips()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, nome_discord, data_inicio FROM vips")
+        cursor.execute("SELECT id, nome_discord, data_inicio, data_fim FROM vips")
         vips = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -1326,18 +1371,31 @@ async def vip_list(ctx):
         )
         from datetime import datetime, timezone
 
-        for id_vip, nome_discord, data_inicio in vips:
-            dias_passados = (datetime.now() - data_inicio).days
+        agora = datetime.now(timezone.utc)
+        itens = []
+        for id_vip, nome_discord, data_inicio, data_fim in vips:
+            # Normaliza para UTC se vier naive
+            if data_inicio.tzinfo is None:
+                data_inicio = data_inicio.replace(tzinfo=timezone.utc)
+            if data_fim.tzinfo is None:
+                data_fim = data_fim.replace(tzinfo=timezone.utc)
 
-            dias_restantes = 30 - dias_passados
-            if dias_restantes < 0:
-                dias_restantes = 0
+            restante = data_fim - agora
+            ativo = restante.total_seconds() > 0
+            dias = max(0, restante.days)
+            horas = max(0, int((restante.total_seconds() % 86400) // 3600))
+            itens.append((ativo, data_fim, nome_discord, data_inicio, dias, horas))
 
-            embed.add_field(
-                name=nome_discord,
-                value=f"Início: `{data_inicio.strftime('%d/%m/%Y')}`\nRestam: **{dias_restantes} dias**",
-                inline=False
+        # Ordena ativos por menor tempo restante; expirados por data_fim
+        itens.sort(key=lambda x: (not x[0], x[1]))
+
+        for ativo, _, nome_discord, data_inicio, dias, horas in itens:
+            status = "Ativo" if ativo else "Expirado"
+            valor = (
+                f"Início: `{data_inicio.strftime('%d/%m/%Y')}`\n"
+                + (f"Restam: **{dias}d {horas}h**" if ativo else "Status: **Expirado**")
             )
+            embed.add_field(name=f"{nome_discord} — {status}", value=valor, inline=False)
 
         await ctx.send(embed=embed)
 
@@ -2403,7 +2461,9 @@ PALAVRAS_GOL = {
     "internacional": "🎩 GOOOOOOOL DO COLORADO!!!",
     "coritiba":    "🍀 GOOOOOOOL DO COXA!!!",
     "remo":        "🦁 GOOOOOOOL DO LEÃO AZUL!!!",
-    "lanus":       "🟤 GOOOOOOOL DO GRANATE!!!"
+    "lanus":       "🟤 GOOOOOOOL DO GRANATE!!!",
+    "santos":      "🐬 GOOOOOOOOOL DO PEIXÃO!!!",
+    "chapecoense": "💚⚪ GOOOOOOOL DA CHAPE!!!"
 }
 
 
