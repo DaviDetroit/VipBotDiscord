@@ -2650,7 +2650,7 @@ async def verificar_gols():
                 role_home_name = key_home
                 role_home = discord.utils.get(canal.guild.roles, name=role_home_name)
                 mention_home = role_home.mention if role_home else f"@{role_home_name}"
-                await canal.send(content=f"{mention_home} {frase_home}", embed=embed)
+                await canal.send(content=f"{mention_home} {emoji_casa}", embed=embed)
 
             if gols_fora > gols_anteriores_fora:
                 key_away = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower())
@@ -2667,7 +2667,7 @@ async def verificar_gols():
                 role_away_name = key_away
                 role_away = discord.utils.get(canal.guild.roles, name=role_away_name)
                 mention_away = role_away.mention if role_away else f"@{role_away_name}"
-                await canal.send(content=f"{mention_away} {frase_away}", embed=embed)
+                await canal.send(content=f"{mention_away} {emoji_fora}", embed=embed)
 
         except Exception as e:
             logging.error(f"❌ Erro ao enviar notificação de gol: {e}")
@@ -2704,7 +2704,7 @@ async def verificar_gols():
                     resultado_final = "draw"
 
                 # Buscar apostas
-                cursor.execute("SELECT user_id, palpite FROM apostas WHERE fixture_id = %s", (fixture_id,))
+                cursor.execute("SELECT user_id, palpite, modo_clown FROM apostas WHERE fixture_id = %s", (fixture_id,))
                 apostas = cursor.fetchall()
 
                 # Contagem por palpite para bônus de minoria
@@ -2721,28 +2721,28 @@ async def verificar_gols():
                 for aposta in apostas:
                     user_id = aposta["user_id"]
                     palpite = aposta["palpite"]
+                    modo_clown = int(aposta.get("modo_clown", 0))
                     acertou = (palpite == resultado_final)
-                    pontos_base = 30 if (acertou and bonus_minoria) else 15
-                    pontos = pontos_base if acertou else -7
+                    pontos_base_vitoria = 30 if (acertou and bonus_minoria) else 15
 
-                    usuario_dm = bot.get_user(int(user_id))
-                    nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
-                    cursor.execute(
-                        """
-                        INSERT INTO pontuacoes (user_id, nome_discord, pontos)
-                        VALUES (%s, %s, %s)
-                        ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos), nome_discord = VALUES(nome_discord)
-                        """,
-                        (user_id, nome_discord, pontos)
-                    )
+                    # Aplicar pontuação via função central
+                    try:
+                        processar_aposta(user_id, fixture_id, resultado_final, pontos_base_vitoria)
+                    except Exception as e:
+                        logging.error(f"Erro ao processar aposta automática de {user_id}: {e}")
 
+                    # Mensagem DM
                     if acertou:
+                        mult = 6 if modo_clown == 1 else 1
+                        pontos_preview = pontos_base_vitoria * mult
                         mensagens_pv.append(
-                            (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+{pontos} pontos**" + (" (bônus de minoria)" if bonus_minoria else ""))
+                            (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+{pontos_preview} pontos**" + (" (bônus de minoria)" if (pontos_base_vitoria == 30) else ""))
                         )
                     else:
+                        mult = 4 if modo_clown == 1 else 1
+                        pontos_preview = -7 * mult
                         mensagens_pv.append(
-                            (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **-7 pontos**")
+                            (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **{pontos_preview} pontos**. Se tiver Segunda Chance ativa, será reembolsado.")
                         )
 
                 # 🔥 Marca como processado
@@ -3111,12 +3111,13 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
         )
         row_chance = cursor.fetchone()
         if row_chance:
-            # Consumir Segunda Chance
+            # Consumir Segunda Chance e devolver 7 pontos (perda padrão)
             cursor.execute("UPDATE loja_pontos SET ativo = 0 WHERE id = %s", (row_chance[0],))
-            adicionar_pontos_db(user_id, pontos_base)  # devolve os pontos
-            logging.info(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: {pontos_base}")
+            adicionar_pontos_db(user_id, 7)
+            logging.info(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: 7")
         else:
-            pontos_final = -pontos_base * multiplicador_derrota
+            perda_base = 7
+            pontos_final = -perda_base * multiplicador_derrota
             adicionar_pontos_db(user_id, pontos_final)
             logging.info(f"Usuário {user_id} perdeu! Perdeu {abs(pontos_final)} pontos.")
 
@@ -3177,7 +3178,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                 await ctx.send(f"⚠️ Jogo {fx} já foi processado.")
                 continue
 
-            cursor.execute("SELECT user_id, palpite FROM apostas WHERE fixture_id = %s", (fx,))
+            cursor.execute("SELECT user_id, palpite, modo_clown FROM apostas WHERE fixture_id = %s", (fx,))
             apostas = cursor.fetchall()
 
             contagem = {"home": 0, "away": 0, "draw": 0}
@@ -3193,42 +3194,42 @@ async def terminar_jogo(ctx, fixture_id: int = None):
             for aposta in apostas:
                 user_id = aposta["user_id"]
                 palpite = aposta["palpite"]
+                modo_clown = int(aposta.get("modo_clown", 0))
                 acertou = (palpite == resultado_final)
-                pontos_base = 30 if (acertou and bonus_minoria) else 15
-                pontos = pontos_base if acertou else -7
-                usuario_dm = bot.get_user(int(user_id))
-                nome_discord = f"{usuario_dm.name}#{usuario_dm.discriminator}" if usuario_dm else str(user_id)
-                cursor.execute(
-                """
-                INSERT INTO pontuacoes (user_id, nome_discord, pontos)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE pontos = pontos + VALUES(pontos), nome_discord = VALUES(nome_discord)
-                """,
-                (user_id, nome_discord, pontos)
-            )
+                pontos_base_vitoria = 30 if (acertou and bonus_minoria) else 15
+
+                # Aplicar pontuação via função central (garante Clown e Segunda Chance)
+                try:
+                    processar_aposta(user_id, fx, resultado_final, pontos_base_vitoria)
+                except Exception as e:
+                    logging.error(f"Erro ao processar aposta de {user_id}: {e}")
+
+                # Mensagem DM (preview do resultado)
                 if acertou:
+                    multiplicador = 6 if modo_clown == 1 else 1
+                    pontos_preview = pontos_base_vitoria * multiplicador
                     mensagens_pv.append(
                         (
                             user_id,
                             f"<a:270795discodance:1419694558945476760> **APOSTA CERTA!**\n"
-                            f"✨ Você garantiu **+{pontos} pontos**" + (" (bônus de minoria)" if bonus_minoria else "") + "!\n\n"
+                            f"✨ Você garantiu **+{pontos_preview} pontos**" + (" (bônus de minoria)" if (pontos_base_vitoria == 30) else "") + "!\n\n"
                             f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
                             f"<:apchikabounce:1408193721907941426> Confira seus pontos com **!meuspontos**\n"
                             f"📘 Veja mais comandos em **!info**"
                         )
                     )
-                    
                 else:
+                    multiplicador = 4 if modo_clown == 1 else 1
+                    pontos_preview = -7 * multiplicador
                     mensagens_pv.append(
                         (
                             user_id,
                             f"😬 **Que pena... você errou a aposta!**\n"
-                            f"Você perdeu **-7 pontos**.\n\n"
+                            f"Você perdeu **{pontos_preview} pontos**." + (" Se você tiver Segunda Chance ativa, será reembolsado." ) + "\n\n"
                             f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
                             f"ℹ️ Veja seus pontos com **!meuspontos**\n"
                             f"📘 Mais informações: **!info**"
                         )
-                        
                     )
 
             cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fx,))
