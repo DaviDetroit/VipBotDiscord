@@ -1963,6 +1963,10 @@ async def enviar_mensagem():
 
 
 EMOJI_TIMES = {
+
+    # =======================
+    # 🏟️ CLUBES DE FUTEBOL
+    # =======================
     "sport": "<:Sport:1425992405227671593>",
     "juventude": "<:Juventude:1425992333207539732>",
     "fortaleza": "<:Fortaleza:1425992225128583218>",
@@ -1983,31 +1987,34 @@ EMOJI_TIMES = {
     "cruzeiro": "<:Cruzeiro:1425990118816354405>",
     "flamengo": "<:Flamengo:1425990044623044659>",
     "palmeiras": "<:Palmeiras:1425989650513662044>",
-    "brasil":"<:imagem_20251111_091505344:1437777668320788501>",
-    "argentina":"<:imagem_20251111_091525637:1437777753205243936>",
-    "frança":"<:imagem_20251111_091547369:1437777844058194001>",
-    "alemanha":"<:imagem_20251111_091612275:1437777948907405332>",
-    "italia":"<:imagem_20251111_091635544:1437778046680699010>",
-    "inglaterra":"<:imagem_20251111_091700042:1437778149155803328>",
-    "espanha":"<:imagem_20251111_091727942:1437778266118422568>",
-    "portugal":"<:imagem_20251111_091755098:1437778380324864103>",
-    "holanda":"<:imagem_20251111_091822476:1437778495018106880>",
-    "uruguai":"<:imagem_20251111_091923082removeb:1437778793711534110>",
-    "belgica":"<:imagem_20251111_091958114:1437778895888846888>",
-    "croacia":"<:imagem_20251111_092025445:1437779010628222998>",
-    "mexico":"<:imagem_20251111_092057355:1437779144917127259>",
-    "japao":"<:imagem_20251111_092122937:1437779251729272903>",
-    "eua":"<:imagem_20251111_092151751:1437779372940464138>",
-    "senegal":"<:imagem_20251111_092227325:1437779522157281290>",
-    "tunisia":"<:imagem_20251111_092254095:1437779634191208518>",
-    "lanus":"<:Lanus:1441436509281718383>",
-    "atletico paranaense":"<:atlpr:1443398482516775055>",
-    "Coritiba" : "<:Coritibaa:1443398813820784660>",
-    "Remo" : "<:Remo:1443399201655492708>"
+    "lanus": "<:Lanus:1441436509281718383>",
+    "atletico paranaense": "<:atlpr:1443398482516775055>",
+    "Coritiba": "<:Coritibaa:1443398813820784660>",
+    "Remo": "<:Remo:1443399201655492708>",
 
 
-
+    # =======================
+    # 🌍 SELEÇÕES (PAÍSES)
+    # =======================
+    "brasil": "<:imagem_20251111_091505344:1437777668320788501>",
+    "argentina": "<:imagem_20251111_091525637:1437777753205243936>",
+    "frança": "<:imagem_20251111_091547369:1437777844058194001>",
+    "alemanha": "<:imagem_20251111_091612275:1437777948907405332>",
+    "italia": "<:imagem_20251111_091635544:1437778046680699010>",
+    "inglaterra": "<:imagem_20251111_091700042:1437778149155803328>",
+    "espanha": "<:imagem_20251111_091727942:1437778266118422568>",
+    "portugal": "<:imagem_20251111_091755098:1437778380324864103>",
+    "holanda": "<:imagem_20251111_091822476:1437778495018106880>",
+    "uruguai": "<:imagem_20251111_091923082removeb:1437778793711534110>",
+    "belgica": "<:imagem_20251111_091958114:1437778895888846888>",
+    "croacia": "<:imagem_20251111_092025445:1437779010628222998>",
+    "mexico": "<:imagem_20251111_092057355:1437779144917127259>",
+    "japao": "<:imagem_20251111_092122937:1437779251729272903>",
+    "eua": "<:imagem_20251111_092151751:1437779372940464138>",
+    "senegal": "<:imagem_20251111_092227325:1437779522157281290>",
+    "tunisia": "<:imagem_20251111_092254095:1437779634191208518>",
 }
+
 
 
 
@@ -2385,57 +2392,141 @@ garantir_tabelas()
 # ---------- Manipulação de reações (usa on_raw_reaction_add para pegar reações em mensagens antigas)
 
 MAPEAMENTO_TIMES = {
-        "atlético mineiro": "galo",
-        "atletico-mg": "galo",
-        "atlético-mg":"galo",
-        "galo": "galo",
-        "são paulo": "sao paulo",
-        "sao paulo fc": "sao paulo",
-        "sao paulo": "sao paulo",
-        "flamengo rj": "flamengo",
-        "flamengo": "flamengo",
-        "fluminense rj": "fluminense",
-        "fluminense": "fluminense",
-        "corinthians sp": "corinthians",
-        "corinthians": "corinthians",
-        "palmeiras sp": "palmeiras",
-        "palmeiras": "palmeiras",
-        "palemeiras": "palmeiras",
-        "internacional rs": "internacional",
-        "internacional": "internacional",
-        "grêmio": "gremio",
-        "gremio rs": "gremio",
-        "gremio": "gremio",
-        "bahia ba": "bahia",
-        "bahia": "bahia",
-        "botafogo rj": "botafogo",
-        "botafogo": "botafogo",
-        "cruzeiro mg": "cruzeiro",
-        "cruzeiro": "cruzeiro",
-        "vasco da gama": "vasco",
-        "vasco": "vasco",
-        "ceará": "ceara",
-        "rb bragantino": "bragantino",
-        "mirassol sp": "mirassol",
-        "juventude rs": "juventude",
-        "vitoria ba": "vitoria",
-        "vitoria": "vitoria",
-        "vitória": "vitoria",
-        "esporte clube vitoria": "vitoria",
-        "ec vitoria": "vitoria",
-        "sport recife": "sport",
-        "lanús": "lanus",
-        "fortaleza ec" :"fortaleza",
-        "fortaleza" :"fortaleza",
-        "atlético paranaense": "atletico paranaense",
-        "atletico pr": "atletico paranaense",
-        "athletico pr": "atletico paranaense",
-        "athletico paranaense": "atletico paranaense",
-        "coritiba": "coritiba",
-        "remo": "remo"
 
-        
-    }
+    # =======================
+    # 🇧🇷 CLUBES BRASILEIROS
+    # =======================
+
+    # Atlético Mineiro
+    "atlético mineiro": "galo",
+    "atletico-mg": "galo",
+    "atlético-mg": "galo",
+    "galo": "galo",
+
+    # São Paulo
+    "são paulo": "sao paulo",
+    "sao paulo fc": "sao paulo",
+    "sao paulo": "sao paulo",
+
+    # Flamengo
+    "flamengo rj": "flamengo",
+    "flamengo": "flamengo",
+
+    # Fluminense
+    "fluminense rj": "fluminense",
+    "fluminense": "fluminense",
+
+    # Corinthians
+    "corinthians sp": "corinthians",
+    "corinthians": "corinthians",
+
+    # Palmeiras
+    "palmeiras sp": "palmeiras",
+    "palmeiras": "palmeiras",
+    "palemeiras": "palmeiras",
+
+    # Internacional
+    "internacional rs": "internacional",
+    "internacional": "internacional",
+
+    # Grêmio
+    "grêmio": "gremio",
+    "gremio rs": "gremio",
+    "gremio": "gremio",
+
+    # Bahia
+    "bahia ba": "bahia",
+    "bahia": "bahia",
+
+    # Botafogo
+    "botafogo rj": "botafogo",
+    "botafogo": "botafogo",
+
+    # Cruzeiro
+    "cruzeiro mg": "cruzeiro",
+    "cruzeiro": "cruzeiro",
+
+    # Vasco
+    "vasco da gama": "vasco",
+    "vasco": "vasco",
+
+    # Ceará
+    "ceará": "ceara",
+
+    # RB Bragantino
+    "rb bragantino": "bragantino",
+
+    # Mirassol
+    "mirassol sp": "mirassol",
+
+    # Juventude
+    "juventude rs": "juventude",
+
+    # Vitória
+    "vitoria ba": "vitoria",
+    "vitoria": "vitoria",
+    "vitória": "vitoria",
+    "esporte clube vitoria": "vitoria",
+    "ec vitoria": "vitoria",
+
+    # Sport
+    "sport recife": "sport",
+
+    # Fortaleza
+    "fortaleza ec": "fortaleza",
+    "fortaleza": "fortaleza",
+
+    # Athletico Paranaense
+    "atlético paranaense": "atletico paranaense",
+    "atletico pr": "atletico paranaense",
+    "athletico pr": "atletico paranaense",
+    "athletico paranaense": "atletico paranaense",
+
+    # Coritiba
+    "coritiba": "coritiba",
+
+    # Remo
+    "remo": "remo",
+
+
+    # =======================
+    # 🌍 CLUBES INTERNACIONAIS
+    # =======================
+
+    # Lanús (Argentina)
+    "lanús": "lanus",
+
+    "brazil": "brasil",
+    "brasil": "brasil",
+    "argentina": "argentina",
+    "france": "frança",
+    "franca": "frança",
+    "germany": "alemanha",
+    "alemanha": "alemanha",
+    "italy": "italia",
+    "italia": "italia",
+    "england": "inglaterra",
+    "inglaterra": "inglaterra",
+    "spain": "espanha",
+    "espanha": "espanha",
+    "portugal": "portugal",
+    "netherlands": "holanda",
+    "holanda": "holanda",
+    "uruguay": "uruguai",
+    "uruguai": "uruguai",
+    "belgium": "belgica",
+    "belgica": "belgica",
+    "croatia": "croacia",
+    "croacia": "croacia",
+    "mexico": "mexico",
+    "japan": "japao",
+    "japao": "japao",
+    "usa": "eua",
+    "united states": "eua",
+    "senegal": "senegal",
+    "tunisia": "tunisia",
+}
+
 
 
 PALAVRAS_GOL = {
@@ -2463,12 +2554,29 @@ PALAVRAS_GOL = {
     "remo":        "🦁 GOOOOOOOL DO LEÃO AZUL!!!",
     "lanus":       "🟤 GOOOOOOOL DO GRANATE!!!",
     "santos":      "🐬 GOOOOOOOOOL DO PEIXÃO!!!",
-    "chapecoense": "💚⚪ GOOOOOOOL DA CHAPE!!!"
+    "chapecoense": "💚⚪ GOOOOOOOL DA CHAPE!!!",
+    "brasil":     "🇧🇷 GOOOOOOOL DO BRASIL!!!",
+    "argentina":  "🇦🇷 GOOOOOOOL DA ARGENTINA!!!",
+    "frança":     "🇫🇷 GOOOOOOOL DA FRANÇA!!!",
+    "alemanha":   "🇩🇪 GOOOOOOOL DA ALEMANHA!!!",
+    "italia":     "🇮🇹 GOOOOOOOL DA ITÁLIA!!!",
+    "inglaterra": "🇬🇧 GOOOOOOOL DA INGLATERRA!!!",
+    "espanha":    "🇪🇸 GOOOOOOOL DA ESPANHA!!!",
+    "portugal":   "🇵🇹 GOOOOOOOL DE PORTUGAL!!!",
+    "holanda":    "🇳🇱 GOOOOOOOL DA HOLANDA!!!",
+    "uruguai":    "🇺🇾 GOOOOOOOL DO URUGUAI!!!",
+    "belgica":    "🇧🇪 GOOOOOOOL DA BÉLGICA!!!",
+    "croacia":    "🇭🇷 GOOOOOOOL DA CROÁCIA!!!",
+    "mexico":     "🇲🇽 GOOOOOOOL DO MÉXICO!!!",
+    "japao":      "🇯🇵 GOOOOOOOL DO JAPÃO!!!",
+    "eua":        "🇺🇸 GOOOOOOOL DOS EUA!!!",
+    "senegal":    "🇸🇳 GOOOOOOOL DO SENEGAL!!!",
+    "tunisia":    "🇹🇳 GOOOOOOOL DA TUNÍSIA!!!"
 }
 
 
 
-LIGAS_PERMITIDAS = [71, 73, 11, 13]
+LIGAS_PERMITIDAS = [1, 71, 73, 11, 13, 1168]
 
 # ---------- Integração com verificar_gols 
 @tasks.loop(minutes=5)
@@ -2606,6 +2714,17 @@ async def verificar_gols():
                     content=cargo_futebol,
                     embed=embed,
                     allowed_mentions=discord.AllowedMentions(roles=True)
+                )
+                if partida["league"]["id"] == 1:
+                    await canal_apostas.send(
+                        "**APOSTAS ABERTAS PARA A COPA DO MUNDO!**\n"
+                        "https://tenor.com/view/world-cup-fifa2018-flames-%E5%A4%A7%E5%8A%9B%E7%A5%9E%E6%9D%AF-gif-12061955"
+                    )
+                mensagem = await canal_apostas.send(
+                    content =cargo_futebol,
+                    embed=embed,
+                    allowed_mentions=discord.AllowedMentions(roles=True)
+                    
                 )
                 
                 await mensagem.add_reaction(emoji_casa)
