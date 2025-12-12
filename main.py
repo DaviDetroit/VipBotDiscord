@@ -358,24 +358,7 @@ async def on_ready():
             await enviar_alerta(moderador_id, total)
     except Exception as e:
         logging.error(f"Falha ao reconstruir contadores/alertas: {e}")
-    finally:
-        try:
-            c.close()
-            conn.close()
-        except Exception:
-            pass
-    try:
-        if not limpar_canal_tickets.is_running():
-            limpar_canal_tickets.start()
-    except Exception as e:
-        logging.error(f"Falha ao iniciar limpeza de canal de tickets: {e}")
-
-    try:
-        if not reset_mencoes_bloqueio.is_running():
-            reset_mencoes_bloqueio.start()
-    except Exception as e:
-        logging.error(f"Falha ao iniciar reset de bloqueio de menções: {e}")
-
+    
 @tasks.loop(minutes=3)
 async def limpar_canal_tickets():
     channel = bot.get_channel(ID_CANAL_TICKET)
@@ -880,37 +863,47 @@ async def on_raw_reaction_add(payload):
         except:
             pass
 
-    # ============================
-    # ----- SISTEMA DE DOAÇÃO -------
-    # ============================
+# ================================================
+#--------------- SISTEMA DE DOAÇÃO ---------------
+# ================================================
     mensagem_salva_id = get_mensagem_doacao()
+    
     if payload.message_id == mensagem_salva_id:
         emoji_clicado = str(payload.emoji)
+        
         if emoji_clicado in EMOJIS_VALORES:
             valor = EMOJIS_VALORES[emoji_clicado]
+            
             guild = bot.get_guild(payload.guild_id)
-            dono = await bot.fetch_user(MEU_ID)
-            # obtém o usuário que reagiu (pode ser Member ou User)
-            if guild is not None:
+            
+            # Tenta pegar o objeto Member (dentro do servidor) ou User (se der falha)
+            if guild:
                 usuario = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
             else:
                 usuario = await bot.fetch_user(payload.user_id)
+            
+            # Define o ID do dono (Certifique-se de que a variável MEU_ID está definida no topo do código)
+            # Se não estiver, substitua MEU_ID pelo número direto: ex: 614476239683584004
+            dono = await bot.fetch_user(MEU_ID)
 
             if dono and usuario:
                 try:
-                    # Adiciona pontos de doação ao banco de dados
-                    adicionar_pontos_db(usuario.id, valor, f"{usuario.name}#{usuario.discriminator}")
-                    
-                    await dono.send(f"🔔 **Nova Doação!**\nO usuário **{usuario.name}** (ID: {usuario.id}) quer te mandar **{valor} reais**.")
+                    # AQUI: Não adicionamos mais pontos no banco. Apenas notificamos.
+                    await dono.send(
+                        f"🔔 **Interesse em Doação!**\n"
+                        f"O usuário {usuario.mention} (ID: `{usuario.id}`) clicou na opção de **R$ {valor},00**.\n"
+                        f"⚠️ **Ação Necessária:** Negociação pendente. Entre em contato com ele para receber."
+                    )
                 except Exception as e:
                     logging.error(f"Erro ao notificar doação: {e}")
-            channel = bot.get_channel(payload.channel_id)
-            message = await channel.fetch_message(payload.message_id)
+
+            # Remove a reação do usuário para limpar a mensagem
             try:
+                channel = bot.get_channel(payload.channel_id)
+                message = await channel.fetch_message(payload.message_id)
                 await message.remove_reaction(payload.emoji, usuario)
             except Exception:
                 pass
-
 
 
 
@@ -4354,7 +4347,11 @@ async def admin(ctx):
 
     embed.add_field(
         name="📨 Utilidades",
-        value="**!enviar_mensagem** — envia uma mensagem para um canal",
+        value=("**!enviar_mensagem** — envia uma mensagem para um canal\n"
+        "**!ticket ** — gerencia tickets de suporte\n" \
+        "**entregar** — entrega pontos de doação manualmente"
+        ),
+        
         inline=False
     )
 
@@ -4483,6 +4480,7 @@ async def doacao(ctx):
 
     salvar_mensagem_doacao(mensagem.id, ctx.channel.id)
 
+
     await ctx.send("💸 Sistema de doação configurado com sucesso!", delete_after=5)
 
 @commands.has_permissions(administrator=True)
@@ -4509,8 +4507,33 @@ async def entregar(ctx, membro: discord.Member, valor:int):
         else:
             status_cargo = f"\nℹ️ Você já possui o cargo **{cargo_doacao.name}**."
         
-        await ctx.send(f"<a:995589misathumb:1443956356846719119> {membro.mention} recebeu {pontos} pontos por doar R$ {valor},00!")
+        await ctx.send(f"<a:995589misathumb:1443956356846719119> {membro.mention} recebeu {pontos} pontos por doar R$ {valor},00!{status_cargo}")
         logging.info(f"{membro} recebeu {pontos} pontos por doar R$ {valor},00.")
+
+        # Se doação for R$50, registrar no banco e entregar também a conquista/cargo TAKE MY MONEY
+        if valor == 50:
+            try:
+                conn_do = conectar_futebol()
+                cur_do = conn_do.cursor()
+                cur_do.execute(
+                    "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+                    (membro.id, 'doacao_50', valor, datetime.utcnow())
+                )
+                conn_do.commit()
+                cur_do.close()
+                conn_do.close()
+            except Exception as e:
+                logging.error(f"Erro ao registrar doação de 50 no banco: {e}")
+
+            # Entregar cargo de conquista 'TAKE MY MONEY' se existir
+            cargo_conquista = discord.utils.get(ctx.guild.roles, name="TAKE MY MONEY")
+            if cargo_conquista is not None and cargo_conquista not in membro.roles:
+                try:
+                    await membro.add_roles(cargo_conquista)
+                    await ctx.send(f"🏆 {membro.mention} desbloqueou a conquista **TAKE MY MONEY** e recebeu o cargo!")
+                except Exception as e:
+                    logging.error(f"Erro ao adicionar cargo TAKE MY MONEY: {e}")
+        
         embed=  discord.Embed(
             title="🙏 Obrigado pela Doação!",
             description=f"Você recebeu **{pontos} pontos** por doar R$ {valor},00 ao servidor!",
@@ -4584,17 +4607,14 @@ async def conquistas(ctx, membro: discord.Member = None):
         resultado_acertos = cur_fut.fetchone()
         acertos_consecutivos = resultado_acertos["acertos_consecutivos"] if resultado_acertos else 0
         
-        # Busca se fez doação (verificar se tem VIP ativo, pois indica que pagou algo)
+        # Busca se fez doação — verificamos se existe um registro de doação de R$50
         # Alternativa: criar tabela específica de doacoes se necessário
-        # Por enquanto, considerar qualquer um com VIP como apoiador
         cur_fut.execute(
             "SELECT pontos FROM pontuacoes WHERE user_id = %s",
             (user_id,)
         )
         resultado_pontos = cur_fut.fetchone()
-        # TODO: Implementar sistema de doações próprio
-        fez_doacao = tem_vip  # Temporariamente, considerar VIP como apoiador
-        
+
         # Verifica VIP
         cur_vips.execute(
             "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
@@ -4602,6 +4622,14 @@ async def conquistas(ctx, membro: discord.Member = None):
         )
         resultado_vip = cur_vips.fetchone()
         tem_vip = resultado_vip is not None
+
+        # Verifica se o usuário teve uma doação de R$50 registrada (item 'doacao_50')
+        cur_fut.execute(
+            "SELECT id FROM loja_pontos WHERE user_id = %s AND item = 'doacao_50' AND ativo = 1",
+            (user_id,)
+        )
+        resultado_doacao50 = cur_fut.fetchone()
+        fez_doacao = resultado_doacao50 is not None
         
         cur_vips.close()
         con_vips.close()
