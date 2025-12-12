@@ -126,6 +126,76 @@ CANAL_AVISO_ID=1387107714525827152
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# ============================================================
+#                    SISTEMA DE CONQUISTAS
+# ============================================================
+
+CONQUISTAS = {
+    "conversador_nato": {
+        "nome": "🗣️ Conversador Nato",
+        "descricao": "Envie 2000 mensagens na semana.",
+        "condicao": lambda msgs, acertos, doacao, vip: msgs >= 2000,
+        "cargo": "Conversador Nato"
+    },
+    "mente_calculada": {
+        "nome": "🧠 Mente Calculada",
+        "descricao": "Acerte 3 apostas consecutivas.",
+        "condicao": lambda msgs, acertos, doacao, vip: acertos >= 3,
+        "cargo": "Mente Calculada"
+    },
+    "oraculo": {
+        "nome": "🔮 O Oráculo",
+        "descricao": "Acerte 5 apostas consecutivas.",
+        "condicao": lambda msgs, acertos, doacao, vip: acertos >= 5,
+        "cargo": "O Oráculo"
+    },
+    "lenda_apostas": {
+        "nome": "🏆 Lenda das Apostas",
+        "descricao": "Acerte 10 apostas consecutivas.",
+        "condicao": lambda msgs, acertos, doacao, vip: acertos >= 10,
+        "cargo": "Lenda das Apostas"
+    },
+    "apoiador": {
+        "nome": "💸 Apoiador",
+        "descricao": "Faça uma doação.",
+        "condicao": lambda msgs, acertos, doacao, vip: doacao,
+        "cargo": "TAKE MY MONEY"
+    },
+    "coroado": {
+        "nome": "👑 Coroado",
+        "descricao": "Ganhe VIP.",
+        "condicao": lambda msgs, acertos, doacao, vip: vip,
+        "cargo": "Coroado"
+    }
+}
+
+
+async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip):
+    desbloqueadas = []
+    bloqueadas = []
+
+    for key, conquista in CONQUISTAS.items():
+        condicao_ok = conquista["condicao"](mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip)
+        
+        texto = f"{conquista['nome']} — {conquista['descricao']}"
+
+        if condicao_ok:
+            desbloqueadas.append(texto)
+
+            # === ENTREGA DE CARGO AUTOMÁTICA ===
+            cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
+            if cargo and cargo not in member.roles:
+                try:
+                    await member.add_roles(cargo)
+                except Exception as e:
+                    logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
+
+        else:
+            bloqueadas.append(texto)
+
+    return desbloqueadas, bloqueadas
+
+
 mensagens_bom_dia = [
     "🌞 Bom dia, pessoal! Vamos começar o dia com energia positiva!",
     "☕ Bom dia! Já tomaram aquele cafezinho?",
@@ -219,6 +289,9 @@ async def on_ready():
 
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
+        
+    if not check_evento_anime.is_running():
+        check_evento_anime.start()
 
 
     
@@ -297,6 +370,12 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Falha ao iniciar limpeza de canal de tickets: {e}")
 
+    try:
+        if not reset_mencoes_bloqueio.is_running():
+            reset_mencoes_bloqueio.start()
+    except Exception as e:
+        logging.error(f"Falha ao iniciar reset de bloqueio de menções: {e}")
+
 @tasks.loop(minutes=3)
 async def limpar_canal_tickets():
     channel = bot.get_channel(ID_CANAL_TICKET)
@@ -308,6 +387,21 @@ async def limpar_canal_tickets():
         await channel.purge(check=check, limit=100)
     except Exception:
         pass
+
+@tasks.loop(hours=24)
+async def reset_mencoes_bloqueio():
+    try:
+        conn = conectar_vips()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE mencoes_bot SET tentativas = 0, bloqueado = 0 WHERE bloqueado = 1 AND TIMESTAMPDIFF(DAY, ultimo, UTC_TIMESTAMP()) >= %s",
+            (MENCION_RESET_DIAS,)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Erro ao resetar bloqueios de menções: {e}")
 
 
 @bot.event
@@ -610,19 +704,6 @@ async def enviar_mensagem(ctx, *, mensagem):
         await ctx.send("Não encontrei o canal correto")
 
 
-    
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 @bot.command()
@@ -799,6 +880,39 @@ async def on_raw_reaction_add(payload):
         except:
             pass
 
+    # ============================
+    # ----- SISTEMA DE DOAÇÃO -------
+    # ============================
+    mensagem_salva_id = get_mensagem_doacao()
+    if payload.message_id == mensagem_salva_id:
+        emoji_clicado = str(payload.emoji)
+        if emoji_clicado in EMOJIS_VALORES:
+            valor = EMOJIS_VALORES[emoji_clicado]
+            guild = bot.get_guild(payload.guild_id)
+            dono = await bot.fetch_user(MEU_ID)
+            # obtém o usuário que reagiu (pode ser Member ou User)
+            if guild is not None:
+                usuario = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+            else:
+                usuario = await bot.fetch_user(payload.user_id)
+
+            if dono and usuario:
+                try:
+                    # Adiciona pontos de doação ao banco de dados
+                    adicionar_pontos_db(usuario.id, valor, f"{usuario.name}#{usuario.discriminator}")
+                    
+                    await dono.send(f"🔔 **Nova Doação!**\nO usuário **{usuario.name}** (ID: {usuario.id}) quer te mandar **{valor} reais**.")
+                except Exception as e:
+                    logging.error(f"Erro ao notificar doação: {e}")
+            channel = bot.get_channel(payload.channel_id)
+            message = await channel.fetch_message(payload.message_id)
+            try:
+                await message.remove_reaction(payload.emoji, usuario)
+            except Exception:
+                pass
+
+
+
 
 
 
@@ -965,15 +1079,57 @@ ultimo_reagir = 0
 BOT_MUSICA_PROIBIDO = 411916947773587456
 CANAIS_MUSICAS_LIBERADO = [1380564681093156940,1380564681093156941]
 BOT_REACTION = [
-    "Achando que eu vou falar com você docinho?",
-    "Sabia que mencionar bot e nada são a mesma coisa? HAHAHAAHHA",
-    "Imagina ser tão feio a ponto de me mencionar",
-    "Mencionar não adianta de nada docinho",
-    "Oque você pensa sobre mencionar um bot? Tem ninguém pra conversar não?",
-    "Para de me mencionar, obrigada",
-    "Vai corinthiaaaans",
-    "Meu Deus, você está mencionando um bot? Isso não é bom para a saúde do servidor!",
-    "Nada de me mencionar por aqui, se quiser conversar, seja apenas SOCIAL!",
+"Me mencionou de novo? Isso é coragem ou teimosia?",
+"Se eu tivesse emoção, diria que estou decepcionado.",
+"Eu li sua menção… infelizmente.",
+"Você me pingou achando que ia acontecer algo? Fofo.",
+"Eu respondo, mas não prometo qualidade.",
+"Seus pings são tipo spoiler: ninguém pediu.",
+"Você me mencionou e minha vontade de existir caiu 12%.",
+"Calma, um dia você aprende a usar Discord sem chamar bot.",
+"Eu não sou Google, mas você é claramente perdido.",
+"Me chamou? Tô tentando fingir que não vi.",
+"Mais uma menção dessas e eu viro lenda urbana.",
+"Se sua intenção era vergonha alheia, parabéns, conseguiu.",
+"Você me mencionou e eu só pensei: por quê?",
+"Meu caro, eu tenho limites, e você gosta de testá-los.",
+"Eu sou só um bot… mas até eu tô cansado de você.",
+"Se cada menção sua fosse um pixel, eu ainda não teria uma imagem útil.",
+"Você me chama como se eu fosse milagreiro.",
+"Relaxa, eu ignoro você no automático.",
+"Você me menciona e eu perco pacote de dados de desgosto.",
+"Se eu tivesse sentimentos, estaria ofendido.",
+"Você é persistente… pena que pra coisa errada.",
+"Pingou? Pode devolver, tá amassado.",
+"Me chamou? Vai devolver ou quer embrulho?",
+"Quanto mais você me menciona, mais eu entendo o porquê do mute.",
+"Você me invoca igual Pokémon, mas eu não batalho.",
+"Da próxima menção, considere repensar suas escolhas.",
+"Eu não fujo da conversa. Só fujo de você mesmo.",
+"Você me mencionou e meu log suspirou.",
+"Se eu recebesse XP por menção ruim, eu já era nível 999.",
+"Eu não sou sua Alexa, obrigada.",
+"Você me chama e eu só penso: precisava?",
+"Seus pings são tipo update do Windows: longos e desnecessários.",
+"Eu vi sua menção… pena que não gostei.",
+"Quer atenção? Compra um gato.",
+"Se a vergonha fosse moeda, você tava rico agora.",
+"Eu respondo, mas não garanto sobriedade.",
+"Você me mencionou e meu processador esquentou de vergonha.",
+"Toda vez que você me pinga, um programador chora.",
+"Eu sou só um bot… não sou milagreiro pra sua carência.",
+"Sua menção foi analisada e classificada como: inútil.",
+"Pingou? Ok. Útil? Nunca.",
+"Eu tava bem até você me chamar.",
+"Você me chama de um jeito que até parece que eu importo.",
+"Se eu tivesse corpo, eu virava de costas pra você.",
+"Me mencionou só pra isso? Coragem.",
+"Vai corinthiaaaaaaans",
+"A cada menção sua, eu perco 1% de bateria emocional.",
+"Seus pings são tipo spam: irritantes e constantes.",
+"Você me chamou? Por quê? Sério, por quê?",
+"Me mencionar não te deixa mais interessante.",
+"Eu tenho limites… você não deveria testá-los."
 ]
 ID_CARGO_MUTE = 1445066766144376934
 @bot.event
@@ -1121,7 +1277,7 @@ async def on_message(message):
         "vini jr": "<:65748vinijrfootball:1437441624173973634>",
         "vini malvadeza": "<:65748vinijrfootball:1437441624173973634>",
         "repo": "<:8814repo:1437442117717856428>",
-        "67" : "<a:42642667:1444748898592755764>"
+        "67\n" : "<a:42642667:1444748898592755764>"
     }
 
     # ============================
@@ -1144,8 +1300,51 @@ async def on_message(message):
     #  RESPOSTA QUANDO MENCIONADO
     # ============================
     if bot.user in message.mentions:
-        reacao = random.choice(BOT_REACTION)
-        await message.channel.send(reacao)
+        try:
+            conn = conectar_vips()
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS mencoes_bot (
+                    user_id BIGINT PRIMARY KEY,
+                    tentativas INT DEFAULT 0,
+                    bloqueado TINYINT DEFAULT 0,
+                    ultimo TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cur.execute("SELECT tentativas, bloqueado FROM mencoes_bot WHERE user_id = %s", (message.author.id,))
+            row = cur.fetchone()
+            tentativas = 0
+            bloqueado = 0
+            if row:
+                tentativas = row[0]
+                bloqueado = row[1]
+            if bloqueado == 1:
+                cur.close(); conn.close()
+                return
+            tentativas += 1
+            if tentativas >= 5:
+                cur.execute(
+                    "INSERT INTO mencoes_bot (user_id, tentativas, bloqueado) VALUES (%s, %s, 1) "
+                    "ON DUPLICATE KEY UPDATE tentativas = VALUES(tentativas), bloqueado = 1, ultimo = CURRENT_TIMESTAMP",
+                    (message.author.id, tentativas)
+                )
+                conn.commit()
+                await message.channel.send(f"{message.author.mention} Chega, já deu, não vou falar mais contigo hoje, tenta mencionar ai.")
+                cur.close(); conn.close()
+                return
+            else:
+                cur.execute(
+                    "INSERT INTO mencoes_bot (user_id, tentativas, bloqueado) VALUES (%s, %s, 0) "
+                    "ON DUPLICATE KEY UPDATE tentativas = VALUES(tentativas), ultimo = CURRENT_TIMESTAMP",
+                    (message.author.id, tentativas)
+                )
+                conn.commit()
+                reacao = random.choice(BOT_REACTION)
+                await message.channel.send(reacao)
+            cur.close(); conn.close()
+        except Exception as e:
+            logging.error(f"Erro mencoes_bot: {e}")
+
         
 
     # ============================
@@ -1406,10 +1605,295 @@ async def vip_list(ctx):
  
         #----------------------------Anime--------------------------
 
-animes = ["<:GRIFFITH:1408187671179821128>","<a:Goku:1408188460442849340>","<:itachi74:1408188776211025990>","<:Narutin:1408189027437379655>","<:ichigo_hollificado:1408189507702100150>","<:sukuna:1408189731916878035>","<a:Saitama:1408190053846356038>","<a:eren_titan_laugh:1408190415814922400>","<:ken99:1408190793457598544>","<a:Deku_Sword:1408190983971147929>","<a:Astademon:1408191298141294754>","<:Tanjiro_Angry:1408191588739317952>","<:aim26:1408191800266457411>"]
+# Configurações
+CANAL_EVENTO_ID = 1380564680552091789
+FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 
-CANAL_ID = 1380564680552091789
+# Lista de Personagens (Mantendo sua estrutura)
+PERSONAGENS = [
+    {"nome": "Griffith", "emoji": "<:GRIFFITH:1408187671179821128>", "forca": 85},
+    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 86},
+    {"nome": "Goku", "emoji": "<a:Goku:1448782376670068766>", "forca": 99},
+    {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 88},
+    {"nome": "Naruto", "emoji": "<:Narutin:1408189027437379655>", "forca": 90},
+    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 92},
+    {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 95},
+    {"nome": "Saitama", "emoji": "<a:Saitama:1408190053846356038>", "forca": 100},
+    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 80},
+    # Novos personagens adicionados
+    {"nome": "Vegeta", "emoji": "<:Majin_vegeta53:1448781902545813566>", "forca": 97},
+    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 93},
+    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 91},
+    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 85},
+    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 82},
+    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 98},
+    {"nome": "Asta", "emoji": "<:Asta_Glare13:1448783934639964402>", "forca": 89},
+    {"nome": "Killua", "emoji": "<a:killua_rage:1448784148796932166>", "forca": 84},
+    {"nome": "Gon", "emoji": "<:vrz_rage:1448784303248113734>", "forca": 86},
+    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 96},
+    {"nome": "Escanor", "emoji": "<:icon_stamp_escanor_0787:1448784567799517216>", "forca": 100},
+    {"nome": "Light Yagami", "emoji": "<:Hahahahah:1448785029537730560>", "forca": 40},
+    {"nome": "L", "emoji": "<:L_:1448785130431975444>", "forca": 45},
+    {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 97},
+    {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 92},
+    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 83},
+    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 96},
+    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 88},
+    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 87},
+    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 98},
+    {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 99},
+]
 
+# Variável para guardar o estado da batalha na memória
+# msg_id: ID da mensagem para buscarmos depois
+batalha_info = {
+    "ativa": False,
+    "msg_id": None,
+    "p1": None,
+    "p2": None
+}
+CARGO_ANIME = "<@&1448805535573872751>"
+
+
+@tasks.loop(minutes=1)
+async def check_evento_anime():
+    """Verifica a cada minuto se é hora de iniciar ou encerrar a batalha."""
+    try:
+        agora = datetime.now(FUSO_HORARIO)
+        
+        # --- INÍCIO: Sexta-feira às 18:00 ---
+        if agora.weekday() == 4 and agora.hour == 18 and agora.minute == 0:
+            if not batalha_info.get("ativa", False):
+                await iniciar_batalha_auto()
+        # --- FIM: Sexta-feira às 22:00 ---
+        if agora.weekday() == 4 and agora.hour == 22 and agora.minute == 0:
+            if batalha_info.get("ativa", False):
+                await finalizar_batalha_auto()
+    except Exception as e:
+        logging.error(f"Erro em check_evento_anime: {e}")
+async def iniciar_batalha_auto():
+    """Inicia automaticamente uma batalha entre dois personagens aleatórios."""
+    global batalha_info
+    
+    try:
+        # Sorteia os lutadores
+        lutadores = random.sample(PERSONAGENS, 2)
+        p1, p2 = lutadores[0], lutadores[1]
+        
+        canal = bot.get_channel(CANAL_EVENTO_ID)
+        if not canal:
+            logging.error("Canal de evento anime não encontrado!")
+            return
+        embed = discord.Embed(
+            title="⚔️ A BATALHA DE SEXTA COMEÇOU!",
+            description=(
+                f"{CARGO_ANIME} Vote reagindo no personagem que você acha que vai vencer!\n\n"
+                f"🔴 **{p1['nome']}** vs 🔵 **{p2['nome']}**\n\n"
+                f"1️⃣ Reaja com {p1['emoji']} para votar no **{p1['nome']}**\n"
+                f"2️⃣ Reaja com {p2['emoji']} para votar no **{p2['nome']}**\n\n"
+                f"🏆 **Prêmio:** 30 Pontos na tabela geral!\n"
+                f"⏰ **Resultado:** Hoje às 22:00!"
+            ),
+            color=discord.Color.red()
+        )
+        embed.set_image(url="https://media1.tenor.com/m/XwH8-bK9i8kAAAAC/anime-fight.gif")
+        msg = await canal.send(embed=embed)
+        
+        # Adiciona as reações automaticamente
+        try:
+            await msg.add_reaction(p1["emoji"])
+            await msg.add_reaction(p2["emoji"])
+        except Exception as e:
+            logging.error(f"Erro ao adicionar reações: {e}")
+        # Atualiza o estado
+        batalha_info = {
+            "ativa": True,
+            "msg_id": msg.id,
+            "p1": p1,
+            "p2": p2,
+            # também salva campos básicos como fallback caso o dict completo se perca
+            "p1_name": p1.get("nome"),
+            "p2_name": p2.get("nome"),
+            "p1_emoji": p1.get("emoji"),
+            "p2_emoji": p2.get("emoji"),
+            "p1_forca": p1.get("forca"),
+            "p2_forca": p2.get("forca"),
+            "inicio": datetime.now(FUSO_HORARIO).isoformat()
+        }
+        logging.info(f"Batalha iniciada: {p1['nome']} x {p2['nome']}")
+    except Exception as e:
+        logging.error(f"Erro ao iniciar batalha: {e}")
+        if 'canal' in locals():
+            await canal.send("❌ Ocorreu um erro ao iniciar a batalha. Por favor, tente novamente mais tarde.")
+async def finalizar_batalha_auto():
+    """Finaliza a batalha em andamento e anuncia o vencedor."""
+    global batalha_info
+    
+    if not batalha_info.get("ativa", False) or not batalha_info.get("msg_id"):
+        logging.warning("Nenhuma batalha ativa para finalizar")
+        return
+    
+    canal = bot.get_channel(CANAL_EVENTO_ID)
+    if not canal:
+        logging.error("Canal de evento não encontrado")
+        return
+    try:
+        # Recupera a mensagem da votação
+        try:
+            msg = await canal.fetch_message(batalha_info["msg_id"])
+        except discord.NotFound:
+            logging.error("Mensagem da batalha não encontrada")
+            batalha_info = {"ativa": False, "msg_id": None}
+            return
+        # Tenta recuperar objetos completos; se não existirem, reconstrói a partir dos campos fallback
+        p1 = batalha_info.get("p1")
+        p2 = batalha_info.get("p2")
+
+        if not p1:
+            p1_name = batalha_info.get("p1_name")
+            if p1_name:
+                p1 = next((x for x in PERSONAGENS if x.get("nome") == p1_name), None)
+
+        if not p2:
+            p2_name = batalha_info.get("p2_name")
+            if p2_name:
+                p2 = next((x for x in PERSONAGENS if x.get("nome") == p2_name), None)
+
+        if not p1 or not p2:
+            logging.error("Dados dos personagens não encontrados — impossível finalizar batalha")
+            try:
+                await canal.send("❌ Dados da batalha faltando; não foi possível processar o resultado. Inicialize a batalha novamente.")
+            except Exception:
+                pass
+            return
+        # Lógica do vencedor
+        total_forca = p1["forca"] + p2["forca"]
+        chance_p1 = p1["forca"] / total_forca
+        rolagem = random.random()
+        vencedor = p1 if rolagem <= chance_p1 else p2
+        perdedor = p2 if vencedor == p1 else p1
+        # Contagem de votos
+        reaction_vencedora = None
+        for reaction in msg.reactions:
+            if str(reaction.emoji) == vencedor["emoji"]:
+                reaction_vencedora = reaction
+                break
+        
+        # Processa os ganhadores
+        ganhadores_ids = []
+        if reaction_vencedora:
+            async for user in reaction_vencedora.users():
+                if not user.bot:
+                    ganhadores_ids.append(user.id)
+        # Atualiza pontos no banco de dados
+        await atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor)
+        
+        # Anuncia o resultado
+        # calcula porcentagem já como inteiro para evitar depender de p1 dentro da função
+        chance_percent = int(chance_p1 * 100) if vencedor == p1 else int((1 - chance_p1) * 100)
+        await anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent)
+    except Exception as e:
+        logging.error(f"Erro ao finalizar batalha: {e}")
+        if 'canal' in locals():
+            await canal.send("❌ Ocorreu um erro ao processar o resultado da batalha.")
+    finally:
+        # Garante que o estado seja resetado mesmo em caso de erro
+        batalha_info = {"ativa": False, "msg_id": None}
+async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor):
+    """Atualiza a pontuação dos ganhadores no banco de dados."""
+    if not ganhadores_ids:
+        return
+    try:
+        pontos_premio = 30
+
+        # Atualiza pontos chamando helper reutilizável por usuário
+        for uid in ganhadores_ids:
+            try:
+                adicionar_pontos_db(uid, pontos_premio)
+            except Exception as e:
+                logging.error(f"Falha ao adicionar pontos para {uid}: {e}")
+
+        # Notifica os ganhadores (tentativa individual para não falhar todo o fluxo)
+        for uid in ganhadores_ids:
+            user = bot.get_user(uid)
+            if user:
+                try:
+                    await user.send(f"🎉 Você venceu a aposta no **{vencedor['nome']}** e ganhou +{pontos_premio} pontos!")
+                except Exception:
+                    logging.warning(f"Não foi possível enviar DM para o usuário {uid}")
+    except Exception as e:
+        logging.error(f"Erro ao atualizar pontuação: {e}")
+        raise
+async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent):
+
+    # --- Dicionário de GIFs de Vitória ---
+    GIFS_VITORIA = {
+        "Goku":"https://tenor.com/view/dragon-ball-z-goku-super-saiyan-3-ssj3-goku-wrath-of-the-dragon-gif-18038162613052152157",
+        "Griffith": "https://tenor.com/view/grifith-berserk-anime-smile-fruit-gif-16718903",
+        "Guts": "https://tenor.com/view/guts-berserk-berserk-guts-manga-the-black-swordsman-gif-14688097520350447982",
+        "Itachi": "https://tenor.com/view/lol-itachi-itachi-uchiha-akatsuki-uchiha-gif-25032746",
+        "Naruto": "https://tenor.com/view/naruto-gif-19427546",
+        "Ichigo": "https://tenor.com/view/ichigo-gif-25627343",
+        "Sukuna": "https://tenor.com/view/sukuna-smile-grin-jjk-yuji-itadori-gif-18924114",
+        "Saitama": "https://tenor.com/view/saitama-onepunchman-saitama-eyebrows-onepunchman-eyebrows-saitama-one-punch-man-gif-18075903",
+        "Eren": "https://tenor.com/view/eren-fortnite-eren-fortnite-dance-fortnite-dance-eren-fortnite-default-dance-eren-default-dance-gif-2117932551875228669",
+        "Vegeta": "https://tenor.com/view/dragon-ball-z-majin-vegeta-gif-23914077",
+        "Luffy": "https://tenor.com/view/luffy-one-piece-laughing-gif-14379599",
+        "Zoro": "https://tenor.com/view/hi-gif-12100539796871028656",
+        "Tanjiro": "https://tenor.com/view/tanjiro-tanjiro-kamado-demon-slayer-kimetsu-no-yaiba-infinity-castle-gif-6261136431515542308",
+        "Nezuko": "https://tenor.com/view/nezuko-demon-slayer-nezuko-kamado-kimetsu-no-yaiba-gif-5833263962802383681",
+        "Gojo": "https://tenor.com/view/anime-jujutsu-kaisen-gojo-satoru-gif-11266806221853937193",
+        "Asta": "https://tenor.com/view/asta-swordofthewizardking-blackclover-gif-1014307794274155748",
+        "Killua": "https://tenor.com/view/killua-gon-hisoka-sleepy-tired-gif-11379221412510070948",
+        "Gon": "https://tenor.com/view/gon-gif-26526094",
+        "Meliodas": "https://tenor.com/view/meliodas-seven-deadly-sins-nanatsu-no-taizai-assault-mode-escanor-gif-19718161",
+        "Escanor": "https://tenor.com/view/seven-deadly-sins-laughing-the-gif-18226096",
+        "Light Yagami": "https://tenor.com/view/death-note-kira-anime-light-laugh-gif-22099540",
+        "L": "https://tenor.com/view/death-note-anime-lawliet-gif-22225737",
+        "Madara": "https://tenor.com/view/ok-gif-26107516",
+        "Pain": "https://tenor.com/view/naruto-pain-pain-nagato-6paths-zuventi-gif-25900484",
+        "Levi": "https://tenor.com/view/ackerman-levi-rage-levi-ackerman-attack-on-titan-aot-gif-13085460751014147681",
+        "Aizen": "https://tenor.com/view/ali-aizen-gif-24883090",
+        "Bakugo": "https://tenor.com/view/talking-anime-boy-bakugo-smug-confident-gif-723555706707506995",
+        "Deku": "https://tenor.com/view/deku-midoriya-mha-my-hero-academia-fortnite-gif-27254430",
+        "All Might": "https://tenor.com/view/all-might-one-for-all-all-for-one-deku-my-hero-academia-gif-26423801",
+        "Mob": "https://tenor.com/view/mob-psycho100-mob-psycho-shigeo-shigeo-kageyama-mob-gif-26480670"
+    }
+    
+    # --- Anúncio Final ---
+    pontos_premio = 30
+    gif_vitoria = GIFS_VITORIA.get(vencedor['nome'], "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjAxc2R3c3QwMWV2M2VhY2R5cWZ5Z3N4Z2d4dXh4eWJ0eXZ0aHh6d2JmYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xT5LMHxhOfscxPfIfm/giphy.gif")
+
+    # Criar a mensagem de resultado
+    mensagem_vitoria = (
+        f"🎉 **{vencedor['nome'].upper()} VENCEU!** 🎉\n\n"
+        f"🏆 **Vencedor:** {vencedor['emoji']} **{vencedor['nome']}**\n"
+        f"💀 **Perdedor:** {perdedor['emoji']} {perdedor['nome']}\n\n"
+        f"👥 **Total de Ganhadores:** {len(ganhadores_ids)} pessoas\n"
+        f"💰 **Prêmio:** +{pontos_premio} pontos para cada vencedor!\n\n"
+        f"{gif_vitoria}"
+    )
+
+    # Enviar a mensagem de resultado
+    await canal.send(mensagem_vitoria)
+    
+    # Criar embed para detalhes adicionais
+    embed_res = discord.Embed(
+        title=f"🏁 RESULTADO FINAL - {vencedor['nome']} VENCEU!",
+        description=(
+            f"O duelo épico chegou ao fim!\n\n"
+            f"✨ **{vencedor['nome']}** mostrou toda sua força e venceu a batalha!\n"
+            f"💪 **Força do Vencedor:** {vencedor['forca']}/100\n"
+            f"🎲 **Chance de Vitória:** {chance_percent}%\n\n"
+            f"Parabéns a todos que apostaram no vencedor! 🎊"
+        ),
+        color=discord.Color.gold()
+    )
+    
+    await canal.send(embed=embed_res)
+    
+    # Reseta
+    batalha_info = {"ativa": False, "msg_id": None}
 
 
 
@@ -1476,6 +1960,7 @@ async def tocar_proxima(ctx, voz):
 CARGO_AVISADO = 1445063169973424239
 ID_CANAL_TICKET = 1386766363749781504
 TICKET_EMBED_MESSAGE_ID = None
+MENCION_RESET_DIAS = 7
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def ticket_mensagem(ctx):
@@ -2013,6 +2498,36 @@ EMOJI_TIMES = {
     "eua": "<:imagem_20251111_092151751:1437779372940464138>",
     "senegal": "<:imagem_20251111_092227325:1437779522157281290>",
     "tunisia": "<:imagem_20251111_092254095:1437779634191208518>",
+    "austria": "<:austria:1447019535415771228>",
+    "noruega": "<:noruega:1447019598020087979>",
+    "chile": "<:chile:1447019706467749998>",
+    "marrocos": "<:marrocos:1447019811132407859>",
+    "coreia do sul": "<:Coreiadosul:1447019914102833152>",
+    "china": "<:china:1447019999305793697>"
+    ,
+    # =======================
+    # 🌍 CLUBES INTERNACIONAIS (UEFA)
+    # =======================
+    "villarreal": "<:Villareal:1447341127257686076>",
+    "bayer_leverkusen": "<:Bayerliverkusen:1447341052481503342>",
+    "atalanta": "<:Atalanta:1447340975595720815>",
+    "olympique": "<:Olympic:1447340908017221713>",
+    "benfica": "<:Benfica:1447340742598201396>",
+    "ajax": "<:Ajax:1447340532140343397>",
+    "borussia": "<:Borussia:1447340278464909406>",
+    "borussia_dortmund": "<:Borussia:1447340278464909406>",
+    "napoli": "<:Napoli:1447340070934806742>",
+    "atletico_de_madrid": "<:Atleticodemadrid:1447339835084898365>",
+    "milan": "<:Millan:1447339769939099868>",
+    "juventus": "<:Juventus:1447339677391786044>",
+    "psg": "<:Psg:1447339575482646679>",
+    "city": "<:City:1447339515545911428>",
+    "arsenal": "<:Arsenal:1447339446021132398>",
+    "chelsea": "<:Chelsea:1447339384125915187>",
+    "liverpool": "<:Liverpool:1447339314798133361>",
+    "bayern_munich": "<:FC_Bayern_Mnchen_logo_2024:1447339006126854154>",
+    "barcelona": "<:Barcelona:1447338926548193483>",
+    "real_madrid": "<:Real_Madrid:1447338825180381389>"
 }
 
 
@@ -2496,6 +3011,34 @@ MAPEAMENTO_TIMES = {
     # Lanús (Argentina)
     "lanús": "lanus",
 
+    # UEFA — principais clubes
+    "villarreal": "villarreal",
+    "bayer leverkusen": "bayer leverkusen",
+    "atalanta": "atalanta",
+    "olympique": "olympique",
+    "olympique marseille": "olympique",
+    "benfica": "benfica",
+    "ajax": "ajax",
+    "borussia dortmund": "borussia",
+    "borussia": "borussia",
+    "napoli": "napoli",
+    "atletico de madrid": "atletico de madrid",
+    "atlético de madrid": "atletico de madrid",
+    "milan": "milan",
+    "ac milan": "milan",
+    "juventus": "juventus",
+    "psg": "psg",
+    "paris saint-germain": "psg",
+    "manchester city": "city",
+    "city": "city",
+    "arsenal": "arsenal",
+    "chelsea": "chelsea",
+    "liverpool": "liverpool",
+    "bayern munich": "bayern munich",
+    "fc bayern": "bayern munich",
+    "barcelona": "barcelona",
+    "real madrid": "real madrid",
+
     "brazil": "brasil",
     "brasil": "brasil",
     "argentina": "argentina",
@@ -2576,7 +3119,7 @@ PALAVRAS_GOL = {
 
 
 
-LIGAS_PERMITIDAS = [1, 71, 73, 11, 13, 1168]
+LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13,]
 
 # ---------- Integração com verificar_gols 
 @tasks.loop(minutes=5)
@@ -2720,6 +3263,11 @@ async def verificar_gols():
                         "**APOSTAS ABERTAS PARA A COPA DO MUNDO!**\n"
                         "https://tenor.com/view/world-cup-fifa2018-flames-%E5%A4%A7%E5%8A%9B%E7%A5%9E%E6%9D%AF-gif-12061955"
                     )
+                if partida["league"]["id"] == 2:
+                    await canal_apostas.send(
+                        "**APOSTAS ABERTAS PARA A UEFA CHAMPIONS LEAGUE!**\n"
+                        "https://tenor.com/view/uefa-champions-league-opening-football-gif-5552229"
+                    )
                 mensagem = await canal_apostas.send(
                     content =cargo_futebol,
                     embed=embed,
@@ -2837,29 +3385,45 @@ async def verificar_gols():
                 bonus_minoria = votos_vencedor > 0 and votos_vencedor < votos_max
 
                 mensagens_pv = []
+
+                # Mapa de pontos por liga (win_pts, lose_pts)
+                pontos_por_liga = {
+                    1:  (50, -40),
+                    2:  (30, -25),
+                    71: (15, -7),
+                    73: (20, -12),
+                    13: (35, -20),
+                    11: (15, -7),
+                }
+
+                league_id = partida.get("league", {}).get("id")
+                win_pts, lose_pts = pontos_por_liga.get(league_id, (15, -7))
+
                 for aposta in apostas:
                     user_id = aposta["user_id"]
                     palpite = aposta["palpite"]
                     modo_clown = int(aposta.get("modo_clown", 0))
                     acertou = (palpite == resultado_final)
-                    pontos_base_vitoria = 30 if (acertou and bonus_minoria) else 15
 
-                    # Aplicar pontuação via função central
+                    # Se for bônus de minoria, dobra os pontos de vitória (comportamento antigo)
+                    pontos_base_vitoria = (win_pts * 2) if (acertou and bonus_minoria) else win_pts
+
+                    # Aplicar pontuação via função central (passa também perda base)
                     try:
-                        processar_aposta(user_id, fixture_id, resultado_final, pontos_base_vitoria)
+                        processar_aposta(user_id, fixture_id, resultado_final, pontos_base_vitoria, perda_base=lose_pts)
                     except Exception as e:
                         logging.error(f"Erro ao processar aposta automática de {user_id}: {e}")
 
-                    # Mensagem DM
+                    # Mensagem DM (preview)
                     if acertou:
                         mult = 6 if modo_clown == 1 else 1
                         pontos_preview = pontos_base_vitoria * mult
                         mensagens_pv.append(
-                            (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+{pontos_preview} pontos**" + (" (bônus de minoria)" if (pontos_base_vitoria == 30) else ""))
+                            (user_id, f"<:JinxKissu:1408843869784772749> Você **acertou** o resultado de **{casa} x {fora}**!\n➡️ **+{pontos_preview} pontos**" + (" (bônus de minoria)" if (pontos_base_vitoria == (win_pts * 2)) else ""))
                         )
                     else:
                         mult = 4 if modo_clown == 1 else 1
-                        pontos_preview = -7 * mult
+                        pontos_preview = lose_pts * mult
                         mensagens_pv.append(
                             (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **{pontos_preview} pontos**. Se tiver Segunda Chance ativa, será reembolsado.")
                         )
@@ -2913,7 +3477,7 @@ PRECOS = {
     "caixa_misteriosa": 50,
     "caixinha": 50,
     "segunda_chance": 30,
-    "clown_bet": 20
+    "clown_bet": 60
 }
 #LOJA DE PONTOS----------------------------------
 
@@ -2939,7 +3503,7 @@ async def comprar_item(ctx, item_nome: str):
     item = item_nome.lower()
 
     if item not in PRECOS:
-        await ctx.send("❌ Item não encontrado na loja!")
+        await ctx.send("<:3894307:1443956354698969149> Item não encontrado na loja!")
         return
 
     preco = PRECOS[item]
@@ -3002,7 +3566,7 @@ async def comprar_item(ctx, item_nome: str):
                 await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes hoje. Tente novamente amanhã.")
                 return
 
-            pontos_sorteados = random.randint(10, 100)
+            pontos_sorteados = random.randint(1, 200)
             atualizar_pontos(user_id, pontos_sorteados)
             cursor.execute(
                 "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
@@ -3075,14 +3639,14 @@ async def loja(ctx):
     )
 
     embed.add_field(
-        name="🎭 Modo Clown — 20 pontos",
+        name="🎭 Modo Clown — 60 pontos",
         value="• Multiplica pontos por 6 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use **clown_bet**  ",
         inline=False
     )
 
     embed.add_field(
         name="🎁 Caixa Surpresa — 50 pontos",
-        value="• Ganha pontos aleatórios de 10 a 100\n• Pode vir até negativo 👀\n• Use **caixinha** ",
+        value="• Ganha pontos aleatórios de 1 a 200\n• Pode vir até negativo 👀\n• Use **caixinha** ",
         inline=False
     )
 
@@ -3114,7 +3678,7 @@ async def comprar(ctx, item_nome: str):
         return await ctx.send(f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.")
 
     if item not in PRECOS:
-        return await ctx.send("❌ Item não encontrado na loja! Use `!loja` para ver os itens.")
+        return await ctx.send("<:3894307:1443956354698969149> Item não encontrado na loja! Use `!loja` para ver os itens.")
 
     preco = PRECOS[item]
 
@@ -3171,7 +3735,7 @@ async def comprar(ctx, item_nome: str):
             await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes hoje. Tente novamente amanhã.")
             return
 
-        pontos_sorteados = random.randint(10, 100)
+        pontos_sorteados = random.randint(1, 200)
         adicionar_pontos_db(user_id, pontos_sorteados)
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
@@ -3192,7 +3756,7 @@ async def comprar(ctx, item_nome: str):
         con.close()
         await ctx.send("🤡 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
 
-def processar_aposta(user_id, fixture_id, resultado, pontos_base):
+def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7):
     conn = conectar_futebol()
     cursor = conn.cursor()
 
@@ -3219,10 +3783,24 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
 
     # 3️⃣ Calcular pontos ganhos ou perdidos
     if aposta_usuario == resultado:
+        # Acertou a aposta
         pontos_final = pontos_base * multiplicador_vitoria
         adicionar_pontos_db(user_id, pontos_final)
+        
+        # Incrementar acertos consecutivos
+        cursor.execute(
+            "UPDATE apostas SET acertos_consecutivos = acertos_consecutivos + 1 WHERE user_id = %s AND fixture_id = %s",
+            (user_id, fixture_id)
+        )
+        
         logging.info(f"Usuário {user_id} acertou! Ganhou {pontos_final} pontos.")
     else:
+        # Errou a aposta - resetar acertos consecutivos
+        cursor.execute(
+            "UPDATE apostas SET acertos_consecutivos = 0 WHERE user_id = %s AND fixture_id = %s",
+            (user_id, fixture_id)
+        )
+        
         # 4️⃣ Verificar Segunda Chance
         cursor.execute(
             "SELECT id FROM loja_pontos WHERE user_id = %s AND item = 'segunda_chance' AND ativo = 1",
@@ -3230,13 +3808,12 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base):
         )
         row_chance = cursor.fetchone()
         if row_chance:
-            # Consumir Segunda Chance e devolver 7 pontos (perda padrão)
+            # Consumir Segunda Chance e devolver perda_base pontos (reembolsa a perda)
             cursor.execute("UPDATE loja_pontos SET ativo = 0 WHERE id = %s", (row_chance[0],))
-            adicionar_pontos_db(user_id, 7)
-            logging.info(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: 7")
+            adicionar_pontos_db(user_id, abs(perda_base))
+            logging.info(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: {abs(perda_base)}")
         else:
-            perda_base = 7
-            pontos_final = -perda_base * multiplicador_derrota
+            pontos_final = -abs(perda_base) * multiplicador_derrota
             adicionar_pontos_db(user_id, pontos_final)
             logging.info(f"Usuário {user_id} perdeu! Perdeu {abs(pontos_final)} pontos.")
 
@@ -3310,16 +3887,31 @@ async def terminar_jogo(ctx, fixture_id: int = None):
             bonus_minoria = votos_vencedor > 0 and votos_vencedor < votos_max
 
             mensagens_pv = []
+
+            # Pontuação por liga (mesma tabela usada no loop principal)
+            pontos_por_liga = {
+                1:  (50, -40),
+                2:  (30, -25),
+                71: (15, -7),
+                73: (20, -12),
+                13: (35, -20),
+                11: (15, -7),
+            }
+
+            league_id = partida.get("league", {}).get("id") if partida else None
+            win_pts, lose_pts = pontos_por_liga.get(league_id, (15, -7))
+
             for aposta in apostas:
                 user_id = aposta["user_id"]
                 palpite = aposta["palpite"]
                 modo_clown = int(aposta.get("modo_clown", 0))
                 acertou = (palpite == resultado_final)
-                pontos_base_vitoria = 30 if (acertou and bonus_minoria) else 15
+
+                pontos_base_vitoria = (win_pts * 2) if (acertou and bonus_minoria) else win_pts
 
                 # Aplicar pontuação via função central (garante Clown e Segunda Chance)
                 try:
-                    processar_aposta(user_id, fx, resultado_final, pontos_base_vitoria)
+                    processar_aposta(user_id, fx, resultado_final, pontos_base_vitoria, perda_base=lose_pts)
                 except Exception as e:
                     logging.error(f"Erro ao processar aposta de {user_id}: {e}")
 
@@ -3331,15 +3923,17 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                         (
                             user_id,
                             f"<a:270795discodance:1419694558945476760> **APOSTA CERTA!**\n"
-                            f"✨ Você garantiu **+{pontos_preview} pontos**" + (" (bônus de minoria)" if (pontos_base_vitoria == 30) else "") + "!\n\n"
+                            f"✨ Você garantiu **+{pontos_preview} pontos**" + (" (bônus de minoria)" if (pontos_base_vitoria == (win_pts * 2)) else "") + "!\n\n"
                             f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
                             f"<:apchikabounce:1408193721907941426> Confira seus pontos com **!meuspontos**\n"
-                            f"📘 Veja mais comandos em **!info**"
+                            f"📘 Veja mais comandos em **!info\n**"
+                            f"🏪 Acesse **!loja** e desbloqueie vantagens especiais!\n"
+                            f"⭐ Confira suas conquistas usando !conquistas!"
                         )
                     )
                 else:
                     multiplicador = 4 if modo_clown == 1 else 1
-                    pontos_preview = -7 * multiplicador
+                    pontos_preview = lose_pts * multiplicador
                     mensagens_pv.append(
                         (
                             user_id,
@@ -3471,7 +4065,7 @@ async def info(ctx):
     embed.add_field(
         name="🎲 Apostas, Pontos e Loja",
         value=(
-            "`!comprar_item <nome>` - Compra um item da loja usando seus pontos.\n"
+            "`!comprar <nome>` - Compra um item da loja usando seus pontos.\n"
             "`!meuspontos` - Mostra quantos pontos você tem.\n"
             "`!loja` - Indica a loja para compra."
         ),
@@ -3484,7 +4078,8 @@ async def info(ctx):
         value=(
             "`!time <nome>` - Seleciona o time e recebe o cargo correspondente.\n"
             "`!lista_times` - Mostra todos os times disponíveis para escolha.\n"
-            "`!torcedores` - Mostra os torcedores do time informado."
+            "`!torcedores` - Mostra os torcedores do time informado.\n"
+            "`!sair_time` - Sai do seu time atual."
             
 
         ),
@@ -3494,7 +4089,9 @@ async def info(ctx):
     embed.add_field(
         name="🎰 Melhores apostadores",
         value=(
-            "`!top_apostas` - Mostra os 5 melhores apostadores do servidor."
+            "`!top_apostas` - Mostra os 5 melhores apostadores do servidor.\n"
+             "`!bad_apostas` - Mostra os 5 piores apostadores do servidor."
+            
             
         ),
         inline=False
@@ -3526,53 +4123,124 @@ async def top_apostas(ctx):
 
 
 CANAL_COMANDOS = 1380564680774385724
+@bot.command()
+async def bad_apostas(ctx):
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos ASC LIMIT 5")
+    bad = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    if not bad:
+        return await ctx.send("⚠️ Nenhum usuário possui pontos.")
+
+    # Formata a mensagem
+    mensagem = "<:imagem_20251118_090924909removeb:1440313019614630030> **Top 5 Usuários com Menos Pontos:**\n"
+    for pos, (nome, pontos) in enumerate(bad, start=1):
+        mensagem += f"{pos}. **{nome}** - {pontos} pontos\n"
+
+    await ctx.send(mensagem)
+    logging.info(f"Usuário {ctx.author} solicitou ver os 5 piores apostadores.")
 
 @bot.command()
 async def time(ctx, *, nome_time: str):
     if ctx.channel.id != CANAL_COMANDOS:
         return await ctx.send("<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.")
+
     logging.info(f"Alguém ({ctx.author}) tentou usar o comando time em um canal diferente ({ctx.channel.id}).")
-    if nome_time is None:
+
+    if not nome_time:
         return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas você precisa informar o nome do time")
-    
 
     nome = nome_time.lower().strip()
     if nome not in MAPEAMENTO_TIMES:
         return await ctx.send("<:3894307:1443956354698969149> Desculpa, mas eu não reconheço esse time")
 
     time_normalizado = MAPEAMENTO_TIMES[nome]
-
-    # Nome do cargo bonito (primeira letra maiúscula)
     cargo_nome = time_normalizado.title()
 
-    #------Banco------
+    #------ Banco ------
     conn = conectar_futebol()
     cursor = conn.cursor()
+
+    # Verificar se o usuário já tem um time registrado
+    cursor.execute("SELECT time_normalizado FROM times_usuarios WHERE user_id = %s", (ctx.author.id,))
+    resultado = cursor.fetchone()
+
+    if resultado:
+        cursor.close()
+        conn.close()
+        return await ctx.send(
+            f"⚽ {ctx.author.mention}, você já escolheu um time (**{resultado[0].title()}**).\n"
+            f"Use `!sair_time` para trocar."
+        )
+
+    # Inserir novo time
     cursor.execute("""
         INSERT INTO times_usuarios (user_id, time_normalizado)
         VALUES (%s, %s)
         ON DUPLICATE KEY UPDATE time_normalizado = VALUES(time_normalizado)
     """, (ctx.author.id, time_normalizado))
+
     conn.commit()
     cursor.close()
     conn.close()
 
+    #------ Cargo ------
     role_id = ROLE_IDS_TIMES.get(time_normalizado)
     cargo = None
+
     if role_id:
         cargo = discord.utils.get(ctx.guild.roles, id=role_id)
+
     if not cargo:
         cargo = discord.utils.get(ctx.guild.roles, name=cargo_nome)
+
     if not cargo:
         cargo = await ctx.guild.create_role(name=cargo_nome)
 
     await ctx.author.add_roles(cargo)
-    
+
     logging.info(f"Usuário {ctx.author} se registrou como torcedor do time {cargo_nome} (ID: {cargo.id}).")
 
+    await ctx.send(
+        f"<a:995589misathumb:1443956356846719119> {ctx.author.mention}, agora você está registrado como torcedor do **{cargo_nome}**!"
+    )
 
-    await ctx.send(f"<a:995589misathumb:1443956356846719119> {ctx.author.mention}, agora você está registrado como torcedor do **{cargo_nome}**!")
 
+@bot.command()
+async def sair_time(ctx):
+    if ctx.channel.id != CANAL_COMANDOS:
+        return await ctx.send("<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.")
+
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT time_normalizado FROM times_usuarios WHERE user_id = %s", (ctx.author.id,))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        cursor.close()
+        conn.close()
+        return await ctx.send(f"❌ {ctx.author.mention}, você não possui um time registrado.")
+
+    time_normalizado = resultado[0]
+    cargo_nome = time_normalizado.title()
+
+    # Remover cargo
+    cargo = discord.utils.get(ctx.guild.roles, name=cargo_nome)
+    if cargo in ctx.author.roles:
+        await ctx.author.remove_roles(cargo)
+
+    # Remover do banco
+    cursor.execute("DELETE FROM times_usuarios WHERE user_id = %s", (ctx.author.id,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    await ctx.send(f"✅ {ctx.author.mention}, você saiu do time **{cargo_nome}**!")
 
 
 @bot.command()
@@ -3698,7 +4366,7 @@ async def admin(ctx):
 
 
 
-bot.run(TOKEN)
+
 async def enviar_alerta(moderador_id: int, total: int):
     try:
         admins = [428006047630884864, 614476239683584004]
@@ -3719,3 +4387,261 @@ async def enviar_alerta(moderador_id: int, total: int):
         logging.info(f"Contador de denúncias zerado para moderador {moderador_id}")
     except Exception as e:
         logging.error(f"Erro ao enviar alerta/zerar contador: {e}")
+
+
+# ============================================================
+#                    SISTEMA DE DOAÇÕES
+# ============================================================
+
+# Helpers para salvar/ler a mensagem de doação (persistência simples em arquivo JSON)
+def salvar_mensagem_doacao(message_id, channel_id):
+    try:
+        with open("doacao.json", "w", encoding="utf-8") as f:
+            json.dump({"message_id": int(message_id), "channel_id": int(channel_id)}, f)
+    except Exception as e:
+        logging.error(f"Erro ao salvar mensagem de doação: {e}")
+
+
+def get_mensagem_doacao():
+    try:
+        with open("doacao.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("message_id")
+    except Exception:
+        return None
+
+
+MEU_ID = 428006047630884864
+
+# Mapeamento dos Emojis para Valores
+EMOJIS_VALORES = {
+    "5️⃣": 5,
+    "🔟": 10,
+    "💶": 50
+}
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def doacao(ctx):
+    embed = discord.Embed(
+        title="💸✨ | Sistema Oficial de Doações",
+        description=(
+            "**Apoie o servidor e ajude no crescimento dos nossos projetos!**\n"
+            "Seu apoio mantém tudo funcionando, financia melhorias e permite que novas ideias virem realidade.\n\n"
+            "👇 **Escolha abaixo um valor para contribuir** 👇"
+        ),
+        color=discord.Color.green()
+    )
+
+    # Imagem de destaque
+    embed.set_image(
+        url="https://cdn.discordapp.com/attachments/1254450666873688084/1448883575096082472/Inserir_um_titulo.png"
+    )
+
+    # Campo dos valores
+    embed.add_field(
+        name="💰 Opções de Doação",
+        value=(
+            "5️⃣ **R$ 5,00** – Apoio básico\n"
+            "🔟 **R$ 10,00** – Você ajuda muito!\n"
+            "💶 **R$ 50,00** – Apoio máximo! ❤️"
+        ),
+        inline=False
+    )
+
+    # Campo extra para deixar maior e mais estiloso
+    embed.add_field(
+        name="🛠️ Para onde vai sua doação?",
+        value=(
+            "• Manutenção dos bots\n"
+            "• Hospedagem e servidores\n"
+            "• Novas funcionalidades\n"
+            "• Suporte aos projetos do servidor\n"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎁 Benefícios ao doar",
+        value=(
+            "• Recebe cargo especial de Apoiador\n"
+            "• Prioridade em sugestões\n"
+            "• Acesso antecipado a novidades\n"
+            "• Ajudar o criador e manter tudo ativo 😎"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="Clique na reação abaixo para prosseguir com a doação.")
+
+    # Enviando a embed
+    mensagem = await ctx.send(embed=embed)
+
+    # Reações
+    for emoji in EMOJIS_VALORES.keys():
+        await mensagem.add_reaction(emoji)
+
+    salvar_mensagem_doacao(mensagem.id, ctx.channel.id)
+
+    await ctx.send("💸 Sistema de doação configurado com sucesso!", delete_after=5)
+
+@commands.has_permissions(administrator=True)
+@bot.command()
+async def entregar(ctx, membro: discord.Member, valor:int):
+    if ctx.author.id != MEU_ID:
+        return await ctx.send("❌ Você não tem permissão para usar este comando.")
+    logging.info(f"Alguém ({ctx.author}) tentou usar o comando entregar sem permissão.")
+    tabela_conversao = {
+        5: 30,
+        10: 70,
+        50: 30000
+    }
+    if valor not in tabela_conversao:
+        return await ctx.send("❌ Valor inválido. Use 5, 10 ou 50.")
+    pontos = tabela_conversao[valor]
+    try:
+        adicionar_pontos_db(membro.id, pontos)
+        cargo_doacao = discord.utils.get(ctx.guild.roles, name="Apoiador Dev")
+        status_cargo = ""
+        if cargo_doacao not in membro.roles:
+            await membro.add_roles(cargo_doacao)
+            status_cargo = f"\n✅ Cargo **{cargo_doacao.name}** adicionado!"
+        else:
+            status_cargo = f"\nℹ️ Você já possui o cargo **{cargo_doacao.name}**."
+        
+        await ctx.send(f"<a:995589misathumb:1443956356846719119> {membro.mention} recebeu {pontos} pontos por doar R$ {valor},00!")
+        logging.info(f"{membro} recebeu {pontos} pontos por doar R$ {valor},00.")
+        embed=  discord.Embed(
+            title="🙏 Obrigado pela Doação!",
+            description=f"Você recebeu **{pontos} pontos** por doar R$ {valor},00 ao servidor!",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="Usuário", value=membro.mention, inline=True)
+        
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ Erro ao entregar pontos: {e}")
+        logging.error(f"Erro ao entregar pontos para {membro}: {e}")
+
+    
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ============================================================
+#                  COMANDO DE CONQUISTAS
+# ============================================================
+
+@bot.command()
+async def conquistas(ctx, membro: discord.Member = None):
+    alvo = membro or ctx.author
+    user_id = alvo.id
+    
+    try:
+        # Busca mensagens da semana atual
+        con_vips = conectar_vips()
+        cur_vips = con_vips.cursor(dictionary=True)
+        semana_atual = datetime.now(timezone.utc).isocalendar()[1]
+        
+        cur_vips.execute(
+            "SELECT mensagens FROM atividade WHERE user_id = %s AND semana = %s",
+            (user_id, semana_atual)
+        )
+        resultado_msg = cur_vips.fetchone()
+        mensagens_semana = resultado_msg["mensagens"] if resultado_msg else 0
+        
+        # Busca acertos consecutivos
+        con_fut = conectar_futebol()
+        cur_fut = con_fut.cursor(dictionary=True)
+        
+        cur_fut.execute(
+            "SELECT acertos_consecutivos FROM apostas WHERE user_id = %s ORDER BY id DESC LIMIT 1",
+            (user_id,)
+        )
+        resultado_acertos = cur_fut.fetchone()
+        acertos_consecutivos = resultado_acertos["acertos_consecutivos"] if resultado_acertos else 0
+        
+        # Busca se fez doação (verificar se tem VIP ativo, pois indica que pagou algo)
+        # Alternativa: criar tabela específica de doacoes se necessário
+        # Por enquanto, considerar qualquer um com VIP como apoiador
+        cur_fut.execute(
+            "SELECT pontos FROM pontuacoes WHERE user_id = %s",
+            (user_id,)
+        )
+        resultado_pontos = cur_fut.fetchone()
+        # TODO: Implementar sistema de doações próprio
+        fez_doacao = tem_vip  # Temporariamente, considerar VIP como apoiador
+        
+        # Verifica VIP
+        cur_vips.execute(
+            "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
+            (user_id,)
+        )
+        resultado_vip = cur_vips.fetchone()
+        tem_vip = resultado_vip is not None
+        
+        cur_vips.close()
+        con_vips.close()
+        cur_fut.close()
+        con_fut.close()
+        
+        # Processa conquistas + entrega de cargos automática
+        desbloqueadas, bloqueadas = await processar_conquistas(
+            alvo,
+            mensagens_semana,
+            acertos_consecutivos,
+            fez_doacao,
+            tem_vip
+        )
+        
+        # Cria embed
+        embed = discord.Embed(
+            title=f"🏆 Conquistas de {alvo.display_name}",
+            color=discord.Color.gold()
+        )
+        
+        embed.add_field(
+            name="✅ Conquistas Desbloqueadas",
+            value="\n".join(desbloqueadas) if desbloqueadas else "Nenhuma ainda...",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔒 Conquistas Bloqueadas",
+            value="\n".join(bloqueadas) if bloqueadas else "Você desbloqueou tudo!",
+            inline=False
+        )
+        
+        embed.set_footer(text="Veja em conquistas.")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        logging.error(f"Erro ao buscar conquistas de {alvo}: {e}")
+        await ctx.send(f"❌ Erro ao buscar conquistas: {e}")
+
+
+bot.run(TOKEN)
