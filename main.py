@@ -134,48 +134,54 @@ CONQUISTAS = {
     "conversador_nato": {
         "nome": "🗣️ Conversador Nato",
         "descricao": "Envie 2000 mensagens na semana.",
-        "condicao": lambda msgs, acertos, doacao, vip: msgs >= 2000,
+        "condicao": lambda msgs, acertos, doacao, vip, call_time: msgs >= 2000,
         "cargo": "Conversador Nato"
     },
     "mente_calculada": {
         "nome": "🧠 Mente Calculada",
         "descricao": "Acerte 3 apostas consecutivas.",
-        "condicao": lambda msgs, acertos, doacao, vip: acertos >= 3,
+        "condicao": lambda msgs, acertos, doacao, vip, call_time: acertos >= 3,
         "cargo": "Mente Calculada"
     },
     "oraculo": {
         "nome": "🔮 O Oráculo",
         "descricao": "Acerte 5 apostas consecutivas.",
-        "condicao": lambda msgs, acertos, doacao, vip: acertos >= 5,
+        "condicao": lambda msgs, acertos, doacao, vip, call_time: acertos >= 5,
         "cargo": "O Oráculo"
     },
     "lenda_apostas": {
         "nome": "🏆 Lenda das Apostas",
         "descricao": "Acerte 10 apostas consecutivas.",
-        "condicao": lambda msgs, acertos, doacao, vip: acertos >= 10,
+        "condicao": lambda msgs, acertos, doacao, vip, call_time: acertos >= 10,
         "cargo": "Lenda das Apostas"
     },
     "apoiador": {
         "nome": "💸 Apoiador",
         "descricao": "Faça uma doação.",
-        "condicao": lambda msgs, acertos, doacao, vip: doacao,
+        "condicao": lambda msgs, acertos, doacao, vip, call_time: doacao,
         "cargo": "TAKE MY MONEY"
     },
     "coroado": {
         "nome": "👑 Coroado",
         "descricao": "Ganhe VIP.",
-        "condicao": lambda msgs, acertos, doacao, vip: vip,
+        "condicao": lambda msgs, acertos, doacao, vip, call_time: vip,
         "cargo": "Coroado"
+    },
+    "conversador_em_call": {
+        "nome": "📞 Conversador em Call",
+        "descricao": "Fique 50 horas em call de voz (acumulado).",
+        "condicao": lambda msgs, acertos, doacao, vip, call_time: call_time >= 180000,
+        "cargo": "Conversador em Call"
     }
 }
 
 
-async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip):
+async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip, tempo_em_call=0):
     desbloqueadas = []
     bloqueadas = []
 
     for key, conquista in CONQUISTAS.items():
-        condicao_ok = conquista["condicao"](mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip)
+        condicao_ok = conquista["condicao"](mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip, tempo_em_call)
         
         texto = f"{conquista['nome']} — {conquista['descricao']}"
 
@@ -709,8 +715,8 @@ async def vip_mensagem(ctx):
             "<:jinxedsignal:1387222975161434246> Amizades verdadeiras\n"
             "<:jinxedsignal:1387222975161434246> Jesus vai te amar\n"
             "<:jinxedsignal:1387222975161434246> Vai estar me ajudando\n"
-            "<:jinxedsignal:1387222975161434246> Novos benefícios futuramente! <:JinxKissu:1408843869784772749>\n\n"
-            "<a:heart_glitch:1408844002647740437> Clique em <:discotoolsxyzicon_6:1444750406763679764> abaixo para solicitar o VIP.\n"
+            "<:jinxedsignal:1387222975161434246> Use o bot de música em qualquer canal com **!tocar** <url> <:JinxKissu:1408843869784772749>\n\n"
+            "<a:thekings:1449048326937772147> Clique em <:discotoolsxyzicon_6:1444750406763679764> abaixo para solicitar o VIP.\n"
             "<:notification:1390647107316355165> Após o clique, um administrador será notificado para continuar o processo.\n"
             "_Acesso válido por 30 dias._ 🗓️"
         ),
@@ -1124,19 +1130,44 @@ BOT_REACTION = [
 "Me mencionar não te deixa mais interessante.",
 "Eu tenho limites… você não deveria testá-los."
 ]
+CANAL_SEJA_VIP = 1381380248511447040
 ID_CARGO_MUTE = 1445066766144376934
 @bot.event
 async def on_message(message):
     global ultimo_reagir
 
     # Ignorar bots
+
     
-    if message.author.id == BOT_MUSICA_PROIBIDO:
-        if message.channel.id not in CANAIS_MUSICAS_LIBERADO:
+    # ============================
+    #  VERIFICAÇÃO BOT DE MÚSICA
+    # ============================
+    if message.content.startswith(("m!play", "m!p")): 
+        # Verifica se o usuário é VIP
+        try:
+            conn_vip = conectar_vips()
+            c_vip = conn_vip.cursor()
+            c_vip.execute(
+                "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
+                (message.author.id,)
+            )
+            resultado_vip = c_vip.fetchone()
+            tem_vip = resultado_vip is not None
+            c_vip.close()
+            conn_vip.close()
+        except:
+            tem_vip = False
+
+        # Se não é VIP e está em canal não autorizado
+        if not tem_vip and message.channel.id not in CANAIS_MUSICAS_LIBERADO:
             try:
                 await message.delete()
-                await message.channel.send(f"{message.author.mention} você não tem vip para poder colocar o bot de música em qualquer lugar!")
-                logging.info(f"Tentativa de colocar o bot de música em {message.channel.mention} por {message.author.mention}")
+                await message.channel.send(
+                    f"{message.author.mention} você não tem VIP para usar o bot de música em qualquer lugar! "
+                    f"Use apenas nos canais de música ou adquira VIP em <#{CANAL_SEJA_VIP}>!"
+
+                )
+                logging.info(f"Tentativa de usar m!play em {message.channel.mention} por {message.author.mention} (sem VIP)")
             except:
                 pass
             return
@@ -1384,8 +1415,178 @@ async def on_message(message):
     except:
         pass
 
+# ============================================================
+#           FUNÇÕES PARA RASTREAMENTO DE TEMPO EM CALL
+# ============================================================
+
+def registrar_entrada_call(user_id: int, guild_id: int, channel_id: int):
+    """Registra a entrada de um usuário em uma call."""
+    try:
+        conn = conectar_vips()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO user_voice_status (user_id, guild_id, channel_id, entry_time) VALUES (%s, %s, %s, %s)",
+            (user_id, guild_id, channel_id, datetime.now())
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logging.info(f"Entrada registrada: user_id={user_id}, guild_id={guild_id}, channel_id={channel_id}")
+    except Exception as e:
+        logging.error(f"Erro ao registrar entrada em call: {e}")
+
+def registrar_saida_call(user_id: int, guild_id: int) -> int:
+    """
+    Registra a saída de um usuário de uma call e retorna o tempo em segundos.
+    """
+    try:
+        conn = conectar_vips()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Buscar o tempo de entrada mais recente
+        cursor.execute(
+            "SELECT entry_time FROM user_voice_status WHERE user_id = %s AND guild_id = %s ORDER BY entry_time DESC LIMIT 1",
+            (user_id, guild_id)
+        )
+        resultado = cursor.fetchone()
+        
+        if resultado:
+            entry_time = resultado['entry_time']
+            exit_time = datetime.now()
+            tempo_em_call_segundos = int((exit_time - entry_time).total_seconds())
+            
+            # Deletar o registro de entrada
+            cursor.execute(
+                "DELETE FROM user_voice_status WHERE user_id = %s AND guild_id = %s AND entry_time = %s",
+                (user_id, guild_id, entry_time)
+            )
+            conn.commit()
+            
+            logging.info(f"Saída registrada: user_id={user_id}, tempo={tempo_em_call_segundos}s")
+            cursor.close()
+            conn.close()
+            return tempo_em_call_segundos
+        else:
+            cursor.close()
+            conn.close()
+            return 0
+    except Exception as e:
+        logging.error(f"Erro ao registrar saída de call: {e}")
+        return 0
+
+def calcular_tempo_total_em_call(user_id: int, guild_id: int) -> int:
+    """
+    Calcula o tempo total acumulado de um usuário em calls (em segundos).
+    Leva em conta entradas ativas (ainda não terminadas) e histórico de saídas.
+    """
+    try:
+        conn = conectar_vips()
+        cursor = conn.cursor(dictionary=True)
+        
+        tempo_total = 0
+        
+        # Buscar entradas ativas (ainda não terminadas)
+        cursor.execute(
+            "SELECT entry_time FROM user_voice_status WHERE user_id = %s AND guild_id = %s",
+            (user_id, guild_id)
+        )
+        resultados_ativos = cursor.fetchall()
+        
+        agora = datetime.now()
+        for entrada in resultados_ativos:
+            entry_time = entrada['entry_time']
+            tempo_nessa_sessao = int((agora - entry_time).total_seconds())
+            tempo_total += tempo_nessa_sessao
+        
+        cursor.close()
+        conn.close()
+        
+        return tempo_total
+    except Exception as e:
+        logging.error(f"Erro ao calcular tempo total em call: {e}")
+        return 0
+
 @bot.event
 async def on_voice_state_update(member, before, after):
+    # ===== RASTREAMENTO DE TEMPO EM CALL =====
+    if member.bot:
+        return
+    
+    guild_id = member.guild.id
+    user_id = member.id
+    
+    # Verificar se entrou em um canal de voz
+    if before.channel is None and after.channel is not None:
+        # Usuário entrou em uma call
+        registrar_entrada_call(user_id, guild_id, after.channel.id)
+    
+    # Verificar se saiu de um canal de voz
+    elif before.channel is not None and after.channel is None:
+        # Usuário saiu de uma call
+        tempo_sessao = registrar_saida_call(user_id, guild_id)
+        
+        # Calcular tempo total em call
+        tempo_total = calcular_tempo_total_em_call(user_id, guild_id)
+        
+        # Se atingiu 50 horas (180000 segundos), desbloquear conquista
+        if tempo_total >= 180000:  # 50 horas = 180000 segundos
+            try:
+                # Obter informações para processar conquistas
+                conn_vips = conectar_vips()
+                cur_vips = conn_vips.cursor(dictionary=True)
+                semana_atual = datetime.now(timezone.utc).isocalendar()[1]
+                
+                cur_vips.execute(
+                    "SELECT mensagens FROM atividade WHERE user_id = %s AND semana = %s",
+                    (user_id, semana_atual)
+                )
+                resultado_msg = cur_vips.fetchone()
+                mensagens_semana = resultado_msg["mensagens"] if resultado_msg else 0
+                
+                conn_fut = conectar_futebol()
+                cur_fut = conn_fut.cursor(dictionary=True)
+                
+                cur_fut.execute(
+                    "SELECT acertos_consecutivos FROM apostas WHERE user_id = %s ORDER BY id DESC LIMIT 1",
+                    (user_id,)
+                )
+                resultado_acertos = cur_fut.fetchone()
+                acertos_consecutivos = resultado_acertos["acertos_consecutivos"] if resultado_acertos else 0
+                
+                cur_fut.execute(
+                    "SELECT id FROM loja_pontos WHERE user_id = %s AND item = 'doacao_50' AND ativo = 1",
+                    (user_id,)
+                )
+                resultado_doacao50 = cur_fut.fetchone()
+                fez_doacao = resultado_doacao50 is not None
+                
+                cur_vips.execute(
+                    "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
+                    (user_id,)
+                )
+                resultado_vip = cur_vips.fetchone()
+                tem_vip = resultado_vip is not None
+                
+                cur_vips.close()
+                conn_vips.close()
+                cur_fut.close()
+                conn_fut.close()
+                
+                # Processar conquistas com o tempo em call
+                await processar_conquistas(
+                    member,
+                    mensagens_semana,
+                    acertos_consecutivos,
+                    fez_doacao,
+                    tem_vip,
+                    tempo_total
+                )
+                
+                logging.info(f"Conquistas processadas para {member.name} (tempo em call: {tempo_total}s)")
+            except Exception as e:
+                logging.error(f"Erro ao processar conquistas após saída de call: {e}")
+    
+    # ===== RESTRIÇÃO DO BOT DE MÚSICA =====
     if member and member.id == BOT_MUSICA_PROIBIDO:
         if after and after.channel:
             canal_id = after.channel.id
@@ -1447,6 +1648,7 @@ async def enviar_top_ativos_semanal_once(semana_atual, canal):
 
 jogando = {}
 ultimo_envio = {}  
+
 
 @bot.event
 async def on_presence_update(before, after):
@@ -1599,7 +1801,7 @@ async def vip_list(ctx):
         #----------------------------Anime--------------------------
 
 # Configurações
-CANAL_EVENTO_ID = 1380564680552091789
+CANAL_EVENTO_ID = 1380564680552091789 
 FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 
 # Lista de Personagens (Mantendo sua estrutura)
@@ -1647,6 +1849,15 @@ batalha_info = {
 }
 CARGO_ANIME = "<@&1448805535573872751>"
 
+GIFS_ANIME = [
+    "https://tenor.com/view/anime-one-punch-man-fight-bang-garou-gif-16359839",
+    "https://tenor.com/view/sasuke-orochimaru-naruto-og-naruto-anime-fight-gif-25013743",
+    "https://tenor.com/view/goku-cell-dbz-dragon-ball-z-perfect-cell-gif-26574911",
+    "https://tenor.com/view/goku-cell-dbz-dragon-ball-z-perfect-cell-gif-26574911",
+    "https://tenor.com/view/anime-battle-arena-aba-gif-21526070",
+    "https://tenor.com/view/itadori-yuji-kokusen-jujutsu-kaisen-anime-hanami-fight-gif-20544438",
+    "https://tenor.com/view/sasuke-naruto-susanoo-shippenden-naruto-sasuke-fight-gif-22099394"
+]
 
 @tasks.loop(minutes=1)
 async def check_evento_anime():
@@ -1689,7 +1900,8 @@ async def iniciar_batalha_auto():
             ),
             color=discord.Color.red()
         )
-        embed.set_image(url="https://media1.tenor.com/m/XwH8-bK9i8kAAAAC/anime-fight.gif")
+        gifs_batalha = random.choice(GIFS_ANIME)
+        embed.set_image(url=gifs_batalha)
         msg = await canal.send(embed=embed)
         
         # Adiciona as reações automaticamente
@@ -1859,7 +2071,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
 
     # Criar a mensagem de resultado
     mensagem_vitoria = (
-        f"🎉 **{vencedor['nome'].upper()} VENCEU!** 🎉\n\n"
+        f"<a:270795discodance:1419694558945476760> **{vencedor['nome'].upper()} VENCEU!** 🎉\n\n"
         f"🏆 **Vencedor:** {vencedor['emoji']} **{vencedor['nome']}**\n"
         f"💀 **Perdedor:** {perdedor['emoji']} {perdedor['nome']}\n\n"
         f"👥 **Total de Ganhadores:** {len(ganhadores_ids)} pessoas\n"
@@ -1872,16 +2084,19 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
     
     # Criar embed para detalhes adicionais
     embed_res = discord.Embed(
-        title=f"🏁 RESULTADO FINAL - {vencedor['nome']} VENCEU!",
+        title="🏁 RESULTADO FINAL",
         description=(
-            f"O duelo épico chegou ao fim!\n\n"
-            f"✨ **{vencedor['nome']}** mostrou toda sua força e venceu a batalha!\n"
-            f"💪 **Força do Vencedor:** {vencedor['forca']}/100\n"
-            f"🎲 **Chance de Vitória:** {chance_percent}%\n\n"
-            f"Parabéns a todos que apostaram no vencedor! 🎊"
+            f"⚔️ **O duelo chegou ao fim!**\n\n"
+            f"👑 **VENCEDOR:** **{vencedor['nome']}**\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"💪 **Força:** `{vencedor['forca']}/100`\n"
+            f"🎲 **Chance de Vitória:** `{chance_percent}%`\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔥 {vencedor['nome']} dominou a batalha e saiu **VITORIOSO**!\n\n"
+            f"🎊 Parabéns a todos que apostaram no campeão!"
         ),
-        color=discord.Color.gold()
-    )
+    color=discord.Color.gold()
+)
     
     await canal.send(embed=embed_res)
     
@@ -2172,14 +2387,9 @@ async def ticket (ctx):
     c.close()
     conn.close()
 
-
-    
-
-
-
-
-
-
+#============================================================
+#-----------------------Comando Música-----------------------
+#============================================================
 
 @bot.command()
 async def tocar(ctx, url):
@@ -2189,7 +2399,7 @@ async def tocar(ctx, url):
     if not (ctx.author.guild_permissions.administrator or 
             (cargo_vip in ctx.author.roles) or 
             (cargo_booster in ctx.author.roles)):
-        await ctx.send("❌ Você não tem permissão para usar este comando.")
+        await ctx.send(f"<:sadness:1449576532090683432> Você não possui vip para poder tocar a música.. Saiba mais em <#{CANAL_SEJA_VIP}>")
         return
 
     # Verifica se o usuário está em um canal de voz
@@ -2798,7 +3008,7 @@ def adicionar_pontos_db(user_id: int, pontos: int, nome_discord: str = None):
             (user_id, nome_discord, pontos)
         )
         con.commit()
-        logging.info(f"✅ Pontos adicionados: user_id={user_id}, pontos={pontos}")
+        logging.info(f"✅ Pontos atualizados: user_id={user_id}, pontos={pontos}")
     except Exception as e:
         logging.error(f"❌ Erro ao adicionar pontos: {e}")
     finally:
@@ -3110,7 +3320,118 @@ PALAVRAS_GOL = {
     "tunisia":    "🇹🇳 GOOOOOOOL DA TUNÍSIA!!!"
 }
 
+GIFS_VITORIA = {
+    # =======================
+    # 🇧🇷 CLUBES BRASILEIROS 2025
+    # =======================
+    "atlético mineiro": "https://tenor.com/view/galo-maior-de-minas-atletico-mg-torcida-torcida-atletico-mg-gif-14052109660678177266",  # galo
+    "athletico paranaense": "https://tenor.com/view/cuello-athletico-athletico-paranaense-furac%C3%A3o-libertadores-gif-27471283",
+    "bahia": "https://tenor.com/view/bahia-bahea-estadio-arena-fonte-nova-torcida-gif-17380352373142877404",
+    "botafogo": "https://tenor.com/view/mundial-de-clubes-brasil-hexa-hexa-brasil-textor-john-textor-gif-538715909373386053",
+    "corinthians": "https://tenor.com/view/fiel-torcida-fiel-coring%C3%A3o-tim%C3%A3o-sccp-gif-15118503192858110787",
+    "coritiba": "https://tenor.com/view/coritiba-coxa-couto-pereira-imperio-torcida-gif-17275403",
+    "cruzeiro": "https://tenor.com/view/raposinho-cruzeiro-raposa-mascote-futebol-gif-7933667981563591605",
+    "cuiabá": "https://tenor.com/view/coritiba-coxa-couto-pereira-imperio-torcida-gif-17275403",
+    "flamengo": "https://tenor.com/view/flamengo-gif-16658643107116512709",
+    "fluminense": "https://tenor.com/view/fluminense-fc-fluminense-gif-10320050767890049196",
+    "fortaleza": "",
+    "goiás": "https://tenor.com/view/torcida-fjg-for%C3%A7a-jovem-goi%C3%A1s-gif-1316517536206430915",
+    "internacional": "https://tenor.com/view/inter-porto-alegre-gif-20185773",
+    "juventude": "",
+    "palmeiras": "https://tenor.com/view/palmeiras-gif-23081966",
+    "santos": "https://tenor.com/view/baleinha-baleiao-mascote-santos-balei%C3%A3o-santos-gif-15750222744612259501",
+    "são paulo": "https://tenor.com/view/s%C3%A3o-paulo-spfc-s%C3%A3o-paulo-fc-gabinevespfc-gif-9429201397661982240",
+    "sport": "",
+    "vasco": "https://tenor.com/view/gigas0-vasc%C3%A3o-vasco-gif-17496526468882394694",
+    "vitoria": "https://tenor.com/view/esporte-clube-vit%C3%B3ria-vit%C3%B3ria-vitoria-gif-4427655074772874931",
+    
+    # Chave genérica para times sem gif específico
+    "default": "https://media.tenor.com/P5WfN5uTi44AAAAC/soccer-goal.gif"
+}
 
+FALAS_BOT = {
+    "atlético mineiro": [
+        "AQUUUUUUUUUUUUUUUUUUUI É GALO P#RRAAAAAAAAAAAAAAAAAAAAAAAAAA!!!! 🐓🔥🔥",
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL DO GALO!!!!! ⚡⚡⚡",
+        "É GALO, É GAAAAAAAAAAALO, É MAIOR DE MINAS!!!! 🏆🏆🏆",
+        "VITÓRIAAAAA DO GALO CARAAAAAALHO!!! 🔥🔥🔥",
+        "GAAAAAAAAAAAAAAAAAAAAAALOOOOOOOOOO! TORCIDA EM ÊXTASE!!! 🙌🙌🙌"
+    ],
+    "flamengo": [
+        "DALE DALE MENGOOOOOOOOOOOOOOOOOOO!!!! 🔥🔥🔥",
+        "GOL DO MENGO CARAAAAAAALHO!!! ⚡⚡⚡",
+        "FLAMENGOOOOOOOO DOMINANDO TUDOOOOOOOOO!!!! 🏆🏆🏆",
+        "VITÓRIAAAAA DO MENGO CARAAAAALHO!!!! 🔥🔥🔥",
+        "VAMOOOOO FLAMENGOOOOOO!!!! 🙌🙌🙌"
+    ],
+    "corinthians": [
+        "É GOL DO TIMÃÃÃÃÃO CARAAAAALHO!!!! 🔥🔥🔥",
+        "TIMÃÃÃÃÃÃO DOMINANDO TUDO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DO TIMÃÃO!!! 🏆🏆🏆",
+        "FIELZAAAAAAAAA, QUE PARTIDA!!!! 🔥🔥🔥",
+        "TIMÃÃÃÃÃO!!! COMEMORAÇÃO GARANTIDA!!! 🙌🙌🙌"
+    ],
+    "palmeiras": [
+        "É GOL DO VERDÃOOOOOOO CARAAAAALHO!!!! 🔥🔥🔥",
+        "PALMEIRAS DOMINANDO TUDOOOOOOOOO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DO VERDÃO!!! 🏆🏆🏆",
+        "QUE JOGADA DO PALMEIRAAAAAAS! 🔥🔥🔥",
+        "PALMEIRAAAAAAAAAA! COMEMORAÇÃO TOTAL!!!! 🙌🙌🙌"
+    ],
+    "são paulo": [
+        "É GOL DO TRICOLOR CARAAAAALHO!!!! 🔥🔥🔥",
+        "SÃO PAULO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DO TRICOLOR!!! 🏆🏆🏆",
+        "QUE JOGADA DO SÃO PAULO!!! 🔥🔥🔥",
+        "TRICOLOR!!! COMEMORAÇÃO GARANTIDA!!!! 🙌🙌🙌"
+    ],
+    "fluminense": [
+        "É GOL DO FLUUUUUUUUUUUUUUUU!!! 🔥🔥🔥",
+        "FLUMINENSE DOMINANDO TUDOOOOO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DO FLU!!! 🏆🏆🏆",
+        "QUE JOGADA DO FLUMINENSEEEE!!! 🔥🔥🔥",
+        "FLUUUUUUUU! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+    ],
+    "cruzeiro": [
+        "É GOL DA RAPOSAAAAAA!!! 🔥🔥🔥",
+        "CRUZEIRO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DA RAPOSA!!! 🏆🏆🏆",
+        "QUE JOGADA DO CRUZEIROOO!!! 🔥🔥🔥",
+        "RAPOSAAAAAA!!! COMEMORAÇÃO GARANTIDA!!! 🙌🙌🙌"
+    ],
+    "internacional": [
+        "É GOL DO INTER CARAAAAALHO!!! 🔥🔥🔥",
+        "COLORADOOOOOO DOMINANDO TUDO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DO INTER!!! 🏆🏆🏆",
+        "QUE JOGADA DO INTER!!! 🔥🔥🔥",
+        "INTER!!! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+    ],
+    "botafogo": [
+        "É GOL DO FOGÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃO!!!! 🔥🔥🔥",
+        "FOGÃO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DO BOTAFOGO!!! 🏆🏆🏆",
+        "QUE JOGADA DO FOGÃOOOOOO!!! 🔥🔥🔥",
+        "FOGÃOOOOOO! COMEMORAÇÃO GARANTIDA!!! 🙌🙌🙌"
+    ],
+    "vasco": [
+        "É GOL DO VASCUUUUUUUUUU!!! 🔥🔥🔥",
+        "VASCO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA DO VASCO!!! 🏆🏆🏆",
+        "QUE JOGADA DO VASCOOOOO!!! 🔥🔥🔥",
+        "VASCOOOOOO! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+    ],
+    "são paulo":[
+        "VAMO SÃO PAULOOOOOOOOO",
+        "É ISSO SÃO PAULO PORRA"
+    ],
+    "default": [
+        "É GOL CARAAAAALHO!!!! 🔥🔥🔥",
+        "TIME DOMINANDO!!! ⚡⚡⚡",
+        "VITÓRIAAAAA!!! 🏆🏆🏆",
+        "QUE JOGADA!!! 🔥🔥🔥",
+        "COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+    ]
+}
 
 LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13,]
 
@@ -3462,15 +3783,12 @@ async def verificar_gols():
 
 PRECOS = {
     "jinxed_vip": 1000,
-    "ticket_reaposta": 200,
-    "som_entrada": 300,
-    "cor_personalizada": 250,
-    "badge_perfil": 500,
-    "limite_apostas_extra": 350,
     "caixa_misteriosa": 50,
     "caixinha": 50,
     "segunda_chance": 30,
-    "clown_bet": 60
+    "clown_bet": 60,
+    "emoji_personalizado": 200,
+    "comemoracao":200
 }
 #LOJA DE PONTOS----------------------------------
 
@@ -3643,7 +3961,6 @@ async def loja(ctx):
         inline=False
     )
 
-
     embed.add_field(
         name="<:discotoolsxyzicon_6:1444750406763679764> Jinxed VIP — 1000 pontos",
         value="• Garante 15 dias do cargo VIP\n• Use **jinxed_vip**",
@@ -3653,6 +3970,17 @@ async def loja(ctx):
     embed.add_field(
         name="⏪ Segunda Chance — 30 pontos",
         value="• Recupera a última aposta perdida\n• Uso único\n• Use **segunda_chance**",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎨 Emoji Personalizado — 200 pontos",
+        value="• Compre e registre seu emoji personalizado\n• Use: `!comprar emoji_personalizado`\n• Depois use `!setemoji <emoji>` para registrar",
+        inline=False
+    )
+    embed.add_field(
+        name="🎉 Comemoração de Vitória — 200 pontos",
+        value="• Escolha um time.\n• Se ele vencer o próximo jogo, o bot posta um GIF festejando além de comemorar!\n• Use: `!comprar comemoracao` e depois `!comemorar <time>`",
         inline=False
     )
 
@@ -3748,6 +4076,188 @@ async def comprar(ctx, item_nome: str):
         con.commit()
         con.close()
         await ctx.send("🤡 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
+
+    elif item == "emoji_personalizado":
+        await ctx.send("🎨 Você comprou **Emoji Personalizado** por 200 pontos! Agora registre seu cargo usando: `!setemoji <nome_cargo> <emoji>`\nExemplo: `!setemoji Fúria 🔥`")
+
+    elif item == "comemorar":
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (user_id, item, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        await ctx.send(f"✅ **Compra realizada!** Agora use `!comemorar <nome_do_time>` para agendar a festa no próximo jogo!")
+
+@bot.command()
+async def comemorar(ctx, *, time_nome: str):
+    user_id = ctx.author.id
+    
+    # Normaliza o nome usando seu mapeamento existente
+    chave_time = MAPEAMENTO_TIMES.get(time_nome.lower(), time_nome.lower())
+
+    # Verifica se o usuário comprou o item
+    con = conectar_futebol()
+    cur = con.cursor()
+    cur.execute(
+        "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'comemorar' AND ativo = 1",
+        (user_id,)
+    )
+    comprado = cur.fetchone()[0]
+    if comprado == 0:
+        con.close()
+        return await ctx.send("❌ Você precisa comprar o item **Comemoração** primeiro usando `!comprar comemorar`.")
+
+    # Salva no banco
+    cur.execute(
+        "INSERT INTO comemoracoes (user_id, team_key) VALUES (%s, %s)",
+        (user_id, chave_time)
+    )
+    con.commit()
+    con.close()
+
+    emoji = EMOJI_TIMES.get(chave_time, "⚽")
+    await ctx.send(f"🎉 **Agendado!** Se o **{chave_time.upper()}** {emoji} ganhar o próximo jogo, vou soltar o GIF de vitória em sua homenagem!")
+
+
+@bot.command()
+async def setemoji(ctx):
+    """
+    Comando interativo para criar um cargo personalizado com ícone de imagem.
+    O bot pede: 1) Nome do cargo, 2) Uma imagem (PNG ou JPG)
+    """
+    user_id = ctx.author.id
+
+    # ===== 1️⃣ VERIFICAR COMPRA DO ITEM =====
+    con = conectar_futebol()
+    cur = con.cursor()
+    cur.execute(
+        "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'emoji_personalizado' AND ativo = 1",
+        (user_id,)
+    )
+    comprado = cur.fetchone()[0]
+    if comprado == 0:
+        con.close()
+        return await ctx.send("❌ Você precisa comprar o item **Emoji Personalizado** primeiro usando `!comprar emoji_personalizado`.")
+    
+    con.close()
+
+    # ===== 2️⃣ PEDIR NOME DO CARGO =====
+    await ctx.send("📝 **Digite o nome do cargo personalizado** (máximo 100 caracteres):\n`Exemplo: Fúria, Lenda, Rei dos Games, etc.`")
+    
+    try:
+        msg_nome = await bot.wait_for(
+            "message",
+            check=lambda m: m.author == ctx.author and m.channel == ctx.channel,
+            timeout=60.0
+        )
+    except asyncio.TimeoutError:
+        return await ctx.send("⏱️ Tempo esgotado! Comando cancelado.")
+    
+    nome_cargo = msg_nome.content.strip()
+    
+    # Validar nome
+    if not nome_cargo or len(nome_cargo) > 100:
+        return await ctx.send("❌ O nome do cargo deve ter entre 1 e 100 caracteres.")
+
+    # ===== 3️⃣ PEDIR IMAGEM =====
+    await ctx.send(f"🖼️ **Agora envie uma imagem para usar como ícone do cargo**\n\n"
+                   f"📌 Requisitos:\n"
+                   f"• Formato: PNG ou JPG\n"
+                   f"• Tamanho máximo: 256 KB\n"
+                   f"• Dimensões recomendadas: 256x256px ou maior\n\n"
+                   f"⏰ Você tem 60 segundos para enviar a imagem!")
+    
+    try:
+        msg_imagem = await bot.wait_for(
+            "message",
+            check=lambda m: m.author == ctx.author and m.channel == ctx.channel and len(m.attachments) > 0,
+            timeout=60.0
+        )
+    except asyncio.TimeoutError:
+        return await ctx.send("⏱️ Tempo esgotado! Comando cancelado.")
+    
+    if not msg_imagem.attachments:
+        return await ctx.send("❌ Nenhuma imagem foi enviada. Comando cancelado.")
+    
+    arquivo = msg_imagem.attachments[0]
+    
+    # ===== 4️⃣ VALIDAR IMAGEM =====
+    # Verificar extensão
+    extensoes_permitidas = [".png", ".jpg", ".jpeg"]
+    if not any(arquivo.filename.lower().endswith(ext) for ext in extensoes_permitidas):
+        return await ctx.send(f"❌ Formato de arquivo inválido! Apenas PNG e JPG são aceitos.\nVocê enviou: `{arquivo.filename}`")
+    
+    # Verificar tamanho (Discord permite até 10MB, mas 256KB é mais seguro para role icon)
+    tamanho_max = 256 * 1024  # 256 KB
+    if arquivo.size > tamanho_max:
+        tamanho_kb = arquivo.size / 1024
+        return await ctx.send(f"❌ Arquivo muito grande! Tamanho: {tamanho_kb:.1f} KB (máximo: 256 KB)\n"
+                             f"Dica: Comprima ou redimensione a imagem.")
+    
+    # ===== 5️⃣ DOWNLOAD DA IMAGEM =====
+    try:
+        imagem_bytes = await arquivo.read()
+    except Exception as e:
+        return await ctx.send(f"❌ Erro ao fazer download da imagem: {e}")
+    
+    # ===== 6️⃣ CRIAR CARGO COM ÍCONE =====
+    con = conectar_futebol()
+    cur = con.cursor()
+    
+    try:
+        # Deletar cargo anterior se existir
+        nome_cargo_full = f"{nome_cargo}"
+        cargo_existente = discord.utils.get(ctx.guild.roles, name=nome_cargo_full)
+        if cargo_existente:
+            await cargo_existente.delete()
+            await asyncio.sleep(0.5)
+        
+        # Criar novo cargo com ícone de imagem
+        cargo = await ctx.guild.create_role(
+            name=nome_cargo_full,
+            color=discord.Color.blurple(),
+            display_icon=imagem_bytes,
+            reason=f"Cargo de ícone personalizado para {ctx.author.name}"
+        )
+        
+        # ===== 7️⃣ ADICIONAR CARGO AO USUÁRIO =====
+        await ctx.author.add_roles(cargo)
+        
+        # ===== 8️⃣ SALVAR NO BANCO DE DADOS =====
+        cur.execute(
+            "UPDATE loja_pontos SET nome_cargo = %s, cargo_id = %s, emoji = %s WHERE user_id = %s AND item = 'emoji_personalizado' AND ativo = 1",
+            (nome_cargo, cargo.id, "[imagem]", user_id)
+        )
+        con.commit()
+        
+        # Sucesso!
+        await ctx.send(
+            f"✅ **Cargo criado com sucesso!**\n"
+            f"👤 Nome: **{nome_cargo}**\n"
+            f"🖼️ Ícone: Imagem aplicada\n"
+            f"🎉 O cargo foi adicionado ao seu perfil!\n\n"
+            f"*Seu cargo está visível e exclusivo para você!*"
+        )
+        
+        logging.info(f"Cargo '{nome_cargo}' criado para {ctx.author.name} (ID: {user_id}) com ícone personalizado")
+        
+    except discord.HTTPException as e:
+        con.close()
+        if "10011" in str(e):  # Invalid image
+            return await ctx.send("❌ A imagem enviada está corrompida ou em formato inválido. Tente outra imagem.")
+        else:
+            return await ctx.send(f"❌ Erro ao criar o cargo: {str(e)[:100]}")
+    
+    except Exception as e:
+        con.close()
+        logging.error(f"Erro ao criar cargo: {e}")
+        await ctx.send(f"❌ Erro inesperado: {str(e)[:100]}")
+        return
+    
+    con.close()
 
 def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7):
     conn = conectar_futebol()
@@ -3856,10 +4366,68 @@ async def terminar_jogo(ctx, fixture_id: int = None):
 
             if gols_casa > gols_fora:
                 resultado_final = "home"
+                time_vencedor_nome = casa
             elif gols_fora > gols_casa:
                 resultado_final = "away"
+                time_vencedor_nome = fora
             else:
                 resultado_final = "draw"
+                time_vencedor_nome = None
+
+            # -----------------------------------------------------------
+            # LÓGICA: COMEMORAÇÃO DE VITÓRIA
+            # -----------------------------------------------------------
+            if time_vencedor_nome:  # Só comemora se não for empate
+                # Pega a chave normalizada do vencedor (ex: "galo")
+                chave_vencedor = MAPEAMENTO_TIMES.get(time_vencedor_nome.lower(), time_vencedor_nome.lower())
+                
+                conn_com = conectar_futebol()
+                cur_com = conn_com.cursor()
+                
+                # Busca quem pediu comemoração para esse time
+                cur_com.execute("SELECT id, user_id FROM comemoracoes WHERE team_key = %s", (chave_vencedor,))
+                rows_com = cur_com.fetchall()
+                
+                if rows_com:
+                    # Pega o GIF
+                    gif_url = GIFS_VITORIA.get(chave_vencedor, GIFS_VITORIA.get("default"))
+                    
+                    # Monta lista de menções dos usuários
+                    usuarios_mencoes = []
+                    ids_para_remover = []
+                    
+                    for row in rows_com:
+                        uid = row[0]  # ID do banco (para deletar)
+                        discord_id = row[1]
+                        ids_para_remover.append(uid)
+                        usuarios_mencoes.append(f"<@{discord_id}>")
+                    
+                    texto_mencoes = ", ".join(usuarios_mencoes)
+                    
+                    # Envia a mensagem no canal de jogos
+                    canal_jogos = bot.get_channel(CANAL_JOGOS_ID)
+                    if canal_jogos:
+                        await canal_jogos.send(
+                            f"🎇 **A FESTA COMEÇOU!** Vitória do **{time_vencedor_nome.upper()}**!\n"
+                            f"Comemoração patrocinada por: {texto_mencoes}\n"
+                            f"{gif_url}"
+                        )
+                        
+                        # Envia 2 falas aleatórias do bot
+                        falas_time = FALAS_BOT.get(chave_vencedor, FALAS_BOT.get("default", []))
+                        if falas_time:
+                            falas_sorteadas = random.sample(falas_time, min(2, len(falas_time)))
+                            for fala in falas_sorteadas:
+                                await canal_jogos.send(fala)
+                    
+                    # Remove as comemorações usadas do banco (para não repetir no próximo jogo)
+                    format_strings = ','.join(['%s'] * len(ids_para_remover))
+                    cur_com.execute(f"DELETE FROM comemoracoes WHERE id IN ({format_strings})", tuple(ids_para_remover))
+                    conn_com.commit()
+                    logging.info(f"✅ Comemorações processadas para {chave_vencedor}")
+
+                cur_com.close()
+                conn_com.close()
 
             cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fx,))
             row = cursor.fetchone()
@@ -3930,11 +4498,11 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                     mensagens_pv.append(
                         (
                             user_id,
-                            f"😬 **Que pena... você errou a aposta!**\n"
+                            f"<a:9749heartbreak:1449948111161262293> **Que pena... você errou a aposta!**\n"
                             f"Você perdeu **{pontos_preview} pontos**." + (" Se você tiver Segunda Chance ativa, será reembolsado." ) + "\n\n"
                             f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
-                            f"ℹ️ Veja seus pontos com **!meuspontos**\n"
-                            f"📘 Mais informações: **!info**"
+                            f"<a:6582red:1449949837763154081> Veja seus pontos com **!meuspontos**\n"
+                            f"<a:9612_aMCenchantedbook:1449948971916202125> Mais informações: **!info**"
                         )
                     )
 
@@ -3949,7 +4517,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
             embed_final = discord.Embed(
                 title=f"🏁 Fim de jogo — {casa} x {fora}",
                 description=f"Placar final: {emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
-                color=discord.Color.orange()
+                color=discord.Color.dark_red()
             )
             embed_final.set_footer(text="Obrigado por participar das apostas!")
 
@@ -4018,7 +4586,7 @@ ID_AMORREBA = 428006047630884864
 @bot.command()
 async def resetar_jogo(ctx):
     if ctx.author.id != ID_AMORREBA:
-        await ctx.send("❌ Você não tem permissão para usar este comando.")
+        await ctx.send("Apenas o melhorzin que tá tendo pode usar")
         logging.info(f"Alguém ({ctx.author}) tentou usar o comando resetar_jogo sem permissão.")
         return
     try:
@@ -4098,7 +4666,9 @@ async def info(ctx):
 async def top_apostas(ctx):
     conn = conectar_futebol()
     cursor = conn.cursor()
-    cursor.execute("SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC LIMIT 5")
+    cursor.execute(
+        "SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC LIMIT 5"
+    )
     top = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -4106,12 +4676,29 @@ async def top_apostas(ctx):
     if not top:
         return await ctx.send("⚠️ Nenhum usuário possui pontos.")
 
-    # Formata a mensagem
-    mensagem = "🏆 **Top 5 Usuários com Mais Pontos:**\n"
-    for pos, (nome, pontos) in enumerate(top, start=1):
-        mensagem += f"{pos}. **{nome}** - {pontos} pontos\n"
+    embed = discord.Embed(
+        title="🏆 Top 5 Apostadores",
+        description="Os usuários com mais pontos no sistema de apostas",
+        color=discord.Color.gold()
+    )
 
-    await ctx.send(mensagem)
+    ranking = ""
+    medalhas = ["<a:PoggersRow:1449578774004895857>", "🥈", "🥉", "🏅", "🏅"]
+
+    for i, (nome, pontos) in enumerate(top):
+        ranking += f"{medalhas[i]} **{nome}** — `{pontos} pontos`\n"
+
+    embed.add_field(
+        name="📊 Ranking Atual",
+        value=ranking,
+        inline=False
+    )
+
+    embed.set_footer(
+        text=f"Solicitado por {ctx.author.display_name}"
+    )
+
+    await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou ver os 5 melhores apostadores.")
 
 
@@ -4120,7 +4707,9 @@ CANAL_COMANDOS = 1380564680774385724
 async def bad_apostas(ctx):
     conn = conectar_futebol()
     cursor = conn.cursor()
-    cursor.execute("SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos ASC LIMIT 5")
+    cursor.execute(
+        "SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos ASC LIMIT 5"
+    )
     bad = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -4128,12 +4717,29 @@ async def bad_apostas(ctx):
     if not bad:
         return await ctx.send("⚠️ Nenhum usuário possui pontos.")
 
-    # Formata a mensagem
-    mensagem = "<:imagem_20251118_090924909removeb:1440313019614630030> **Top 5 Usuários com Menos Pontos:**\n"
-    for pos, (nome, pontos) in enumerate(bad, start=1):
-        mensagem += f"{pos}. **{nome}** - {pontos} pontos\n"
+    embed = discord.Embed(
+        title="<:imagem_20251118_090924909removeb:1440313019614630030> Top 5 Piores Apostadores",
+        description="Quando o palpite é emoção e não razão…",
+        color=discord.Color.red()
+    )
 
-    await ctx.send(mensagem)
+    ranking = ""
+    emojis = ["💀", "🥴", "🤡", "😵", "🚑"]
+
+    for i, (nome, pontos) in enumerate(bad):
+        ranking += f"{emojis[i]} **{nome}** — `{pontos} pontos`\n"
+
+    embed.add_field(
+        name="📉 Ranking Atual",
+        value=ranking,
+        inline=False
+    )
+
+    embed.set_footer(
+        text=f"Solicitado por {ctx.author.display_name}"
+    )
+
+    await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou ver os 5 piores apostadores.")
 
 @bot.command()
@@ -4441,7 +5047,8 @@ async def doacao(ctx):
         value=(
             "5️⃣ **R$ 5,00** – Apoio básico\n"
             "🔟 **R$ 10,00** – Você ajuda muito!\n"
-            "💶 **R$ 50,00** – Apoio máximo! ❤️"
+            "💶 **R$ 50,00** – Apoio máximo! ❤️\n"
+            "   • Ao doar R$50, você ganha **30.000 pontos** e a conquista **TAKE MY MONEY** 🏆"
         ),
         inline=False
     )
@@ -4480,14 +5087,14 @@ async def doacao(ctx):
 
     salvar_mensagem_doacao(mensagem.id, ctx.channel.id)
 
-
     await ctx.send("💸 Sistema de doação configurado com sucesso!", delete_after=5)
+
 
 @commands.has_permissions(administrator=True)
 @bot.command()
 async def entregar(ctx, membro: discord.Member, valor:int):
     if ctx.author.id != MEU_ID:
-        return await ctx.send("❌ Você não tem permissão para usar este comando.")
+        return await ctx.send("Apenas o brabo pode usar <:Galo:1425991683690074212>")
     logging.info(f"Alguém ({ctx.author}) tentou usar o comando entregar sem permissão.")
     tabela_conversao = {
         5: 30,
@@ -4545,32 +5152,6 @@ async def entregar(ctx, membro: discord.Member, valor:int):
     except Exception as e:
         await ctx.send(f"❌ Erro ao entregar pontos: {e}")
         logging.error(f"Erro ao entregar pontos para {membro}: {e}")
-
-    
-
-   
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -4631,6 +5212,9 @@ async def conquistas(ctx, membro: discord.Member = None):
         resultado_doacao50 = cur_fut.fetchone()
         fez_doacao = resultado_doacao50 is not None
         
+        # Busca tempo em call
+        tempo_em_call = calcular_tempo_total_em_call(user_id, ctx.guild.id)
+        
         cur_vips.close()
         con_vips.close()
         cur_fut.close()
@@ -4642,8 +5226,13 @@ async def conquistas(ctx, membro: discord.Member = None):
             mensagens_semana,
             acertos_consecutivos,
             fez_doacao,
-            tem_vip
+            tem_vip,
+            tempo_em_call
         )
+        
+        # Converter tempo em call para formato legível
+        horas_call = tempo_em_call // 3600
+        minutos_call = (tempo_em_call % 3600) // 60
         
         # Cria embed
         embed = discord.Embed(
@@ -4652,7 +5241,13 @@ async def conquistas(ctx, membro: discord.Member = None):
         )
         
         embed.add_field(
-            name="✅ Conquistas Desbloqueadas",
+            name="📞 Tempo em Call",
+            value=f"**{horas_call}h {minutos_call}m** | Faltam {180000 - tempo_em_call} segundos para desbloquear",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="<a:thekings:1449048326937772147> Conquistas Desbloqueadas",
             value="\n".join(desbloqueadas) if desbloqueadas else "Nenhuma ainda...",
             inline=False
         )
@@ -4670,6 +5265,52 @@ async def conquistas(ctx, membro: discord.Member = None):
     except Exception as e:
         logging.error(f"Erro ao buscar conquistas de {alvo}: {e}")
         await ctx.send(f"❌ Erro ao buscar conquistas: {e}")
+
+
+@bot.command()
+async def fuck_you(ctx, member: discord.Member = None):
+    # ID autorizado
+    DONO_ID = 428006047630884864  # <-- coloque o SEU ID aqui!
+
+    if ctx.author.id != DONO_ID:
+        return await ctx.send("🚫 Só o goat pode usar.")
+
+    if member is None:
+        return await ctx.send("⚠️ Use: `!power_mode @membro`")
+
+    # Nomes dos cargos
+    cargo_jinxed = discord.utils.get(ctx.guild.roles, name="Jinxed Dev")
+    cargo_moderador = discord.utils.get(ctx.guild.roles, name="Moderador")
+
+    if cargo_jinxed is None:
+        return await ctx.send("❌ Cargo **Jinxed Dev** não encontrado.")
+
+    if cargo_moderador is None:
+        return await ctx.send("❌ Cargo **Moderador** não encontrado.")
+    if cargo_jinxed in ctx.author.roles:
+        return  
+
+    try:
+        # Dar cargo em você
+        await ctx.author.add_roles(cargo_jinxed)
+
+        # Remover Moderador da pessoa mencionada
+        if cargo_moderador in member.roles:
+            await member.remove_roles(cargo_moderador)
+            await ctx.send(f"⚡ **Power Mode ativado!**\n"
+                           f"🔱 Você recebeu **Jinxed Dev**.\n"
+                           f"🗑️ O cargo **Moderador** foi removido de {member.mention}.")
+        else:
+            await ctx.send(f"⚡ **Power Mode ativado!**\n"
+                           f"🔱 Você recebeu **Jinxed Dev**.\n"
+                           f"ℹ️ {member.mention} não tinha o cargo **Moderador**.")
+
+    except discord.Forbidden:
+        await ctx.send("❌ Permissões insuficientes para alterar cargos.")
+    except Exception as e:
+        await ctx.send(f"⚠️ Ocorreu um erro inesperado:\n```{e}```")
+
+
 
 
 bot.run(TOKEN)
