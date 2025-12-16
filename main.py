@@ -1217,6 +1217,7 @@ async def on_message(message):
                     f"{message.author.mention} 🔇 Você recebeu mute automático de **3 horas**."
                 )
                 asyncio.create_task(remover_mute_apos_3h(message.author))
+                logging.info(f"Mutei o usuário{message.author.name} por 3 horas por quebrar a regra!")
     c.close()
     conn.close()
     
@@ -1809,6 +1810,7 @@ PERSONAGENS = [
     {"nome": "Griffith", "emoji": "<:GRIFFITH:1408187671179821128>", "forca": 85},
     {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 86},
     {"nome": "Goku", "emoji": "<a:Goku:1448782376670068766>", "forca": 99},
+    {"nome" : "Cell","emoji": "<a:3549cellthink:1450487722094362817>", "forca": 89},
     {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 88},
     {"nome": "Naruto", "emoji": "<:Narutin:1408189027437379655>", "forca": 90},
     {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 92},
@@ -2034,6 +2036,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
     # --- Dicionário de GIFs de Vitória ---
     GIFS_VITORIA = {
         "Goku":"https://tenor.com/view/dragon-ball-z-goku-super-saiyan-3-ssj3-goku-wrath-of-the-dragon-gif-18038162613052152157",
+        "Cell": "https://tenor.com/view/cell-dragon-ball-dbz-laugh-anime-gif-15917449",
         "Griffith": "https://tenor.com/view/grifith-berserk-anime-smile-fruit-gif-16718903",
         "Guts": "https://tenor.com/view/guts-berserk-berserk-guts-manga-the-black-swordsman-gif-14688097520350447982",
         "Itachi": "https://tenor.com/view/lol-itachi-itachi-uchiha-akatsuki-uchiha-gif-25032746",
@@ -2329,8 +2332,14 @@ async def ticket (ctx):
             )
         except:
             pass
-        sql = "INSERT INTO avisados (user_id, denunciante_id) VALUES (%s, %s) ON DUPLICATE KEY UPDATE denunciante_id=VALUES(denunciante_id)"
-        c.execute(sql, (membro.id, user.id))
+        sql = """
+            INSERT INTO avisados (user_id, nome, denunciante_id) 
+            VALUES (%s, %s, %s) 
+            ON DUPLICATE KEY UPDATE 
+                denunciante_id=VALUES(denunciante_id),
+                nome=VALUES(nome)
+        """
+        c.execute(sql, (membro.id, str(membro), user.id))
         conn.commit()
 
         # evita duplicidade de alerta ativo
