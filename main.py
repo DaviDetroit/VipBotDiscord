@@ -172,21 +172,96 @@ CONQUISTAS = {
         "descricao": "Fique 50 horas em call de voz (acumulado).",
         "condicao": lambda msgs, acertos, doacao, vip, call_time: call_time >= 180000,
         "cargo": "Conversador em Call"
+    },
+    "chamando_ajuda": {
+        "nome": "🤖 Alô Miisha?",
+        "descricao": "Mencione a bot Miisha para pedir ajuda.",
+        # A condição é simples: se 'mencionou_miisha' for True, ganha.
+        "condicao": lambda msgs, acertos, doacao, vip, call_time, mencionou_miisha: mencionou_miisha,
+        "cargo": "Amigo da IA"
+    },
+    "dj_sarah": {
+        "nome": "🎧 DJ da Sarah",
+        "descricao": "Toque uma música usando a Sarah.",
+        # A condição é simples: se tocou_musica for True, ganha.
+        "condicao": lambda msgs, acertos, doacao, vip, call_time, mencionou_miisha, tocou_musica: tocou_musica,
+        "cargo": "DJ da Sarah"
+    },
+    "insistente_pelucia": {
+    "nome": "🧸 Insistente da Pelúcia",
+    "descricao": "Mencione o bot 100 vezes pedindo pelúcia.",
+    "condicao": lambda d: d["mencoes_bot"] >= 100 and not d["bloqueado"],
+    "cargo": "Pelúcia Darwin"
     }
 }
 
 
-async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip, tempo_em_call=0):
+def get_mencoes_bot(user_id):
+    conn = conectar_vips()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT tentativas FROM mencoes_bot WHERE user_id = %s",
+        (user_id,)
+    )
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    return result[0] if result else 0
+
+
+
+async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip, tempo_em_call=0, mencionou_miisha = False, tocou_musica=False, mencoes_bot=0):
     desbloqueadas = []
     bloqueadas = []
+    novas_conquistas = []
+
+    # Verificar se o usuário já tem as conquistas salvas
+    conexao = conectar_vips()
+    cursor = conexao.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conquistas_desbloqueadas (
+            user_id BIGINT,
+            conquista_id VARCHAR(50),
+            data_desbloqueio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, conquista_id)
+        )
+    """)
+    conexao.commit()
+    
+    # Buscar conquistas já desbloqueadas
+    cursor.execute("SELECT conquista_id FROM conquistas_desbloqueadas WHERE user_id = %s", (member.id,))
+    conquistas_existentes = {row[0] for row in cursor.fetchall()}
 
     for key, conquista in CONQUISTAS.items():
-        condicao_ok = conquista["condicao"](mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip, tempo_em_call)
+        if key == 'insistente_pelucia':
+            # Para a conquista 'insistente_pelucia', passamos um dicionário com os valores necessários
+            condicao_ok = conquista["condicao"]({
+                'mencoes_bot': mencoes_bot,
+                'bloqueado': False  # Adicione esta linha se o campo 'bloqueado' for necessário
+            })
+        else:
+            # Para as outras conquistas, mantemos a chamada original
+            condicao_ok = conquista["condicao"](mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip, tempo_em_call, mencionou_miisha, tocou_musica)
         
         texto = f"{conquista['nome']} — {conquista['descricao']}"
 
         if condicao_ok:
             desbloqueadas.append(texto)
+            
+            # Verificar se é uma conquista nova
+            if key not in conquistas_existentes:
+                # Registrar a conquista como desbloqueada
+                try:
+                    cursor.execute(
+                        "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
+                        (member.id, key)
+                    )
+                    conexao.commit()
+                    novas_conquistas.append(conquista)
+                except Exception as e:
+                    logging.error(f"Erro ao registrar conquista {key} para {member}: {e}")
 
             # === ENTREGA DE CARGO AUTOMÁTICA ===
             cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
@@ -195,11 +270,45 @@ async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, f
                     await member.add_roles(cargo)
                 except Exception as e:
                     logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
-
         else:
             bloqueadas.append(texto)
+    
+    cursor.close()
+    conexao.close()
+    
+    # Enviar mensagem de notificação para conquistas novas
+    if novas_conquistas:
+        try:
+            embed = discord.Embed(
+                title="<:55105yippee:1450627092336082945> Nova Conquista Desbloqueada!",
+                color=discord.Color.gold()
+            )
+            
+            for conquista in novas_conquistas:
+                embed.add_field(
+                    name=conquista["nome"],
+                    value=f"Parabéns! {conquista['descricao']}",
+                    inline=False
+                )
+            
+            embed.set_footer(text="Use !conquistas para ver todas as suas conquistas!")
+            
+            try:
+                await member.send(embed=embed)
+            except discord.Forbidden:
+                # Se não for possível enviar DM, tenta enviar no canal atual
+                channel = member.guild.get_channel(CANAL_AVISO_ID)
+                if channel:
+                    await channel.send(f"{member.mention}, você desbloqueou uma nova conquista! Verifique sua DM.")
+                    try:
+                        await member.send(embed=embed)
+                    except:
+                        pass
+        except Exception as e:
+            logging.error(f"Erro ao enviar notificação de conquista para {member}: {e}")
 
     return desbloqueadas, bloqueadas
+
 
 
 mensagens_bom_dia = [
@@ -1415,6 +1524,21 @@ async def on_message(message):
                         pass
     except:
         pass
+#=========================Conquista=========================
+
+    ID_DA_MIISHA = 1272457532434153472 
+    marcou_a_miisha = any(user.id == ID_DA_MIISHA for user in message.mentions)
+    desbloqueadas, bloqueadas = await processar_conquistas(
+        member=message.author,
+        mensagens_semana=msgs_db,
+        acertos_consecutivos=acertos_db,
+        fez_doacao=doacao_db,
+        tem_vip=vip_db,
+        tempo_em_call=call_db,
+        mencionou_miisha=marcou_a_miisha,
+        tocou_musica=False,
+        mencoes_bot=get_mencoes_bot(message.author.id)
+    )
 
 # ============================================================
 #           FUNÇÕES PARA RASTREAMENTO DE TEMPO EM CALL
@@ -1610,6 +1734,7 @@ async def on_voice_state_update(member, before, after):
                 except Exception as e:
                     logging.error(f"Falha ao aplicar restrição ao bot de música: {e}")
 
+    
 
 
 # ======================================
@@ -2182,9 +2307,9 @@ async def ticket_mensagem(ctx):
         description=(
             "Use o comando **!ticket** neste canal e siga as instruções na DM.\n\n"
             "Opções disponíveis:\n"
-            "1️⃣ Ajuda do servidor\n"
-            "2️⃣ Recuperar cargo perdido\n"
-            "3️⃣ Denúncia"
+            "<:99034one:1450651488589189261> Ajuda do servidor\n"
+            "<:32475two:1450651490879410237> Recuperar cargo perdido\n"
+            "<:17611three:1450651492250816542> Denúncia"
         ),
         color=discord.Color.blue()
     )
@@ -2249,7 +2374,7 @@ async def ticket (ctx):
     if opcao == "1":
         await dm.send("Seu pedido de ajuda foi registrado! Em breve um staff irá te atender.")
         try:
-            admins = [428006047630884864, 614476239683584004]
+            admins = [428006047630884864, 614476239683584004, 1136342425820987474]
             for admin_id in admins:
                 admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
                 if admin:
@@ -2327,8 +2452,9 @@ async def ticket (ctx):
         try:
             dm_denunciado = await membro.create_dm()
             await dm_denunciado.send(
-                "⚠️ Você recebeu uma denúncia de perturbação. "
-                "Estamos monitorando seu comportamento durante 30 dias."
+                "⚠️ Você recebeu uma denúncia por abuso de moderação. "
+                "Seu comportamento será monitorado pela equipe de administração. "
+                "Caso receba mais denúncias, poderá ter seus cargos de moderação removidos."
             )
         except:
             pass
@@ -2365,7 +2491,33 @@ async def ticket (ctx):
             """
         c.execute(sql, (int(id_moderador),))
         qtd = c.fetchone()[0]
-        if qtd >= 3:
+        if qtd >= 5:
+            try:
+                cargos_mod = ["Dono", "Moderador"]
+                cargos_para_remover = [
+                    role for role in membro.roles 
+                    if role.name in cargos_mod
+                ]
+                if cargos_para_remover:
+                    await membro.remove_roles(
+                        *cargos_para_remover,
+                        reason="5 denúncias distintas por abuso de moderação"
+                    )
+                    logging.warning(
+                        "Cargos %s removidos de %s (ID: %s) após %s denúncias",
+                        cargos_mod, membro, membro.id, qtd
+                    )
+            except discord.Forbidden:
+                logging.error(
+                    "Não foi possível remover cargos de %s (ID: %s) - permissões insuficientes",
+                    membro, membro.id
+                )
+            except Exception as e:
+                logging.error(
+                    "Erro ao remover cargos de %s (ID: %s): %s",
+                    membro, membro.id, str(e)
+                )
+
             alertar = [428006047630884864, 614476239683584004]
             for admin_id in alertar:
                 admin = bot.get_user(admin_id)
@@ -2434,14 +2586,37 @@ async def tocar(ctx, url):
     # Cria fila se não existir
     if ctx.guild.id not in filas:
         filas[ctx.guild.id] = []
+    sucesso = False 
 
     # Adiciona música à fila ou toca imediatamente
     if voz.is_playing():
         filas[ctx.guild.id].append(url)
         await ctx.send("<a:53941musicalastronaut:1417173804861489192> Música adicionada à fila!")
+        sucesso = True
     else:
         filas[ctx.guild.id].append(url)
         await tocar_proxima(ctx, voz)
+        sucesso = True
+
+    # === APLICAR A CONQUISTA ===
+    if sucesso:
+        # Nota: Como estamos dentro de um comando específico, não temos os dados de mensagens/aposta aqui.
+        # Passamos 0 ou False para o resto, pois só queremos ativar a conquista da música agora.
+        desbloqueadas, _ = await processar_conquistas(
+            member=ctx.author,
+            mensagens_semana=0, 
+            acertos_consecutivos=0,
+            fez_doacao=False,
+            tem_vip=True, # Se chegou aqui, tem vip né rs
+            tempo_em_call=0,
+            mencionou_miisha=False,
+            tocou_musica=True 
+        )
+
+        # Se quiser avisar no chat que ganhou a conquista
+        if "DJ da Sarah" in str(desbloqueadas):
+            await ctx.send(f"<a:7753pengujamming:1450645225126236190> {ctx.author.mention}, você desbloqueou a conquista **DJ da Sarah**!")
+
 
     
 
@@ -3282,6 +3457,130 @@ MAPEAMENTO_TIMES = {
     "tunisia": "tunisia",
 }
 
+def get_estadio_time_casa(nome_time_api: str):
+    """
+    Retorna informações do estádio com base no time da casa.
+    A imagem fica vazia para preenchimento manual depois.
+    """
+
+    if not nome_time_api:
+        return {
+            "time": None,
+            "estadio": "Estádio indefinido",
+            "imagem": ""
+        }
+
+    # normaliza o nome vindo da API
+    chave = nome_time_api.strip().lower()
+
+    # usa seu mapeamento
+    time_padrao = MAPEAMENTO_TIMES.get(chave)
+
+    # mapeamento de estádios (imagem vazia)
+    ESTADIOS_CASA = {
+        "galo": {
+            "estadio": "Arena MRV",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630112570642442/Atletico-MG-x-Vasco-Arena-MRV-scaled-aspect-ratio-512-320-1.png?ex=69433c12&is=6941ea92&hm=f1e94aca0ff077b31ebba4e81ab7885181c222ea4d52601cf5e1a8bb848f9e93&"
+        },
+        "flamengo": {
+            "estadio": "Maracanã",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630216887046260/maracana-3.png?ex=69433c2b&is=6941eaab&hm=b75fbf731d905d9fe5dfb46464249769c421f4acfd78e3b286fe8d2e89cab9a8&"
+        },
+        "corinthians": {
+            "estadio": "Neo Química Arena",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630489772920902/semifinal-do-paulistao.png?ex=69433c6c&is=6941eaec&hm=9dbad229595c20db4ac934f46ae6d88f29d9a54992284de23c492ca6b3e57fa9&"
+        },
+        "palmeiras": {
+            "estadio": "Allianz Parque",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630593170898994/allianz-parque-1.png?ex=69433c84&is=6941eb04&hm=59d9c923e6a31f32b45aa3c2c0ec886cd9b504dbc45ff312446196e10af2ca4c&"
+        },
+        "sao paulo": {
+            "estadio": "Morumbis",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630680575873107/677bfba7d0e445c4997dcedf_shows-linkin-park-morumbis.png?ex=69433c99&is=6941eb19&hm=71ee9eb15dfa539a361bb85fbe8ec784aa6b137d873c01a3445ed98086e49d66&"
+        },
+        "fluminense": {
+            "estadio": "Maracanã",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630216887046260/maracana-3.png?ex=69433c2b&is=6941eaab&hm=b75fbf731d905d9fe5dfb46464249769c421f4acfd78e3b286fe8d2e89cab9a8&"
+        },
+        "vasco": {
+            "estadio": "São Januário",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630838483161098/20250709-183535-1-.png?ex=69433cbf&is=6941eb3f&hm=5ec546990ae5194f53d4f7f759201867efdc35f7be049bcf4bbf91f9e3c3957b&"
+        },
+        "botafogo": {
+            "estadio": "Nilton Santos",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630996226474188/32313942052_b9e440bc57_o.png?ex=69433ce4&is=6941eb64&hm=707c15845b7e9104590c913e6e644eadcad02c8cc3ee77d3ff6d71ce0e2bfb74&"
+        },
+        "gremio": {
+            "estadio": "Arena do Grêmio",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631115306963006/arena_gremio-aspect-ratio-512-320.png?ex=69433d01&is=6941eb81&hm=894b6d9d2e725d9c3bb80ad763648d6903baa380006819c9ffa7fe80b6f44dd1&"
+        },
+        "internacional": {
+            "estadio": "Beira-Rio",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631360090996798/estdio_beira_rio_cover.png?ex=69433d3b&is=6941ebbb&hm=a264bbba7813a131aa381683d1a5e460f9bed0ce2ab64ff4efbe2c52856754d8&"
+        },
+        "cruzeiro": {
+            "estadio": "Mineirão",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631501233520660/mineirao-breno-pataro-_acervo-pbh-356.png?ex=69433d5d&is=6941ebdd&hm=90347ad60c0a93fe9ddd8c9b4cb9fd16c2cab48bd8e61c5a5d81ac3af9265f58&"
+        },
+        "bahia": {
+            "estadio": "Arena Fonte Nova",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631618070057043/52792335402-1a7ff7cab0-k.png?ex=69433d79&is=6941ebf9&hm=d0efeb1a28086734b37d05065bc3bb60e221d6b615741c9181ea0ecdc05d57fd&"
+        },
+        "fortaleza": {
+            "estadio": "Castelão",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631739784302795/Iluminacao-Cenica-Arena-Castelao-1-2.png?ex=69433d96&is=6941ec16&hm=c99255ee07e333516585304fc42214ea251ba8b31e00a2af44855c0193b01180&"
+        },
+        "sport": {
+            "estadio": "Ilha do Retiro",
+            "imagem": ""
+        },
+        "vitoria": {
+            "estadio": "Barradão",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631935452774441/Diretoria-do-Vitoria-aprova-projeto-da-Arena-Barra0136694900202511031829.png?ex=69433dc4&is=6941ec44&hm=0efc8d7324422a627d209d0c311b06dc223d7db0c5bef435ddb9ff5a4ec5c996&"
+        },
+        "athletico paranaense": {
+            "estadio": "Ligga Arena",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632038649434235/iluminacao-noturna-da.png?ex=69433ddd&is=6941ec5d&hm=c9ca1b011998a6a98d2eb5d882dcd0680a5c57f9f50ce6f15fc7d26e340dabc2&"
+        },
+        "coritiba": {
+            "estadio": "Couto Pereira",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632125748609034/Vista_AC3A9rea_do_Couto_Pereira_em_2021.png?ex=69433df2&is=6941ec72&hm=d186c8626af7ff3724d4677d122a6aca20f2f73f9110a110823bbddc622f3ec7&"
+        },
+        "bragantino": {
+            "estadio": "Nabi Abi Chedid",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632323778482248/EstC3A1dio_Nabi.png?ex=69433e21&is=6941eca1&hm=2cb264a4431ef038cbbea1a6064b8cae38f76e939e4c6456bc06b82925eca379&"
+        },
+        "juventude": {
+            "estadio": "Alfredo Jaconi",
+            "imagem": ""
+        },
+        "ceara": {
+            "estadio": "Castelão",
+            "imagem": ""
+        },
+        "remo": {
+            "estadio": "Baenão",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632470155493376/whatsapp_image_2019-08-21_at_22.png?ex=69433e44&is=6941ecc4&hm=502ca438c1d945149a7738299a8690db712b5da7a2fb0822303aa6a05d766043&"
+        },
+        "mirassol": {
+            "estadio": "José Maria de Campos Maia",
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632602963808266/1287592_med_jose_maria_de_campos_maia.png?ex=69433e63&is=6941ece3&hm=37e078d410ab4ab2ee06e13be38ccc11c5a9e4f6e3000a2c0d4d715f89820501&"
+        }
+    }
+
+    if not time_padrao or time_padrao not in ESTADIOS_CASA:
+        return {
+            "time": time_padrao,
+            "estadio": "Estádio indefinido",
+            "imagem": ""
+        }
+
+    return {
+        "time": time_padrao,
+        "estadio": ESTADIOS_CASA[time_padrao]["estadio"],
+        "imagem": ESTADIOS_CASA[time_padrao]["imagem"]
+    }
+
 
 
 PALAVRAS_GOL = {
@@ -3329,7 +3628,7 @@ PALAVRAS_GOL = {
     "tunisia":    "🇹🇳 GOOOOOOOL DA TUNÍSIA!!!"
 }
 
-GIFS_VITORIA = {
+GIFS_VITORIA_TIME = {
     # =======================
     # 🇧🇷 CLUBES BRASILEIROS 2025
     # =======================
@@ -3402,9 +3701,9 @@ FALAS_BOT = {
         "FLUUUUUUUU! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
     ],
     "cruzeiro": [
-        "É GOL DA RAPOSAAAAAA!!! 🔥🔥🔥",
-        "CRUZEIRO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DA RAPOSA!!! 🏆🏆🏆",
+        "MAIOR DE MINAS PORRA!!! 🔥🔥🔥",
+        "AqUi É cAbuLOSOOOOOOOOOOOOOOO!!! ⚡⚡⚡",
+        "RAPOSA TÁ COM FOMEE!!! 🏆🏆🏆",
         "QUE JOGADA DO CRUZEIROOO!!! 🔥🔥🔥",
         "RAPOSAAAAAA!!! COMEMORAÇÃO GARANTIDA!!! 🙌🙌🙌"
     ],
@@ -3426,7 +3725,7 @@ FALAS_BOT = {
         "É GOL DO VASCUUUUUUUUUU!!! 🔥🔥🔥",
         "VASCO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
         "VITÓRIAAAAA DO VASCO!!! 🏆🏆🏆",
-        "QUE JOGADA DO VASCOOOOO!!! 🔥🔥🔥",
+        "GIGANTES VENCEM, PEQUENOS OLHAM!!! 🔥🔥🔥",
         "VASCOOOOOO! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
     ],
     "são paulo":[
@@ -4399,7 +4698,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                 
                 if rows_com:
                     # Pega o GIF
-                    gif_url = GIFS_VITORIA.get(chave_vencedor, GIFS_VITORIA.get("default"))
+                    gif_url = GIFS_VITORIA_TIME.get(chave_vencedor, GIFS_VITORIA_TIME.get("default"))
                     
                     # Monta lista de menções dos usuários
                     usuarios_mencoes = []
@@ -4489,31 +4788,70 @@ async def terminar_jogo(ctx, fixture_id: int = None):
                 if acertou:
                     multiplicador = 6 if modo_clown == 1 else 1
                     pontos_preview = pontos_base_vitoria * multiplicador
-                    mensagens_pv.append(
-                        (
-                            user_id,
-                            f"<a:270795discodance:1419694558945476760> **APOSTA CERTA!**\n"
-                            f"✨ Você garantiu **+{pontos_preview} pontos**" + (" (bônus de minoria)" if (pontos_base_vitoria == (win_pts * 2)) else "") + "!\n\n"
-                            f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
-                            f"<:apchikabounce:1408193721907941426> Confira seus pontos com **!meuspontos**\n"
-                            f"📘 Veja mais comandos em **!info\n**"
-                            f"🏪 Acesse **!loja** e desbloqueie vantagens especiais!\n"
-                            f"⭐ Confira suas conquistas usando !conquistas!"
-                        )
+
+                    embed = discord.Embed(
+                        title="🎉 APOSTA CERTA!",
+                        description=(
+                            f"✨ Você garantiu **+{pontos_preview} pontos"
+                            + (" (bônus de minoria)" if pontos_base_vitoria == (win_pts * 2) else "")
+                            + "!**"
+                        ),
+                        color=discord.Color.green()
                     )
+                    info = get_estadio_time_casa(casa)
+                    if info["estadio"] != "Estádio indefinido":
+                        embed.add_field(
+                        name="🏟️ Estádio",
+                        value=info["estadio"],
+                        inline=False
+                        )
+                    if info["imagem"]:
+                        embed.set_image(url=info["imagem"])
+
+                    embed.add_field(
+                        name="📊 Ações",
+                        value=(
+                            "<:apchikabounce:1408193721907941426> **!meuspontos**\n"
+                            "📘 **!info**\n"
+                            "🏪 **!loja**\n"
+                            "⭐ **!conquistas**"
+                        ),
+                        inline=False
+                    )
+
+                    embed.set_thumbnail(url="https://i.imgur.com/SEU_GIF_OU_ICON.gif")
+
+                    mensagens_pv.append((user_id, embed))
+
                 else:
                     multiplicador = 4 if modo_clown == 1 else 1
                     pontos_preview = lose_pts * multiplicador
-                    mensagens_pv.append(
-                        (
-                            user_id,
-                            f"<a:9749heartbreak:1449948111161262293> **Que pena... você errou a aposta!**\n"
-                            f"Você perdeu **{pontos_preview} pontos**." + (" Se você tiver Segunda Chance ativa, será reembolsado." ) + "\n\n"
-                            f"🏟️ **Partida:** `{casa} x {fora}`\n\n"
-                            f"<a:6582red:1449949837763154081> Veja seus pontos com **!meuspontos**\n"
-                            f"<a:9612_aMCenchantedbook:1449948971916202125> Mais informações: **!info**"
-                        )
+
+                    embed = discord.Embed(
+                        title="💔 Aposta Errada",
+                        description=(
+                            f"Você perdeu **{pontos_preview} pontos"
+                            + (". Se você tiver **Segunda Chance**, será reembolsado." if modo_clown == 1 else ".")
+                        ),
+                        color=discord.Color.red()
                     )
+
+                    embed.add_field(
+                        name="🏟️ Partida",
+                        value=f"`{casa} x {fora}`",
+                        inline=False
+                    )
+
+                    embed.add_field(
+                        name="📊 Comandos",
+                        value=(
+                            "<a:6582red:1449949837763154081> **!meuspontos**\n"
+                            "<a:9612_aMCenchantedbook:1449948971916202125> **!info**"
+                        ),
+                        inline=False
+                    )
+
+                    mensagens_pv.append((user_id, embed))
 
             cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fx,))
             conn.commit()
