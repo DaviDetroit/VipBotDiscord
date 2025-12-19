@@ -192,6 +192,12 @@ CONQUISTAS = {
     "descricao": "Mencione o bot 100 vezes pedindo pelúcia.",
     "condicao": lambda d: d["mencoes_bot"] >= 100 and not d["bloqueado"],
     "cargo": "Pelúcia Darwin"
+    },
+        "party_na_call": {
+        "nome": "🎮 Party na Call",
+        "descricao": "Jogue o mesmo jogo em call com 2 amigos.",
+        "cargo": "Party na Call",
+        "tipo": "grupo"  
     }
 }
 
@@ -309,6 +315,60 @@ async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, f
 
     return desbloqueadas, bloqueadas
 
+CHAT_GERAL = 1380564680552091789
+
+async def desbloquear_conquistas_em_grupo(guild, user_ids, conquista_id):
+    conquista = CONQUISTAS[conquista_id]
+    conexao = conectar_vips()
+    cursor = conexao.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conquistas_desbloqueadas (
+            user_id BIGINT,
+            conquista_id VARCHAR(50),
+            data_desbloqueio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, conquista_id)
+        )
+    """)
+    conexao.commit()
+    novos = []
+    for user_id in user_ids:
+        cursor.execute(
+            "SELECT 1 FROM conquistas_desbloqueadas WHERE user_id=%s AND conquista_id=%s",
+            (user_id, conquista_id)
+        )
+
+        if cursor.fetchone():
+            continue
+        cursor.execute(
+            "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
+            (user_id, conquista_id)
+        )
+        conexao.commit()
+        member = guild.get_member(user_id)
+        if not member:
+            continue
+        cargo = discord.utils.get(guild.roles, name=conquista['cargo'])
+        if cargo and cargo not in member.roles:
+            try:
+                await member.add_roles(cargo)
+            except:
+                pass
+            novos.append(member)
+            cursor.close()
+            conexao.close()
+
+            if novos:
+                embed = discord.Embed(
+            title="<a:8377gamingcontroller:1451333843486376151> Conquista em Grupo Desbloqueada!",
+            description=f"Vocês desbloquearam **{conquista['nome']}**!\n{conquista['descricao']}",
+            color=discord.Color.green()
+                )
+            mentions = " ".join(m.mention for m in novos)
+            canal = guild.get_channel(CHAT_GERAL)
+            if canal:
+                await canal.send(mentions, embed=embed)
+
+    
 
 
 mensagens_bom_dia = [
@@ -362,28 +422,29 @@ mensagens_bom_dia = [
 ]
 
 
-mensagens_boa_tarde = [
-    "Opa, boa tarde! Fala aí 😎",
-    "Boa tarde! E aí, como tá a vida?",
-    "Boa tarde! Cheguei, sentiu minha falta? 😏",
-    "Boa tarde! Suave por aí?",
-    "Boa tarde! E aí, o que manda?",
-    "Boa tarde! Tudo certo ou só quase?",
-    "Boa tarde! Bora fazer essa tarde render?",
-    "Boa tarde! E aí, firmeza?",
-    "Boa tarde! Passando pra lembrar que você é brabo 😌",
-    "Boa tarde! Tarde boa é tarde com você online 😂",
-    "Boa tarde! E aí, tá de boas ou no caos?",
-    "Boa tarde! Fala comigo, não me ignora 👀",
-    "Boa tarde! Chega mais, bora trocar ideia!",
-    "Boa tarde! Tá on? Bora movimentar isso aqui 😎",
-    "Boa tarde! Força aí, que o dia ainda não acabou 💪",
-    "Boa tarde! Tô só observando a galera… 👀",
-    "Boa tarde! Hoje tá com cara de dia bom, hein?",
-    "Boa tarde! Só passando pra deixar aquele salve ✌️",
-    "Boa tarde! E aí, aprontando o quê?",
-    "Boa tarde! Se anima aí que a tarde tá só começando!"
+mensagens_curiosidade = [
+    "🤔 Você sabia que o cérebro humano gera energia suficiente pra acender uma lâmpada pequena?",
+    "👀 Curiosidade rápida: polvos têm três corações e sangue azul!",
+    "🧠 Já parou pra pensar que a gente sonha mesmo sem lembrar depois?",
+    "😮 Sabia que o coração bate mais rápido quando a gente tá curioso?",
+    "📚 Curiosidade do dia: o mel nunca estraga. Tipo… nunca mesmo.",
+    "🌍 Você sabia que a Terra não é perfeitamente redonda?",
+    "🕒 Curioso pensar que você já viveu bilhões de segundos até agora, né?",
+    "🎮 Sabia que alguns jogos mudam dificuldade sem você perceber?",
+    "🐙 Polvos conseguem abrir potes. E a gente sofre com tampa de garrafa 😅",
+    "💭 Curiosidade estranha: seu cérebro não sente dor.",
+    "🧩 Você sabia que lembrar algo errado várias vezes cria uma falsa memória?",
+    "🌌 O universo é tão grande que algumas estrelas que vemos já nem existem mais.",
+    "🧠 Curioso: o cérebro humano consome cerca de 20% da energia do corpo.",
+    "🐝 As abelhas conseguem reconhecer rostos humanos.",
+    "🎧 Curiosidade sonora: o silêncio absoluto não existe.",
+    "📖 Você sabia que ler muda fisicamente o cérebro?",
+    "🧠 Curioso pensar que seu cérebro completa frases automaticamente.",
+    "⏳ Você sabia que o tempo passa diferente dependendo da velocidade?",
+    "👁️ Curiosidade visual: seu olho tem um ponto cego e você não percebe.",
+    "🤯 Curioso como seu cérebro acredita no que ele mesmo inventa."
 ]
+
 @bot.event
 async def on_ready():
     logging.info(f"Bot conectado como {bot.user}")
@@ -433,7 +494,7 @@ async def on_ready():
     if 12 <= hora < 18:
         canal = bot.get_channel(1380564680552091789)
         if canal:
-            mensagem = random.choice(mensagens_boa_tarde)
+            mensagem = random.choice(mensagens_curiosidade)
             await canal.send(mensagem)
 
     # ===== TOP ATIVOS DOMINGO =====
@@ -509,6 +570,8 @@ async def on_reaction_add(reaction, user):
 
     message = reaction.message
     emoji = str(reaction.emoji)
+
+    
 
     # ======================================================
     # 1) SISTEMA DE POSTS (👍 / 👎)
@@ -856,30 +919,64 @@ async def vip_mensagem(ctx):
 
 vip_message_id = None
 
-# Dicionário que guarda apostas ativas
-# Estrutura:
-# apostas_ativas[message_id] = {
-#     "fixture_id": 123,
-#     "home": "galo",
-#     "away": "flamengo",
-#     "emoji_home": "<:Galo:123>",
-#     "emoji_away": "<:Flamengo:123>",
-#     "emoji_empate": "⚪",
-#     "tempo_fechamento": datetime,
-# }
+
 apostas_ativas = {}
 
+CARGOS_POR_REACAO = {
+    "<a:22db139b5bff4e4389db335417680d19:1409886253658279936>": "Pelúcia Goku",
+    "<:3938dantesmile:1437791755096293510>": "Pelúcia Dante"
+}
 
 @bot.event
 async def on_raw_reaction_add(payload):
-    global vip_message_id, apostas_ativas
-
     if payload.user_id == bot.user.id:
         return
 
     guild = bot.get_guild(payload.guild_id)
     if guild is None:
         return
+
+    emoji = str(payload.emoji)
+
+    # Se não for um emoji válido, ignora
+    if emoji not in CARGOS_POR_REACAO:
+        return
+
+    member = guild.get_member(payload.user_id)
+    if member is None:
+        return
+
+    pelucia_secreta = CARGOS_POR_REACAO[emoji]
+    cargo_pelucia = discord.utils.get(guild.roles, name=pelucia_secreta)
+
+    if not cargo_pelucia:
+        return
+
+    # 🔒 Verifica se alguém já possui essa pelúcia
+    for m in guild.members:
+        if cargo_pelucia in m.roles:
+            try:
+                await member.send(
+                    "Oi! Vi que você reagiu ao emoji para conseguir a pelúcia, "
+                    "mas infelizmente essa pelúcia é exclusiva e já foi pega 😢"
+                )
+            except discord.Forbidden:
+                pass
+            return  # ⛔ PARA AQUI — não adiciona o cargo
+
+    # ✅ Se chegou aqui, ninguém tem a pelúcia
+    try:
+        await member.add_roles(cargo_pelucia)
+        logging.info(
+            f"<a:995589misathumb:1443956356846719119> Parabéns! Você conseguiu a pelúcia secreta **{pelucia_secreta}** feita para o usuário {member.id}"
+        )
+    except discord.Forbidden:
+        logging.error(
+            f"Sem permissão para adicionar o cargo '{pelucia_secreta}' ao usuário {member.id}"
+        )
+
+   
+
 
     # ============================
     # 1) ----- SISTEMA VIP -------
@@ -1020,8 +1117,38 @@ async def on_raw_reaction_add(payload):
             except Exception:
                 pass
 
+CARGOS_POR_REACAO = {
+    "emoji":"Pelucia goku",
+    "emoji2":"Pelucia sla oq"
+}   
+async def on_raw_reaction_add(payload):
+    if payload.user_id == bot.user.id:
+        return
+    guild = bot.get_guild(payload.guild_id)
+    if guild is None:
+        return
+    member = guild.get_member(payload.member)
+    if member is None:
+        return
+    emoji = str(payload.emoji)
+    if emoji is None:
+        return
+    cargo_pelucia = CARGOS_POR_REACAO[emoji]
+    dar_cargo = guild.get_role(guild.roles,name="pelucia nome")
+    if cargo_pelucia not in CARGOS_POR_REACAO:
+        return
+    for m in guild.members:
+        if cargo_pelucia in m.roles:
+    
+            try:
+                member.send(f"Pelúcia já conseguida por {author.id}")
+            except discord.Forbidden:
+                logging.info("Pessoa clicou na reação mas não ganhou pelúcia")
 
 
+
+
+    
 
 
 @bot.command()
@@ -1272,7 +1399,7 @@ async def on_message(message):
             try:
                 await message.delete()
                 await message.channel.send(
-                    f"{message.author.mention} você não tem VIP para usar o bot de música em qualquer lugar! "
+                    f"{message.author.mention} você não tem VIP para usar o bot de música em qualquer lugar! Use o bot em <#1380564681093156940> ou <#1380564681093156941>"
                     f"Use apenas nos canais de música ou adquira VIP em <#{CANAL_SEJA_VIP}>!"
 
                 )
@@ -1379,7 +1506,7 @@ async def on_message(message):
         "one piece": "<:__:1410352761148674129>",
         "blue lock": "<:bl:1410628296554840125>",
         "read dead": "<:RDR:1410628111850278912>",
-        "dante": "<:3938dantesmile:1437791755096293510>",
+        "dante\n": "<:3938dantesmile:1437791755096293510>",
         "dmc": "<:3938dantesmile:1437791755096293510>",
         "devil may cry": "<:3938dantesmile:1437791755096293510>",
         "vergil": "<:9488vergil:1437791981001773197>",
@@ -1816,6 +1943,11 @@ async def on_presence_update(before, after):
                 f"<a:5ad2b0ea20074b8c80a3fa600b4e8ec4:1410657064430075975> "
                 f"Os jogadores {mentions} estão jogando **{jogo_atual}** na call! Jogue você também!"
             )
+            await desbloquear_conquista_em_grupo(
+                guild=channel.guild,
+                user_ids=user_ids,
+                conquista_id="party_na_call"
+            )
             ultimo_envio[jogo_atual] = agora
 
  
@@ -2104,6 +2236,11 @@ async def finalizar_batalha_auto():
         rolagem = random.random()
         vencedor = p1 if rolagem <= chance_p1 else p2
         perdedor = p2 if vencedor == p1 else p1
+
+
+        base_pontos = 25 
+        pontos_vitoria = int(base_pontos * (total_forca / vencedor["forca"]))
+        pontos_vitoria = max(20, min(pontos_vitoria, 100))
         # Contagem de votos
         reaction_vencedora = None
         for reaction in msg.reactions:
@@ -2118,12 +2255,12 @@ async def finalizar_batalha_auto():
                 if not user.bot:
                     ganhadores_ids.append(user.id)
         # Atualiza pontos no banco de dados
-        await atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor)
+        await atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_vitoria)
         
         # Anuncia o resultado
         # calcula porcentagem já como inteiro para evitar depender de p1 dentro da função
         chance_percent = int(chance_p1 * 100) if vencedor == p1 else int((1 - chance_p1) * 100)
-        await anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent)
+        await anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent, pontos_vitoria)
     except Exception as e:
         logging.error(f"Erro ao finalizar batalha: {e}")
         if 'canal' in locals():
@@ -2131,17 +2268,24 @@ async def finalizar_batalha_auto():
     finally:
         # Garante que o estado seja resetado mesmo em caso de erro
         batalha_info = {"ativa": False, "msg_id": None}
-async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor):
+async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_premio):
     """Atualiza a pontuação dos ganhadores no banco de dados."""
     if not ganhadores_ids:
         return
+    for uid in ganhadores_ids:
+        adicionar_pontos_db(uid, pontos_premio)
+    
     try:
-        pontos_premio = 30
 
         # Atualiza pontos chamando helper reutilizável por usuário
         for uid in ganhadores_ids:
             try:
                 adicionar_pontos_db(uid, pontos_premio)
+                user = bot.get_user(uid)
+                if user:
+                    try:
+                        await user.send(f"🎉 Vitória épica! O azarão **{vencedor['nome']}** venceu e você faturou **+{pontos_premio} pontos**!")
+                    except: pass
             except Exception as e:
                 logging.error(f"Falha ao adicionar pontos para {uid}: {e}")
 
@@ -2156,7 +2300,7 @@ async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor):
     except Exception as e:
         logging.error(f"Erro ao atualizar pontuação: {e}")
         raise
-async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent):
+async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent, pontos_premio):
 
     # --- Dicionário de GIFs de Vitória ---
     GIFS_VITORIA = {
@@ -2199,11 +2343,11 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
 
     # Criar a mensagem de resultado
     mensagem_vitoria = (
-        f"<a:270795discodance:1419694558945476760> **{vencedor['nome'].upper()} VENCEU!** 🎉\n\n"
-        f"🏆 **Vencedor:** {vencedor['emoji']} **{vencedor['nome']}**\n"
-        f"💀 **Perdedor:** {perdedor['emoji']} {perdedor['nome']}\n\n"
-        f"👥 **Total de Ganhadores:** {len(ganhadores_ids)} pessoas\n"
-        f"💰 **Prêmio:** +{pontos_premio} pontos para cada vencedor!\n\n"
+        f"**{vencedor['nome'].upper()} SUPEROU AS EXPECTATIVAS!** 🏆\n\n"
+        f"💰 **Prêmio por Voto:** `{pontos_premio} pontos`\n"
+        f"👥 **Ganhadores:** {len(ganhadores_ids)}\n"
+        f"📉 **Probabilidade inicial:** {chance_percent}%\n\n"
+        f"{vencedor['emoji']} massacrou {perdedor['emoji']}!\n"
         f"{gif_vitoria}"
     )
 
@@ -3644,6 +3788,7 @@ GIFS_VITORIA_TIME = {
     "fluminense": "https://tenor.com/view/fluminense-fc-fluminense-gif-10320050767890049196",
     "fortaleza": "",
     "goiás": "https://tenor.com/view/torcida-fjg-for%C3%A7a-jovem-goi%C3%A1s-gif-1316517536206430915",
+    "gremio": "https://tenor.com/view/cortezinho-gr%C3%AAmio-gremio-cortesinho-mood-gif-13967005",
     "internacional": "https://tenor.com/view/inter-porto-alegre-gif-20185773",
     "juventude": "",
     "palmeiras": "https://tenor.com/view/palmeiras-gif-23081966",
@@ -3668,7 +3813,7 @@ FALAS_BOT = {
     "flamengo": [
         "DALE DALE MENGOOOOOOOOOOOOOOOOOOO!!!! 🔥🔥🔥",
         "GOL DO MENGO CARAAAAAAALHO!!! ⚡⚡⚡",
-        "FLAMENGOOOOOOOO DOMINANDO TUDOOOOOOOOO!!!! 🏆🏆🏆",
+        "VAMO MENGAAAAAAAAAO!!!! 🏆🏆🏆",
         "VITÓRIAAAAA DO MENGO CARAAAAALHO!!!! 🔥🔥🔥",
         "VAMOOOOO FLAMENGOOOOOO!!!! 🙌🙌🙌"
     ],
@@ -5441,7 +5586,7 @@ async def doacao(ctx):
 @bot.command()
 async def entregar(ctx, membro: discord.Member, valor:int):
     if ctx.author.id != MEU_ID:
-        return await ctx.send("Apenas o brabo pode usar <:Galo:1425991683690074212>")
+        return await ctx.send("Apenas o brabo pode usar <a:1199777523261775963:1451401949667655730>")
     logging.info(f"Alguém ({ctx.author}) tentou usar o comando entregar sem permissão.")
     tabela_conversao = {
         5: 30,
@@ -5577,9 +5722,18 @@ async def conquistas(ctx, membro: discord.Member = None):
             tempo_em_call
         )
         
+        # Função para criar barra de progresso
+        def format_progress_bar(current, total, length=15):
+            progress = min(current / total, 1.0)
+            filled = int(progress * length)
+            return f"[{'█' * filled}{'▁' * (length - filled)}] {int(progress * 100)}%"
+        
         # Converter tempo em call para formato legível
         horas_call = tempo_em_call // 3600
         minutos_call = (tempo_em_call % 3600) // 60
+        segundos_restantes = max(180000 - tempo_em_call, 0)
+        horas_restantes = segundos_restantes // 3600
+        minutos_restantes = (segundos_restantes % 3600) // 60
         
         # Cria embed
         embed = discord.Embed(
@@ -5587,9 +5741,14 @@ async def conquistas(ctx, membro: discord.Member = None):
             color=discord.Color.gold()
         )
         
+        progress_bar = format_progress_bar(tempo_em_call, 180000)
         embed.add_field(
-            name="📞 Tempo em Call",
-            value=f"**{horas_call}h {minutos_call}m** | Faltam {180000 - tempo_em_call} segundos para desbloquear",
+            name="📞 Tempo em Call (Meta: 50h)",
+            value=(
+                f"{progress_bar}\n"
+                f"⏱️ **{horas_call}h {minutos_call:02d}m** • "
+                f"⏳ Faltam {horas_restantes}h {minutos_restantes:02d}m"
+            ),
             inline=False
         )
         
