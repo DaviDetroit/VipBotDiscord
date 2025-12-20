@@ -750,34 +750,77 @@ async def on_reaction_remove(reaction, user):
     cursor.close()
 
 
-@tasks.loop(hours=24)  # roda uma vez por dia
+@tasks.loop(hours=24)
 async def verificar_posts():
-    conexao = conectar_vips()
-    cursor = conexao.cursor(dictionary=True)
-
-    # pega posts mais antigos que 7 dias e ainda não removidos
-    cursor.execute("""
-        SELECT id, channel_id, upvotes, downvotes, timestamp 
-        FROM posts 
-        WHERE removed=FALSE AND timestamp <= (NOW() - INTERVAL 7 DAY)
-    """)
-    posts = cursor.fetchall()
-
-    for post in posts:
-        if post["downvotes"] > post["upvotes"]:
-            try:
-                channel = bot.get_channel(post["channel_id"])
-                msg = await channel.fetch_message(post["id"])
-                await msg.delete()
-
-                cursor.execute("UPDATE posts SET removed=TRUE WHERE id=%s", (post["id"],))
-                conexao.commit()
-                logging.info(f"Mensagem {post['id']} excluída por votos negativos.")
-            except Exception as e:
-                logging.error(f"Erro ao excluir mensagem {post['id']}: {e}")
-
-    cursor.close()
-    conexao.close()
+    """
+    Remove automaticamente posts com mais downvotes que upvotes após 7 dias.
+    Executa uma vez por dia.
+    """
+    CANAIS_PERMITIDOS = [1234567890]  # IDs dos canais permitidos
+    DIAS_PARA_REMOCAO = 7
+    LIMITE_REMOCOES = 50  # Máximo de remoções por execução
+    
+    try:
+        conexao = conectar_vips()
+        cursor = conexao.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT id, channel_id, upvotes, downvotes, timestamp, author_id
+            FROM posts 
+            WHERE removed = FALSE 
+            AND timestamp <= (NOW() - INTERVAL %s DAY)
+            AND channel_id IN %s
+            ORDER BY timestamp ASC
+            LIMIT %s
+        """, (DIAS_PARA_REMOCAO, tuple(CANAIS_PERMITIDOS), LIMITE_REMOCOES))
+        
+        posts = cursor.fetchall()
+        remocoes = 0
+        
+        for post in posts:
+            if post["downvotes"] > post["upvotes"] and remocoes < LIMITE_REMOCOES:
+                try:
+                    channel = bot.get_channel(post["channel_id"])
+                    if not channel:
+                        continue
+                        
+                    msg = await channel.fetch_message(post["id"])
+                    await msg.delete()
+                    
+                    cursor.execute("""
+                        UPDATE posts 
+                        SET removed = TRUE, 
+                            motivo_remocao = 'Mais downvotes que upvotes após 7 dias'
+                        WHERE id = %s
+                    """, (post["id"],))
+                    
+                    # Notificar o autor
+                    try:
+                        autor = await bot.fetch_user(post["author_id"])
+                        if autor:
+                            await autor.send(f"Seu post em #{channel.name} foi removido por receber mais downvotes que upvotes após 7 dias.")
+                    except Exception as e:
+                        logging.error(f"Erro ao notificar autor {post['author_id']}: {e}")
+                    
+                    remocoes += 1
+                    logging.info(f"Post {post['id']} do usuário {post['author_id']} removido por votos negativos.")
+                    
+                except discord.NotFound:
+                    logging.warning(f"Post {post['id']} não encontrado, marcando como removido.")
+                    cursor.execute("UPDATE posts SET removed = TRUE WHERE id = %s", (post["id"],))
+                except Exception as e:
+                    logging.error(f"Erro ao processar post {post['id']}: {e}")
+        
+        conexao.commit()
+        logging.info(f"Verificação de posts concluída. {remocoes} posts removidos.")
+        
+    except Exception as e:
+        logging.error(f"Erro na verificação de posts: {e}")
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conexao' in locals():
+            conexao.close()
 
 
 @tasks.loop(minutes=10)  # roda a cada 10 minutos
@@ -812,6 +855,7 @@ async def sincronizar_reacoes():
     conexao.commit()
     cursor.close()
     conexao.close()
+
 @tasks.loop(hours=24)
 async def ranking_mensal():
     agora = datetime.now()
@@ -833,7 +877,7 @@ async def ranking_mensal():
     cursor.execute("""
         SELECT user_id, id, upvotes
         FROM posts
-        WHERE removed=FALSE
+        WHERE removed = FALSE
           AND timestamp BETWEEN %s AND %s
         ORDER BY upvotes DESC
         LIMIT 1
@@ -841,17 +885,41 @@ async def ranking_mensal():
 
     top_post = cursor.fetchone()
 
-    cursor.close()
-    conexao.close()
-
     if top_post:
+        # salva ranking mensal
+        cursor.execute("""
+            INSERT INTO post_mensal (user_id, post_id, upvotes, mes, ano)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            top_post["user_id"],
+            top_post["id"],
+            top_post["upvotes"],
+            mes,
+            ano
+        ))
+        logging.info("Inserindo o post mensal")
+
+        # limpa posts do mês encerrado
+        cursor.execute("""
+            DELETE FROM posts
+            WHERE timestamp BETWEEN %s AND %s
+        """, (primeiro_dia, ultimo_dia))
+
+        conexao.commit()
+        logging.info("Deleta dos posts")
+
         user = await bot.fetch_user(top_post["user_id"])
-        channel = bot.get_channel(1386805780140920954)  # canal mural
+        channel = bot.get_channel(1386805780140920954)
         await channel.send(
             f"<a:489897catfistbump:1414720257720848534> "
             f"Usuário com o post mais curtido do mês {mes}/{ano}: {user.mention}! "
             f"<a:a36fc0b021624a25b50e1bd237cd024c:1411136694844915902>"
         )
+
+    cursor.close()
+    conexao.close()
+
+    
 
 
 @bot.command()
@@ -1117,33 +1185,7 @@ async def on_raw_reaction_add(payload):
             except Exception:
                 pass
 
-CARGOS_POR_REACAO = {
-    "emoji":"Pelucia goku",
-    "emoji2":"Pelucia sla oq"
-}   
-async def on_raw_reaction_add(payload):
-    if payload.user_id == bot.user.id:
-        return
-    guild = bot.get_guild(payload.guild_id)
-    if guild is None:
-        return
-    member = guild.get_member(payload.member)
-    if member is None:
-        return
-    emoji = str(payload.emoji)
-    if emoji is None:
-        return
-    cargo_pelucia = CARGOS_POR_REACAO[emoji]
-    dar_cargo = guild.get_role(guild.roles,name="pelucia nome")
-    if cargo_pelucia not in CARGOS_POR_REACAO:
-        return
-    for m in guild.members:
-        if cargo_pelucia in m.roles:
-    
-            try:
-                member.send(f"Pelúcia já conseguida por {author.id}")
-            except discord.Forbidden:
-                logging.info("Pessoa clicou na reação mas não ganhou pelúcia")
+
 
 
 
@@ -1370,6 +1412,38 @@ CANAL_SEJA_VIP = 1381380248511447040
 ID_CARGO_MUTE = 1445066766144376934
 @bot.event
 async def on_message(message):
+
+    if message.author.bot:
+        return
+
+    # =========================
+    #  PROTEÇÃO CANAL DE TICKET
+    # =========================
+    if message.channel.id == ID_CANAL_TICKET:
+        conn = conectar_vips()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT message_id FROM ticket_mensagem LIMIT 1")
+        registro = cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        if registro:
+            message_oficial_id = registro["message_id"]
+
+            # Apaga qualquer coisa que não seja:
+            # - a embed oficial
+            # - comando
+            if message.id != message_oficial_id and not message.content.startswith("!"):
+                try:
+                    await message.delete()
+                except:
+                    pass
+                return  # MUITO IMPORTANTE
+
+    
+    
     global ultimo_reagir
 
     # Ignorar bots
@@ -1407,8 +1481,7 @@ async def on_message(message):
             except:
                 pass
             return
-    if message.author.bot:
-        return
+    
     # ============================
     #  SISTEMA MONITORAMENTO
     # ============================
@@ -1639,18 +1712,7 @@ async def on_message(message):
     cursor.close()
     conexao.close()
 
-    await bot.process_commands(message)
 
-    try:
-        if message.channel.id == ID_CANAL_TICKET:
-            if 'TICKET_EMBED_MESSAGE_ID' in globals():
-                if (globals().get('TICKET_EMBED_MESSAGE_ID') is not None) and (message.id != globals().get('TICKET_EMBED_MESSAGE_ID')) and (not message.author.bot):
-                    try:
-                        await message.delete()
-                    except:
-                        pass
-    except:
-        pass
 #=========================Conquista=========================
 
     ID_DA_MIISHA = 1272457532434153472 
@@ -1666,6 +1728,9 @@ async def on_message(message):
         tocou_musica=False,
         mencoes_bot=get_mencoes_bot(message.author.id)
     )
+    await bot.process_commands(message)
+
+
 
 # ============================================================
 #           FUNÇÕES PARA RASTREAMENTO DE TEMPO EM CALL
@@ -2444,10 +2509,31 @@ MENCION_RESET_DIAS = 7
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def ticket_mensagem(ctx):
+    logging.info("Comando ticket_mensagem executado por %s", ctx.author)
+
     if ctx.channel.id != ID_CANAL_TICKET:
         return await ctx.send("❌ Use este comando no canal de tickets.")
+
+    conn = conectar_vips()
+    cursor = conn.cursor()
+
+    # Cria tabela
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ticket_mensagem (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            message_id BIGINT NOT NULL,
+            autor_mensagem_id BIGINT NOT NULL,
+            canal_id BIGINT NOT NULL,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Limpa registros antigos (só pode existir 1)
+    cursor.execute("DELETE FROM ticket_mensagem")
+    conn.commit()
+
     embed = discord.Embed(
-        title="🎫 Abra seu Ticket",
+        title="<:767939ticket:1451964270903431320> Abra seu Ticket",
         description=(
             "Use o comando **!ticket** neste canal e siga as instruções na DM.\n\n"
             "Opções disponíveis:\n"
@@ -2457,17 +2543,36 @@ async def ticket_mensagem(ctx):
         ),
         color=discord.Color.blue()
     )
-    embed.set_footer(text="Use o comando !ticket para abrir um ticket.")
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1380564680552091789/1445202774756298752/JINXED_7.png?ex=692f7d78&is=692e2bf8&hm=23728dc10a7f583a4a4210f09c6cf5ec4555ee640fedd190de239bb5639b06f8&")
-    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749579605119148/discotools-xyz-icon.png?ex=692fd1a5&is=692e8025&hm=c5bc7e74adbb2ea7dfa4f3340d48d94cc51818dcfb936f9ebb56aaaccd44bb8f&")
+
+    embed.set_footer(text="💡 Dica: habilite mensagens no privado para que o bot consiga te enviar DMs.")
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1380564680552091789/1445202774756298752/JINXED_7.png")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749579605119148/discotools-xyz-icon.png")
+
     try:
         msg = await ctx.send(embed=embed)
+
+        cursor.execute(
+            """
+            INSERT INTO ticket_mensagem (message_id, autor_mensagem_id, canal_id)
+            VALUES (%s, %s, %s)
+            """,
+            (msg.id, ctx.author.id, ctx.channel.id)
+        )
+        conn.commit()
+
         global TICKET_EMBED_MESSAGE_ID
         TICKET_EMBED_MESSAGE_ID = msg.id
+
         await ctx.message.delete()
+
     except Exception as e:
         logging.error(f"Falha ao enviar ticket_mensagem: {e}")
-        return await ctx.send("❌ Não foi possível enviar a mensagem de ticket.")
+        await ctx.send("❌ Não foi possível enviar a mensagem de ticket.")
+
+    finally:
+        cursor.close()
+        conn.close()
+
 
     return
 
@@ -2489,9 +2594,9 @@ async def ticket (ctx):
             "Olá! Vi que você solicitou o seu ticket.\n\n"
             "O que você deseja?\n"
             "Digite o número da opção:\n"
-            "1️⃣ Ajuda do servidor\n"
-            "2️⃣ Recuperar cargo perdido\n"
-            "3️⃣ Denúncia"
+            "<:44273helpids:1451964392202567731>| <:62797minecraftblue1:1451965466833846292> Ajuda do servidor\n"
+            "<:85946supportids:1451964721006641265> | <:43507minecraftblue2:1451965468889059478> Recuperar cargo perdido\n"
+            "<:18181report:1451965090851979457>| <:74240minecraftblue3:1451965470390358046> Denúncia"
         )
     except:
         return await ctx.send("❌ Não consegui enviar DM. Ative sua DM para continuar.")
