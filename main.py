@@ -112,8 +112,6 @@ def pegar_torcedores(time):
 
 
 
-
-
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
@@ -198,7 +196,14 @@ CONQUISTAS = {
         "descricao": "Jogue o mesmo jogo em call com 2 amigos.",
         "cargo": "Party na Call",
         "tipo": "grupo"  
+    },
+        "rei_do_mural": {
+        "nome": "❤️ Rei do Mural",
+        "descricao": "Teve o post mais curtido do mês no mural.",
+        "cargo": "Rei do Mural",
+        "tipo": "mensal"
     }
+
 }
 
 
@@ -241,6 +246,8 @@ async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, f
     conquistas_existentes = {row[0] for row in cursor.fetchall()}
 
     for key, conquista in CONQUISTAS.items():
+        if "condicao" not in conquista:
+            continue
         if key == 'insistente_pelucia':
             # Para a conquista 'insistente_pelucia', passamos um dicionário com os valores necessários
             condicao_ok = conquista["condicao"]({
@@ -571,46 +578,72 @@ async def on_reaction_add(reaction, user):
     message = reaction.message
     emoji = str(reaction.emoji)
 
-    
-
     # ======================================================
     # 1) SISTEMA DE POSTS (👍 / 👎)
     # ======================================================
-    if message.channel.id == 1386805780140920954:
-        tipo = None
-        if emoji == "👍":
-            tipo = "up"
-        elif emoji == "👎":
-            tipo = "down"
+    CANAL_MURAL_ID = 1386805780140920954
 
-        if tipo:
-            conexao = conectar_vips()
-            cursor = conexao.cursor()
+    if message.channel.id != CANAL_MURAL_ID:
+        return
 
-            try:
-                cursor.execute(
-                    "INSERT INTO reacoes (message_id, user_id, tipo) VALUES (%s, %s, %s)",
-                    (message.id, user.id, tipo)
-                )
-                conexao.commit()
-            except:
-                pass  # já votou
+    if emoji not in ("👍", "👎"):
+        return
 
-            cursor.execute(
-                "SELECT COUNT(*) FROM reacoes WHERE message_id=%s AND tipo=%s",
-                (message.id, tipo)
-            )
-            count = cursor.fetchone()[0]
+    tipo = "up" if emoji == "👍" else "down"
 
-            if tipo == "up":
-                cursor.execute("UPDATE posts SET upvotes=%s WHERE id=%s", (count, message.id))
-            else:
-                cursor.execute("UPDATE posts SET downvotes=%s WHERE id=%s", (count, message.id))
+    conexao = conectar_vips()
+    cursor = conexao.cursor()
 
-            conexao.commit()
-            cursor.close()
-            conexao.close()
-            return  # impede que passe para apostas
+    try:
+        # impede votar no próprio post
+        cursor.execute(
+            "SELECT user_id FROM posts WHERE id = %s",
+            (message.id,)
+        )
+        autor = cursor.fetchone()
+
+        if autor and autor[0] == user.id:
+            return
+
+        # remove voto anterior (se existir)
+        cursor.execute(
+            "DELETE FROM reacoes WHERE message_id=%s AND user_id=%s",
+            (message.id, user.id)
+        )
+
+        # insere novo voto
+        cursor.execute(
+            "INSERT INTO reacoes (message_id, user_id, tipo) VALUES (%s, %s, %s)",
+            (message.id, user.id, tipo)
+        )
+
+        # recalcula votos
+        cursor.execute(
+            "SELECT COUNT(*) FROM reacoes WHERE message_id=%s AND tipo='up'",
+            (message.id,)
+        )
+        upvotes = cursor.fetchone()[0]
+
+        cursor.execute(
+            "SELECT COUNT(*) FROM reacoes WHERE message_id=%s AND tipo='down'",
+            (message.id,)
+        )
+        downvotes = cursor.fetchone()[0]
+
+        cursor.execute(
+            "UPDATE posts SET upvotes=%s, downvotes=%s WHERE id=%s",
+            (upvotes, downvotes, message.id)
+        )
+
+        conexao.commit()
+
+    except Exception as e:
+        logging.error(f"Erro ao processar reação no mural: {e}")
+
+    finally:
+        cursor.close()
+        conexao.close()
+
 
     # ======================================================
     # 2) SISTEMA DE APOSTAS
@@ -856,10 +889,47 @@ async def sincronizar_reacoes():
     cursor.close()
     conexao.close()
 
+async def conceder_conquista_manual(member, conquista_id):
+    conquista = CONQUISTAS.get(conquista_id)
+    if not conquista:
+        return
+    conexao = conectar_vips()
+    cursor = conexao.cursor()
+    cursor.execute("""
+        SELECT 1 FROM conquistas_desbloqueadas
+        WHERE user_id = %s AND conquista_id = %s
+    """, (member.id, conquista_id))
+    if cursor.fetchone():
+        cursor.close()
+        conexao.close()
+        return
+    cursor.execute("""
+        INSERT INTO conquistas_desbloqueadas (user_id, conquista_id)
+        VALUES (%s, %s)
+    """, (member.id, conquista_id))
+    conexao.commit()
+    cargo = discord.utils.get(member.guild.roles, name = conquista ["cargo"])
+    if cargo and cargo not in member.roles:
+        await member.add_roles(cargo)
+
+    embed = discord.Embed(
+        title="🏆 Nova Conquista!",
+        description=f"**{conquista['nome']}**\n{conquista['descricao']}",
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text="Parabéns pelo destaque no servidor!")
+    try:
+        await member.send(embed=embed)
+    except:
+        pass
+    cursor.close()
+    conexao.close()
+
+
 @tasks.loop(hours=24)
 async def ranking_mensal():
     agora = datetime.now()
-    
+
     # define o mês anterior
     if agora.month == 1:
         mes = 12
@@ -867,7 +937,7 @@ async def ranking_mensal():
     else:
         mes = agora.month - 1
         ano = agora.year
-    
+
     primeiro_dia = datetime(ano, mes, 1)
     ultimo_dia = datetime(ano, mes, monthrange(ano, mes)[1], 23, 59, 59)
 
@@ -897,7 +967,6 @@ async def ranking_mensal():
             mes,
             ano
         ))
-        logging.info("Inserindo o post mensal")
 
         # limpa posts do mês encerrado
         cursor.execute("""
@@ -906,18 +975,24 @@ async def ranking_mensal():
         """, (primeiro_dia, ultimo_dia))
 
         conexao.commit()
-        logging.info("Deleta dos posts")
 
-        user = await bot.fetch_user(top_post["user_id"])
         channel = bot.get_channel(1386805780140920954)
+        user = await bot.fetch_user(top_post["user_id"])
+
         await channel.send(
             f"<a:489897catfistbump:1414720257720848534> "
             f"Usuário com o post mais curtido do mês {mes}/{ano}: {user.mention}! "
             f"<a:a36fc0b021624a25b50e1bd237cd024c:1411136694844915902>"
         )
 
+        # ✅ AGORA SIM: concede a conquista
+        member = channel.guild.get_member(top_post["user_id"])
+        if member:
+            await conceder_conquista_manual(member, "rei_do_mural")
+
     cursor.close()
     conexao.close()
+
 
     
 
@@ -985,65 +1060,188 @@ async def vip_mensagem(ctx):
     with open("vip.json", "w") as f:
         json.dump({"vip_message_id": vip_message_id}, f)
 
+
+def embed_clipe_resultado(tipo:str, autor: discord.Member, pontos: int):
+    if tipo == "risada":
+        cor = discord.Color.green()
+        titulo = "😂 Clipe aprovado!"
+        descricao = f"{autor.mention} ganhou **+{pontos} pontos**!"
+    else:
+        cor = discord.Color.red()
+        titulo = "💩 Clipe flopou!"
+        descricao = f"{autor.mention} perdeu **{abs(pontos)} pontos**!"
+
+    embed = discord.Embed(
+        title=titulo,
+        description=descricao,
+        color=cor
+    )
+    embed.set_footer(text="Sistema de clipes")
+
+    return embed
+
 vip_message_id = None
 
 
 apostas_ativas = {}
 
-CARGOS_POR_REACAO = {
-    "<a:22db139b5bff4e4389db335417680d19:1409886253658279936>": "Pelúcia Goku",
-    "<:3938dantesmile:1437791755096293510>": "Pelúcia Dante"
-}
-
 @bot.event
 async def on_raw_reaction_add(payload):
+
+    # Ignora reações do próprio bot
     if payload.user_id == bot.user.id:
         return
 
     guild = bot.get_guild(payload.guild_id)
-    if guild is None:
+    if not guild:
         return
 
-    emoji = str(payload.emoji)
+    emoji_str = str(payload.emoji)
 
-    # Se não for um emoji válido, ignora
-    if emoji not in CARGOS_POR_REACAO:
+    # ==================================================
+    #  SISTEMA DE PELÚCIAS (TOTALMENTE ISOLADO)
+    # ==================================================
+    if emoji_str in CARGOS_POR_REACAO:
+        member = guild.get_member(payload.user_id)
+        if not member:
+            return
+
+        nome_pelucia = CARGOS_POR_REACAO[emoji_str]
+        cargo_pelucia = discord.utils.get(guild.roles, name=nome_pelucia)
+
+        if not cargo_pelucia:
+            return
+
+        # Verifica se alguém já possui essa pelúcia
+        for m in guild.members:
+            if cargo_pelucia in m.roles:
+                try:
+                    await member.send(
+                        "😢 Essa pelúcia é exclusiva e já foi resgatada por outra pessoa."
+                    )
+                except discord.Forbidden:
+                    pass
+                return
+
+        # Dá a pelúcia
+        try:
+            await member.add_roles(cargo_pelucia)
+            logging.info(
+                f"🎁 Pelúcia '{nome_pelucia}' concedida para {member.id}"
+            )
+        except discord.Forbidden:
+            logging.error(
+                f"Sem permissão para adicionar o cargo '{nome_pelucia}'"
+            )
+        return  # ⛔ IMPORTANTE: não deixa cair no sistema de clipes
+
+    # ==================================================
+    #  SISTEMA DE CLIPES
+    # ==================================================
+    if payload.channel_id != CANAL_CLIPES:
         return
 
-    member = guild.get_member(payload.user_id)
-    if member is None:
+    if payload.emoji.name not in (EMOJI_RISADA, EMOJI_BOSTA):
         return
 
-    pelucia_secreta = CARGOS_POR_REACAO[emoji]
-    cargo_pelucia = discord.utils.get(guild.roles, name=pelucia_secreta)
-
-    if not cargo_pelucia:
+    channel = bot.get_channel(payload.channel_id)
+    if not channel:
         return
 
-    # 🔒 Verifica se alguém já possui essa pelúcia
-    for m in guild.members:
-        if cargo_pelucia in m.roles:
-            try:
-                await member.send(
-                    "Oi! Vi que você reagiu ao emoji para conseguir a pelúcia, "
-                    "mas infelizmente essa pelúcia é exclusiva e já foi pega 😢"
+    message = await channel.fetch_message(payload.message_id)
+
+    # Busca o clipe no banco
+    con = conectar_futebol()
+    cur = con.cursor(dictionary=True)
+
+    cur.execute(
+        """
+        SELECT autor_id, risada_aplicada, bosta_aplicada
+        FROM clipes
+        WHERE message_id = %s
+        """,
+        (message.id,)
+    )
+    dados = cur.fetchone()
+
+    if not dados:
+        cur.close()
+        con.close()
+        return
+
+    autor_id = dados["autor_id"]
+
+    # Autor não pode reagir no próprio clipe
+    if payload.user_id == autor_id:
+        cur.close()
+        con.close()
+        return
+
+    # Conta reações válidas
+    reaction = discord.utils.get(message.reactions, emoji=payload.emoji.name)
+    if not reaction:
+        cur.close()
+        con.close()
+        return
+
+    total_validas = 0
+    async for user in reaction.users():
+        if not user.bot and user.id != autor_id:
+            total_validas += 1
+
+    logging.info(
+        f"[CLIPES] {payload.emoji.name} = {total_validas} | mensagem {message.id}"
+    )
+
+    # ==================================================
+    #  APLICAÇÃO DE PONTOS
+    # ==================================================
+
+    # 😂 RISADA → +100 pontos
+    if payload.emoji.name == EMOJI_RISADA:
+        if total_validas >= RISADAS_NECESSARIAS and not dados["risada_aplicada"]:
+
+            adicionar_pontos_db(
+                user_id=autor_id,
+                pontos=PONTOS_RISADA
+            )
+
+            cur.execute(
+                "UPDATE clipes SET risada_aplicada = TRUE WHERE message_id = %s",
+                (message.id,)
+            )
+            con.commit()
+
+            autor = guild.get_member(autor_id)
+            if autor:
+                await channel.send(
+                    embed=embed_clipe_resultado("risada", autor, PONTOS_RISADA)
                 )
-            except discord.Forbidden:
-                pass
-            return  # ⛔ PARA AQUI — não adiciona o cargo
 
-    # ✅ Se chegou aqui, ninguém tem a pelúcia
-    try:
-        await member.add_roles(cargo_pelucia)
-        logging.info(
-            f"<a:995589misathumb:1443956356846719119> Parabéns! Você conseguiu a pelúcia secreta **{pelucia_secreta}** feita para o usuário {member.id}"
-        )
-    except discord.Forbidden:
-        logging.error(
-            f"Sem permissão para adicionar o cargo '{pelucia_secreta}' ao usuário {member.id}"
-        )
+    # 💩 BOSTA → -50 pontos
+    if payload.emoji.name == EMOJI_BOSTA:
+        if total_validas >= BOSTAS_NECESSARIAS and not dados["bosta_aplicada"]:
 
-   
+            adicionar_pontos_db(
+                user_id=autor_id,
+                pontos=PONTOS_BOSTA
+            )
+
+            cur.execute(
+                "UPDATE clipes SET bosta_aplicada = TRUE WHERE message_id = %s",
+                (message.id,)
+            )
+            con.commit()
+
+            autor = guild.get_member(autor_id)
+            if autor:
+                await channel.send(
+                    embed=embed_clipe_resultado("bosta", autor, PONTOS_BOSTA)
+                )
+
+    cur.close()
+    con.close()
+
 
 
     # ============================
@@ -1410,6 +1608,9 @@ BOT_REACTION = [
 ]
 CANAL_SEJA_VIP = 1381380248511447040
 ID_CARGO_MUTE = 1445066766144376934
+CANAL_CLIPES = 1452062186016079903  # ID do canal de clipes
+EMOJI_RISADA = "😂"
+EMOJI_BOSTA = "💩"
 @bot.event
 async def on_message(message):
 
@@ -1440,7 +1641,38 @@ async def on_message(message):
                     await message.delete()
                 except:
                     pass
-                return  # MUITO IMPORTANTE
+                return  
+    
+    # ======================
+    #  SISTEMA DE CLIPES 
+    # ======================
+    if message.channel.id == CANAL_CLIPES:
+    
+        if not message.attachments and "http" not in message.content.lower():
+            await bot.process_commands(message)
+            return
+        try:
+            await message.add_reaction(EMOJI_RISADA)
+            await message.add_reaction(EMOJI_BOSTA)
+
+            con = conectar_futebol()
+            cur = con.cursor()
+            cur.execute(
+            """
+            INSERT IGNORE INTO clipes (message_id, autor_id)
+            VALUES (%s, %s)
+            """,
+                (message.id, message.author.id)
+            )
+            con.commit()
+            cur.close()
+            con.close()
+        except Exception as e:
+            logging.error(f"Erro ao salvar clip: {e}")
+
+    
+    
+
 
     
     
@@ -2741,6 +2973,9 @@ async def ticket (ctx):
         c.execute(sql, (int(id_moderador),))
         qtd = c.fetchone()[0]
         if qtd >= 5:
+            if membro.id == ctx.guild.owner_id:
+                logging.warning("Tentativa de punição no dono do servidor ignorada.")
+                return
             try:
                 cargos_mod = ["Dono", "Moderador"]
                 cargos_para_remover = [
@@ -2756,6 +2991,15 @@ async def ticket (ctx):
                         "Cargos %s removidos de %s (ID: %s) após %s denúncias",
                         cargos_mod, membro, membro.id, qtd
                     )
+                    for admin_id in alertar:
+                        admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
+                        if admin:
+                            await admin.send(
+                            "🚨 **Ação automática aplicada**\n\n"
+                            f"O moderador <@{membro.id}> recebeu **5 denúncias distintas**.\n"
+                            "❌ Seus cargos de moderação/administração foram **removidos automaticamente**.\n\n"
+                            "🔎 Verifique o caso no painel / banco de dados."
+                        )
             except discord.Forbidden:
                 logging.error(
                     "Não foi possível remover cargos de %s (ID: %s) - permissões insuficientes",
@@ -2773,7 +3017,7 @@ async def ticket (ctx):
                 if admin:
                     await admin.send(
                         "⚠️ Alerta de possível abuso de moderação\n\n"
-                        f"O moderador <@{id_moderador}> recebeu denúncias de 3 usuários diferentes.\n"
+                        f"O moderador <@{id_moderador}> recebeu denúncias de 5 usuários diferentes.\n"
                         "Verifique o caso no painel / banco de dados."
                     )
                     logging.info("Alerta enviado para %s sobre %s denúncias de abuso de moderação", admin, qtd)
@@ -3110,8 +3354,9 @@ EMOJI_TIMES = {
     "palmeiras": "<:Palmeiras:1425989650513662044>",
     "lanus": "<:Lanus:1441436509281718383>",
     "atletico paranaense": "<:atlpr:1443398482516775055>",
-    "Coritiba": "<:Coritibaa:1443398813820784660>",
-    "Remo": "<:Remo:1443399201655492708>",
+    "coritiba": "<:Coritibaa:1443398813820784660>",
+    "remo": "<:Remo:1443399201655492708>",
+    "chapecoense" :"<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
 
 
     # =======================
@@ -3606,6 +3851,10 @@ MAPEAMENTO_TIMES = {
 
     # RB Bragantino
     "rb bragantino": "bragantino",
+    #Chapecoense
+    "associação chapecoense de futebol": "chapecoense",
+    "chapecoense": "chapecoense",
+    "chapecoense fc": "chapecoense",
 
     # Mirassol
     "mirassol sp": "mirassol",
@@ -3881,7 +4130,7 @@ GIFS_VITORIA_TIME = {
     # =======================
     # 🇧🇷 CLUBES BRASILEIROS 2025
     # =======================
-    "atlético mineiro": "https://tenor.com/view/galo-maior-de-minas-atletico-mg-torcida-torcida-atletico-mg-gif-14052109660678177266",  # galo
+    "atlético mineiro": "https://cdn.discordapp.com/attachments/704107435295637605/1452323837890007070/atletico-mineiro-galo-doido.gif?ex=69496579&is=694813f9&hm=65d76d8ada459f0523286f43e5cde68c79468d63920b337b7e2bda4073f55f20&",  # galo
     "athletico paranaense": "https://tenor.com/view/cuello-athletico-athletico-paranaense-furac%C3%A3o-libertadores-gif-27471283",
     "bahia": "https://tenor.com/view/bahia-bahea-estadio-arena-fonte-nova-torcida-gif-17380352373142877404",
     "botafogo": "https://tenor.com/view/mundial-de-clubes-brasil-hexa-hexa-brasil-textor-john-textor-gif-538715909373386053",
@@ -3910,7 +4159,7 @@ GIFS_VITORIA_TIME = {
 FALAS_BOT = {
     "atlético mineiro": [
         "AQUUUUUUUUUUUUUUUUUUUI É GALO P#RRAAAAAAAAAAAAAAAAAAAAAAAAAA!!!! 🐓🔥🔥",
-        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL DO GALO!!!!! ⚡⚡⚡",
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALOOOO!!!!! ⚡⚡⚡",
         "É GALO, É GAAAAAAAAAAALO, É MAIOR DE MINAS!!!! 🏆🏆🏆",
         "VITÓRIAAAAA DO GALO CARAAAAAALHO!!! 🔥🔥🔥",
         "GAAAAAAAAAAAAAAAAAAAAAALOOOOOOOOOO! TORCIDA EM ÊXTASE!!! 🙌🙌🙌"
@@ -5457,6 +5706,7 @@ async def lista_times(ctx):
     await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou a lista de times.")
 
+
 #Mostrar os torcedores do servidor
 @bot.command()
 async def torcedores(ctx):
@@ -5507,6 +5757,21 @@ async def torcedores(ctx):
         logging.info(f"Ocorreu um erro ao listar os torcedores: {e}")
         await ctx.send(f"Ocorreu um erro ao listar os torcedores: {e}")
 
+@bot.event()
+async def on_member_remove(member):
+    try:
+        conn = conectar_futebol
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM times_usuarios WHERE user_id = %s",
+            (member.id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logging.info(f"Usuário {member.id} removido do banco ao sair do servidor.")
+    except Exception as e:
+        logging.error(f"Erro ao remover o usuário do banco de dados {e}")
 
 
 # ----- CÓDIGO PARA VER TODOS OS COMANDOS ADMIN -----
@@ -5526,6 +5791,7 @@ async def admin(ctx):
             "**!resetar_jogo** — limpa as apostas de um jogo\n"
             "**!fixture_id** — busca informações de uma partida\n"
             "**!terminar_jogo** — finaliza e processa resultados\n"
+            "**!resetar_mensagens** - reseta as mensagens\n"
         ),
         inline=False
     )
