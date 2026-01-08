@@ -132,78 +132,69 @@ CONQUISTAS = {
     "conversador_nato": {
         "nome": "🗣️ Conversador Nato",
         "descricao": "Envie 2000 mensagens na semana.",
-        "condicao": lambda msgs, acertos, doacao, vip, call_time: msgs >= 2000,
+        "condicao": lambda d: d['mensagens_semana'] >= 2000,
         "cargo": "Conversador Nato"
     },
     "mente_calculada": {
         "nome": "🧠 Mente Calculada",
         "descricao": "Acerte 3 apostas consecutivas.",
-        "condicao": lambda msgs, acertos, doacao, vip, call_time: acertos >= 3,
+        "condicao": lambda d: d['acertos_consecutivos'] >= 3,
         "cargo": "Mente Calculada"
     },
     "oraculo": {
         "nome": "🔮 O Oráculo",
         "descricao": "Acerte 5 apostas consecutivas.",
-        "condicao": lambda msgs, acertos, doacao, vip, call_time: acertos >= 5,
+        "condicao": lambda d: d['acertos_consecutivos'] >= 5,
         "cargo": "O Oráculo"
     },
     "lenda_apostas": {
         "nome": "🏆 Lenda das Apostas",
         "descricao": "Acerte 10 apostas consecutivas.",
-        "condicao": lambda msgs, acertos, doacao, vip, call_time: acertos >= 10,
+        "condicao": lambda d: d['acertos_consecutivos'] >= 10,
         "cargo": "Lenda das Apostas"
     },
     "apoiador": {
         "nome": "💸 Apoiador",
-        "descricao": "Faça uma doação.",
-        "condicao": lambda msgs, acertos, doacao, vip, call_time: doacao,
+        "descricao": "Faça uma doação de R$50.",
+        "condicao": lambda d: d['fez_doacao'],
         "cargo": "TAKE MY MONEY"
     },
     "coroado": {
-        "nome": "👑 Coroado",
+        "nome": "<a:thekings:1449048326937772147> Coroado",
         "descricao": "Ganhe VIP.",
-        "condicao": lambda msgs, acertos, doacao, vip, call_time: vip,
+        "condicao": lambda d: d['tem_vip'],
         "cargo": "Coroado"
     },
     "conversador_em_call": {
         "nome": "📞 Conversador em Call",
         "descricao": "Fique 50 horas em call de voz (acumulado).",
-        "condicao": lambda msgs, acertos, doacao, vip, call_time: call_time >= 180000,
+        "condicao": lambda d: d['tempo_em_call'] >= 180000,
         "cargo": "Conversador em Call"
     },
     "chamando_ajuda": {
         "nome": "🤖 Alô Miisha?",
         "descricao": "Mencione a bot Miisha para pedir ajuda.",
-        # A condição é simples: se 'mencionou_miisha' for True, ganha.
-        "condicao": lambda msgs, acertos, doacao, vip, call_time, mencionou_miisha: mencionou_miisha,
+        "condicao": lambda d: d['mencionou_miisha'],
         "cargo": "Amigo da IA"
     },
     "dj_sarah": {
         "nome": "🎧 DJ da Sarah",
         "descricao": "Toque uma música usando a Sarah.",
-        # A condição é simples: se tocou_musica for True, ganha.
-        "condicao": lambda msgs, acertos, doacao, vip, call_time, mencionou_miisha, tocou_musica: tocou_musica,
+        "condicao": lambda d: d['tocou_musica'],
         "cargo": "DJ da Sarah"
     },
     "insistente_pelucia": {
-    "nome": "🧸 Insistente da Pelúcia",
-    "descricao": "Mencione o bot 100 vezes pedindo pelúcia.",
-    "condicao": lambda d: d["mencoes_bot"] >= 100 and not d["bloqueado"],
-    "cargo": "Pelúcia Darwin"
+        "nome": "🧸 Insistente da Pelúcia",
+        "descricao": "Mencione o bot 100 vezes.",
+        "condicao": lambda d: d["mencoes_bot"] >= 100 and not d.get("bloqueado", False),
+        "cargo": "Pelúcia Darwin"
     },
-        "party_na_call": {
+    "party_na_call": {
         "nome": "🎮 Party na Call",
-        "descricao": "Jogue o mesmo jogo em call com 2 amigos.",
-        "cargo": "Party na Call",
-        "tipo": "grupo"  
-    },
-        "rei_do_mural": {
-        "nome": "❤️ Rei do Mural",
-        "descricao": "Teve o post mais curtido do mês no mural.",
-        "cargo": "Rei do Mural",
-        "tipo": "mensal"
+        "descricao": "Esteja em uma call com mais 2 pessoas jogando o mesmo jogo.",
+        "condicao": lambda d: False,  # Concedida manualmente via detecção de jogo
+        "cargo": "Party na Call"
     }
-
 }
 
 
@@ -223,14 +214,37 @@ def get_mencoes_bot(user_id):
 
 
 
-async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, fez_doacao, tem_vip, tempo_em_call=0, mencionou_miisha = False, tocou_musica=False, mencoes_bot=0):
+async def processar_conquistas(
+    member,
+    mensagens_semana,
+    acertos_consecutivos,
+    fez_doacao,
+    tem_vip,
+    tempo_em_call=0,
+    mencionou_miisha=False,
+    tocou_musica=False,
+    mencoes_bot=0
+):
+    dados = {
+        "mensagens_semana": mensagens_semana,
+        "acertos_consecutivos": acertos_consecutivos,
+        "fez_doacao": fez_doacao,
+        "tem_vip": tem_vip,
+        "tempo_em_call": tempo_em_call,
+        "mencionou_miisha": mencionou_miisha,
+        "tocou_musica": tocou_musica,
+        "mencoes_bot": mencoes_bot,
+        "bloqueado": False
+    }
+
     desbloqueadas = []
     bloqueadas = []
     novas_conquistas = []
 
-    # Verificar se o usuário já tem as conquistas salvas
     conexao = conectar_vips()
     cursor = conexao.cursor()
+
+    # Garantir tabela
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS conquistas_desbloqueadas (
             user_id BIGINT,
@@ -240,49 +254,31 @@ async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, f
         )
     """)
     conexao.commit()
-    
+
     # Buscar conquistas já desbloqueadas
-    cursor.execute("SELECT conquista_id FROM conquistas_desbloqueadas WHERE user_id = %s", (member.id,))
+    cursor.execute(
+        "SELECT conquista_id FROM conquistas_desbloqueadas WHERE user_id = %s",
+        (member.id,)
+    )
     conquistas_existentes = {row[0] for row in cursor.fetchall()}
 
     for key, conquista in CONQUISTAS.items():
-        if "condicao" not in conquista:
-            continue
-        
         try:
-            if key == 'insistente_pelucia':
-                condicao_ok = conquista["condicao"]({
-                    'mencoes_bot': mencoes_bot,
-                    'bloqueado': False
-                })
-            elif key == 'chamando_ajuda':
-                condicao_ok = conquista["condicao"](
-                    mensagens_semana, acertos_consecutivos, fez_doacao, 
-                    tem_vip, tempo_em_call, mencionou_miisha
-                )
-            elif key == 'dj_sarah':
-                condicao_ok = conquista["condicao"](
-                    mensagens_semana, acertos_consecutivos, fez_doacao, 
-                    tem_vip, tempo_em_call, mencionou_miisha, tocou_musica
-                )
-            else:
-                # Para as conquistas que usam apenas 5 argumentos
-                condicao_ok = conquista["condicao"](
-                    mensagens_semana, acertos_consecutivos, 
-                    fez_doacao, tem_vip, tempo_em_call
-                )
+            condicao_ok = conquista["condicao"](dados)
         except Exception as e:
-            logging.error(f"Erro ao verificar condição da conquista {key}: {e}")
+            logging.error(f"Erro na conquista {key}: {e}")
             continue
-        
+
         texto = f"**{conquista['nome']}**\n{conquista['descricao']}"
 
-        if condicao_ok:
+        ja_no_banco = key in conquistas_existentes
+        desbloqueada = ja_no_banco or condicao_ok
+
+        if desbloqueada:
             desbloqueadas.append(texto)
-            
-            # Verificar se é uma conquista nova
-            if key not in conquistas_existentes:
-                # Registrar a conquista como desbloqueada
+
+            # Registrar no banco se for nova
+            if condicao_ok and not ja_no_banco:
                 try:
                     cursor.execute(
                         "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
@@ -290,54 +286,59 @@ async def processar_conquistas(member, mensagens_semana, acertos_consecutivos, f
                     )
                     conexao.commit()
                     novas_conquistas.append(conquista)
+                    logging.info(f"Conquista desbloqueada: {conquista['nome']} para {member.display_name} ({member.id})")
                 except Exception as e:
                     logging.error(f"Erro ao registrar conquista {key} para {member}: {e}")
 
-            # === ENTREGA DE CARGO AUTOMÁTICA ===
-            cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
-            if cargo and cargo not in member.roles:
-                try:
-                    await member.add_roles(cargo)
-                except Exception as e:
-                    logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
+            # === ENTREGA DE CARGO (sempre que desbloqueada) ===
+            if member.guild:
+                cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
+                if cargo and cargo not in member.roles:
+                    try:
+                        await member.add_roles(cargo)
+                    except Exception as e:
+                        logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
         else:
             bloqueadas.append(texto)
-    
+
     cursor.close()
     conexao.close()
-    
-    # Enviar mensagem de notificação para conquistas novas
+
+    # === NOTIFICAÇÃO DE NOVAS CONQUISTAS ===
     if novas_conquistas:
         try:
             embed = discord.Embed(
                 title="<a:44503lockkey:1457473730329710706> Nova Conquista Desbloqueada!",
                 color=discord.Color.gold()
             )
-            
+
             for conquista in novas_conquistas:
                 embed.add_field(
                     name=conquista["nome"],
                     value=f"<:55105yippee:1450627092336082945> Parabéns! {conquista['descricao']}",
                     inline=False
                 )
-            
+
             embed.set_footer(text="Use !conquistas para ver todas as suas conquistas!")
-            
+
             try:
                 await member.send(embed=embed)
             except discord.Forbidden:
-                # Se não for possível enviar DM, tenta enviar no canal atual
-                channel = member.guild.get_channel(CANAL_AVISO_ID)
-                if channel:
-                    await channel.send(f"{member.mention}, você desbloqueou uma nova conquista! Verifique sua DM.")
-                    try:
-                        await member.send(embed=embed)
-                    except:
-                        pass
+                if member.guild:
+                    channel = member.guild.get_channel(CANAL_AVISO_ID)
+                    if channel:
+                        await channel.send(
+                            f"{member.mention}, você desbloqueou uma nova conquista! Verifique sua DM."
+                        )
+                        try:
+                            await member.send(embed=embed)
+                        except:
+                            pass
         except Exception as e:
             logging.error(f"Erro ao enviar notificação de conquista para {member}: {e}")
 
     return desbloqueadas, bloqueadas
+
 
 CHAT_GERAL = 1380564680552091789
 
@@ -378,19 +379,20 @@ async def desbloquear_conquistas_em_grupo(guild, user_ids, conquista_id):
             except:
                 pass
             novos.append(member)
-            cursor.close()
-            conexao.close()
 
-            if novos:
-                embed = discord.Embed(
+    cursor.close()
+    conexao.close()
+
+    if novos:
+        embed = discord.Embed(
             title="<a:8377gamingcontroller:1451333843486376151> Conquista em Grupo Desbloqueada!",
             description=f"Vocês desbloquearam **{conquista['nome']}**!\n{conquista['descricao']}",
             color=discord.Color.green()
-                )
-            mentions = " ".join(m.mention for m in novos)
-            canal = guild.get_channel(CHAT_GERAL)
-            if canal:
-                await canal.send(mentions, embed=embed)
+        )
+        mentions = " ".join(m.mention for m in novos)
+        canal = guild.get_channel(CHAT_GERAL)
+        if canal:
+            await canal.send(mentions, embed=embed)
 
 
 mensagens_bom_dia = [
@@ -820,7 +822,7 @@ async def verificar_posts():
         canais = tuple(CANAIS_PERMITIDOS) if CANAIS_PERMITIDOS else (0,)
         
         cursor.execute("""
-            SELECT id, channel_id, upvotes, downvotes, timestamp, author_id
+            SELECT id, channel_id, upvotes, downvotes, timestamp, user_id
             FROM posts 
             WHERE removed = FALSE 
             AND timestamp <= (NOW() - INTERVAL %s DAY)
@@ -852,14 +854,14 @@ async def verificar_posts():
                     
                     # Notificar o autor
                     try:
-                        autor = await bot.fetch_user(post["author_id"])
+                        autor = await bot.fetch_user(post["user_id"])
                         if autor:
                             await autor.send(f"Seu post em #{channel.name} foi removido por receber mais downvotes que upvotes após 7 dias.")
                     except Exception as e:
-                        logging.error(f"Erro ao notificar autor {post['author_id']}: {e}")
+                        logging.error(f"Erro ao notificar autor {post['user_id']}: {e}")
                     
                     remocoes += 1
-                    logging.info(f"Post {post['id']} do usuário {post['author_id']} removido por votos negativos.")
+                    logging.info(f"Post {post['id']} do usuário {post['user_id']} removido por votos negativos.")
                     
                 except discord.NotFound:
                     logging.warning(f"Post {post['id']} não encontrado, marcando como removido.")
@@ -931,6 +933,7 @@ async def conceder_conquista_manual(member, conquista_id):
         VALUES (%s, %s)
     """, (member.id, conquista_id))
     conexao.commit()
+    logging.info(f"Conquista manual concedida: {conquista['nome']} para {member.display_name} ({member.id})")
     cargo = discord.utils.get(member.guild.roles, name = conquista ["cargo"])
     if cargo and cargo not in member.roles:
         await member.add_roles(cargo)
@@ -1500,9 +1503,11 @@ async def dar_vip(ctx, membro: discord.Member, duracao: str):
 
         try:
             await membro.send(f"<:Jinx_Watching:1390380695712694282> Você recebeu VIP por {duracao}!")
+            logging.info(f"Vip dado ao usuário {membro.display_name} ({membro.id}) por {duracao}")
         except:
             pass
         await ctx.send(f"<:Jinx_Watching:1390380695712694282> {membro.display_name} agora é VIP por {duracao}.")
+        logging.info(f"VIP concedido com sucesso: {membro.display_name} ({membro.id}) por {duracao}")
     except Exception as e:
         await ctx.send("❌ Erro ao salvar VIP no banco de dados.")
         logging.error(f"Erro dar_vip: {e}")
@@ -1670,6 +1675,7 @@ BOT_REACTION = [
 "Me mencionar não te deixa mais interessante.",
 "Eu tenho limites… você não deveria testá-los."
 ]
+
 CANAL_SEJA_VIP = 1381380248511447040
 ID_CARGO_MUTE = 1445066766144376934
 CANAL_CLIPES = 1452062186016079903  # ID do canal de clipes
@@ -1696,6 +1702,7 @@ async def on_message(message):
         conn.close()
 
         if not registro:
+            await bot.process_commands(message)
             return
 
         message_oficial_id = registro["message_id"]
@@ -2051,11 +2058,14 @@ async def on_message(message):
     
         # Calcular tempo em call (em segundos)
         call_db = calcular_tempo_total_em_call(message.author.id, message.guild.id) if message.guild else 0
+        # Garantir que não seja None
+        if call_db is None:
+            call_db = 0
     
         cursor.close()
         conexao.close()
     
-        logging.info(f"Dados do usuário {message.author.id}: msgs={msgs_db}, acertos={acertos_db}, doacao={doacao_db}, vip={vip_db}, call={call_db}")
+        
     
         ID_DA_MIISHA = 1272457532434153472 
         marcou_a_miisha = any(user.id == ID_DA_MIISHA for user in message.mentions)
@@ -2120,7 +2130,10 @@ def registrar_saida_call(user_id: int, guild_id: int) -> int:
             entry_time = resultado['entry_time']
             exit_time = datetime.now()
             tempo_em_call_segundos = int((exit_time - entry_time).total_seconds())
-            
+            cursor.execute(
+                "INSERT INTO voice_time_history (user_id, guild_id, session_duration) VALUES (%s, %s, %s)",
+                (user_id, guild_id, tempo_em_call_segundos)
+            )
             # Deletar o registro de entrada
             cursor.execute(
                 "DELETE FROM user_voice_status WHERE user_id = %s AND guild_id = %s AND entry_time = %s",
@@ -2141,35 +2154,55 @@ def registrar_saida_call(user_id: int, guild_id: int) -> int:
         return 0
 
 def calcular_tempo_total_em_call(user_id: int, guild_id: int) -> int:
-    """
-    Calcula o tempo total acumulado de um usuário em calls (em segundos).
-    Leva em conta entradas ativas (ainda não terminadas) e histórico de saídas.
-    """
     try:
+        logging.debug(f"Calculando tempo total para user_id={user_id}, guild_id={guild_id}")
         conn = conectar_vips()
         cursor = conn.cursor(dictionary=True)
         
         tempo_total = 0
         
-        # Buscar entradas ativas (ainda não terminadas)
+        # Entradas ativas
         cursor.execute(
             "SELECT entry_time FROM user_voice_status WHERE user_id = %s AND guild_id = %s",
             (user_id, guild_id)
         )
         resultados_ativos = cursor.fetchall()
+        logging.debug(f"Entradas ativas encontradas: {len(resultados_ativos)}")
         
+        # Histórico
+        cursor.execute(
+            "SELECT SUM(session_duration) AS total FROM voice_time_history WHERE user_id = %s AND guild_id = %s",
+            (user_id, guild_id)
+        )
+        resultado = cursor.fetchone()
+        historico = resultado.get('total', 0) if resultado and resultado.get('total') is not None else 0
+        logging.debug(f"Histórico de tempo: {historico}s")
+        
+        tempo_total = historico if historico is not None else 0
         agora = datetime.now()
+        
         for entrada in resultados_ativos:
             entry_time = entrada['entry_time']
-            tempo_nessa_sessao = int((agora - entry_time).total_seconds())
-            tempo_total += tempo_nessa_sessao
+            if entry_time is not None:
+                try:
+                    tempo_nessa_sessao = int((agora - entry_time).total_seconds())
+                    if tempo_nessa_sessao is not None and tempo_nessa_sessao > 0 and tempo_total is not None:
+                        tempo_total += tempo_nessa_sessao
+                        logging.debug(f"Sessão ativa: {tempo_nessa_sessao}s")
+                except (TypeError, ValueError, OverflowError) as e:
+                    logging.warning(f"Erro ao calcular tempo da sessão para user_id={user_id}: {e}")
+                    continue
         
         cursor.close()
         conn.close()
         
+        logging.debug(f"Tempo total calculado: {tempo_total}s")
         return tempo_total
     except Exception as e:
-        logging.error(f"Erro ao calcular tempo total em call: {e}")
+        logging.error(
+            f"Erro ao calcular tempo total em call para user_id={user_id}, guild_id={guild_id}: {e}",
+            exc_info=True
+        )
         return 0
 
 @bot.event
@@ -2231,7 +2264,13 @@ async def on_voice_state_update(member, before, after):
                     (user_id,)
                 )
                 resultado_vip = cur_vips.fetchone()
-                tem_vip = resultado_vip is not None
+                cur_vips.execute(
+                    "SELECT user_id FROM loja_vip WHERE user_id = %s AND ativo = 1 AND data_expira > NOW()",
+                    (user_id,)
+                )
+                resultado_loja = cur_vips.fetchone()
+
+                tem_vip = resultado_vip is not None or resultado_loja is not None
                 
                 cur_vips.close()
                 conn_vips.close()
@@ -2359,7 +2398,7 @@ async def on_presence_update(before, after):
             )
             await desbloquear_conquista_em_grupo(
                 guild=channel.guild,
-                user_ids=user_ids,
+                user_ids=jogando[jogo_atual],
                 conquista_id="party_na_call"
             )
             ultimo_envio[jogo_atual] = agora
@@ -2819,7 +2858,11 @@ async def tocar_proxima(ctx, voz):
                 info = ydl.extract_info(url, download=True)
                 arquivo = ydl.prepare_filename(info)
         except Exception as e:
-            await ctx.send(f"❌ Não consegui tocar essa música: {e}")
+            error_msg = str(e)
+            if "DRM" in error_msg:
+                await ctx.send("❌ **Essa música tem proteção DRM e não pode ser tocada.**\n🔍 **Tente outra versão da música ou um link diferente!**")
+            else:
+                await ctx.send(f"❌ Não consegui tocar essa música: {e}")
             return
 
         def depois_de_tocar(error):
@@ -2866,15 +2909,16 @@ async def ticket_mensagem(ctx):
     conn = conectar_vips()
     cursor = conn.cursor()
 
-    # Cria tabela
+    # Cria tabela (compatível com estrutura existente)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ticket_mensagem (
             id INT AUTO_INCREMENT PRIMARY KEY,
             message_id BIGINT NOT NULL,
             autor_mensagem_id BIGINT NOT NULL,
-            canal_id BIGINT NOT NULL,
-            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+            autor_mensagem_nome VARCHAR(255) NOT NULL,
+            data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_message (message_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
     # Limpa registros antigos (só pode existir 1)
@@ -2902,10 +2946,10 @@ async def ticket_mensagem(ctx):
 
         cursor.execute(
             """
-            INSERT INTO ticket_mensagem (message_id, autor_mensagem_id, canal_id)
+            INSERT INTO ticket_mensagem (message_id, autor_mensagem_id, autor_mensagem_nome)
             VALUES (%s, %s, %s)
             """,
-            (msg.id, ctx.author.id, ctx.channel.id)
+            (msg.id, ctx.author.id, str(ctx.author))
         )
         conn.commit()
 
@@ -3108,6 +3152,7 @@ async def ticket (ctx):
                         "Cargos %s removidos de %s (ID: %s) após %s denúncias",
                         cargos_mod, membro, membro.id, qtd
                     )
+                    alertar = [428006047630884864, 614476239683584004]
                     for admin_id in alertar:
                         admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
                         if admin:
@@ -3210,22 +3255,29 @@ async def tocar(ctx, url):
 
     # === APLICAR A CONQUISTA ===
     if sucesso:
-        # Nota: Como estamos dentro de um comando específico, não temos os dados de mensagens/aposta aqui.
-        # Passamos 0 ou False para o resto, pois só queremos ativar a conquista da música agora.
-        desbloqueadas, _ = await processar_conquistas(
+        try:
+        # APENAS REGISTRA. O on_message cuida do resto na próxima mensagem dele.
+            conexao = conectar_vips()
+            cursor = conexao.cursor()
+            cursor.execute("INSERT INTO interacoes_stats (user_id, tocou_musica) VALUES (%s, 1) ON DUPLICATE KEY UPDATE tocou_musica = 1", (ctx.author.id,))
+            conexao.commit()
+            cursor.close()
+            conexao.close()
+        # === VERIFICAR CONQUISTAS AUTOMATICAMENTE ===
+            await processar_conquistas(
             member=ctx.author,
-            mensagens_semana=0, 
+            mensagens_semana=0,  # valores padrão
             acertos_consecutivos=0,
             fez_doacao=False,
-            tem_vip=True, # Se chegou aqui, tem vip né rs
+            tem_vip=False,
             tempo_em_call=0,
             mencionou_miisha=False,
-            tocou_musica=True 
+            tocou_musica=True,  # ACABOU DE TOCAR MÚSICA
+            mencoes_bot=0
         )
 
-        
-        if "DJ da Sarah" in str(desbloqueadas):
-            await ctx.send(f"<a:7753pengujamming:1450645225126236190> {ctx.author.mention}, você desbloqueou a conquista **DJ da Sarah**!")
+        except Exception as e:
+            logging.error(f"Erro ao registrar estatística de música: {e}")
 
 
     
@@ -4709,10 +4761,10 @@ PRECOS = {
     "jinxed_vip": 1000,
     "caixa_misteriosa": 50,
     "caixinha": 50,
-    "segunda_chance": 30,
+    "segunda_chance": 45,
     "clown_bet": 60,
-    "emoji_personalizado": 200,
-    "comemoracao":200
+    "emoji_personalizado": 4500,
+    "comemoracao":1000
 }
 #LOJA DE PONTOS----------------------------------
 
@@ -4892,18 +4944,18 @@ async def loja(ctx):
     )
 
     embed.add_field(
-        name="⏪ Segunda Chance — 30 pontos",
+        name="⏪ Segunda Chance — 45 pontos",
         value="• Recupera a última aposta perdida\n• Uso único\n• Use **segunda_chance**",
         inline=False
     )
 
     embed.add_field(
-        name="🎨 Emoji Personalizado — 200 pontos",
+        name="🎨 Emoji Personalizado — 4500 pontos",
         value="• Compre e registre seu emoji personalizado\n• Use: `!comprar emoji_personalizado`\n• Depois use `!setemoji <emoji>` para registrar",
         inline=False
     )
     embed.add_field(
-        name="🎉 Comemoração de Vitória — 200 pontos",
+        name="🎉 Comemoração de Vitória — 1000 pontos",
         value="• Escolha um time.\n• Se ele vencer o próximo jogo, o bot posta um GIF festejando além de comemorar!\n• Use: `!comprar comemoracao` e depois `!comemorar <time>`",
         inline=False
     )
@@ -4951,6 +5003,17 @@ async def comprar(ctx, item_nome: str):
             con.close()
             await ctx.author.add_roles(cargo)
             await ctx.send(f"<:discotoolsxyzicon_6:1444750406763679764> Parabéns! Você comprou o cargo **Jinxed Vip** por 15 dias!")
+            await processar_conquistas(
+                member=ctx.author,
+                mensagens_semana=0,  # valores padrão
+                acertos_consecutivos=0,
+                fez_doacao=False,
+                tem_vip=True,  # ACABOU DE GANHAR VIP
+                tempo_em_call=0,
+                mencionou_miisha=False,
+                tocou_musica=False,
+                mencoes_bot=0
+            )
             logging.info(f"{ctx.author.name} comprou o cargo Jinxed Vip por 15 dias.")
         else:
             await ctx.send("⚠️ Cargo 'Jinxed Vip' não encontrado no servidor.")
@@ -5002,7 +5065,7 @@ async def comprar(ctx, item_nome: str):
         await ctx.send("🤡 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
 
     elif item == "emoji_personalizado":
-        await ctx.send("🎨 Você comprou **Emoji Personalizado** por 200 pontos! Agora registre seu cargo usando: `!setemoji <nome_cargo> <emoji>`\nExemplo: `!setemoji Fúria 🔥`")
+        await ctx.send("🎨 Você comprou **Emoji Personalizado** por 4.500 pontos! Agora registre seu cargo usando: `!setemoji <nome_cargo> <emoji>`\nExemplo: `!setemoji Fúria 🔥`")
 
     elif item == "comemorar":
         con = conectar_futebol()
@@ -5629,6 +5692,15 @@ async def info(ctx):
         inline=False
     )
 
+    embed.add_field(
+        name="💖 Doações & Aniversário",
+        value=(
+            "`!feliz_aniversario` 🎂 — Envia uma mensagem especial de aniversário para o usuário.\n"
+            "`!entregar @usuario <valor>` 💸 — Entrega pontos ao usuário após uma doação aprovada."
+        ),
+        inline=False
+    )
+
     await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou a lista de comandos.")
 
@@ -5648,19 +5720,19 @@ async def top_apostas(ctx):
         return await ctx.send("⚠️ Nenhum usuário possui pontos.")
 
     embed = discord.Embed(
-        title="🏆 Top 5 Apostadores",
+        title="<a:30348trophyfixed:1457473332843778220> Top 5 Apostadores",
         description="Os usuários com mais pontos no sistema de apostas",
         color=discord.Color.gold()
     )
 
     ranking = ""
-    medalhas = ["<a:PoggersRow:1449578774004895857>", "🥈", "🥉", "🏅", "🏅"]
+    medalhas = ["<a:17952trophycoolbrawlstarspin:1457784734074535946>", "🥈", "🥉", "🏅", "🏅"]
 
     for i, (nome, pontos) in enumerate(top):
         ranking += f"{medalhas[i]} **{nome}** — `{pontos} pontos`\n"
 
     embed.add_field(
-        name="📊 Ranking Atual",
+        name="📊 Ranking Atual\n",
         value=ranking,
         inline=False
     )
@@ -5689,7 +5761,7 @@ async def bad_apostas(ctx):
         return await ctx.send("⚠️ Nenhum usuário possui pontos.")
 
     embed = discord.Embed(
-        title="<:imagem_20251118_090924909removeb:1440313019614630030> Top 5 Piores Apostadores",
+        title="<a:1846_TaketheL:1457780626282385448> Top 5 Piores Apostadores",
         description="Quando o palpite é emoção e não razão…",
         color=discord.Color.red()
     )
@@ -5701,7 +5773,7 @@ async def bad_apostas(ctx):
         ranking += f"{emojis[i]} **{nome}** — `{pontos} pontos`\n"
 
     embed.add_field(
-        name="📉 Ranking Atual",
+        name="📉 Ranking Atual\n",
         value=ranking,
         inline=False
     )
@@ -5885,7 +5957,7 @@ async def torcedores(ctx):
 @bot.event
 async def on_member_remove(member):
     try:
-        conn = conectar_futebol
+        conn = conectar_futebol()
         cursor = conn.cursor()
         cursor.execute(
             "DELETE FROM times_usuarios WHERE user_id = %s",
@@ -6020,7 +6092,7 @@ async def doacao(ctx):
         description=(
             "**Apoie o servidor e ajude no crescimento dos nossos projetos!**\n"
             "Seu apoio mantém tudo funcionando, financia melhorias e permite que novas ideias virem realidade.\n\n"
-            "👇 **Escolha abaixo um valor para contribuir** 👇"
+            "👇 **Escolha abaixo um valor para contribuir**"
         ),
         color=discord.Color.green()
     )
@@ -6032,29 +6104,29 @@ async def doacao(ctx):
 
     # Campo dos valores
     embed.add_field(
-    value=(
-        "5️⃣ **R$ 5,00** — Apoio básico\n"
-        "➜ Recebe **30 pontos**\n\n"
+        name="<:diamond:1454722243467804817> Valores disponíveis",
+        value=(
+            "5️⃣ **R$ 5,00** — Apoio básico\n"
+            "➜ Recebe **300 pontos**\n\n"
 
-        "🔟 **R$ 10,00** — Apoio intermediário\n"
-        "➜ Recebe **285 pontos**\n\n"
+            "🔟 **R$ 10,00** — Apoio intermediário\n"
+            "➜ Recebe **700 pontos**\n\n"
 
-        "💶 **R$ 25,00** — Grande apoio ao servidor 💙\n"
-        "➜ Recebe **2.710 pontos**\n\n"
+            "💶 **R$ 25,00** — Grande apoio ao servidor 💙\n"
+            "➜ Recebe **2.000 pontos**\n\n"
 
-        "💰 **R$ 50,00** — Apoio máximo ❤️\n"
-        "➜ Recebe **30.000 pontos**\n"
-        "<a:30348trophyfixed:1457473332843778220> Desbloqueia a conquista <a:74731moneywave:1454721352698433730> **TAKE MY MONEY**"
-    ),
-    inline=False
-)
+            "💰 **R$ 50,00** — Apoio máximo ❤️\n"
+            "➜ Recebe **6.000 pontos**\n"
+            "<a:30348trophyfixed:1457473332843778220> Desbloqueia a conquista **TAKE MY MONEY**"
+        ),
+        inline=False
+    )
 
     # Campo extra para deixar maior e mais estiloso
     embed.add_field(
         name="<:381258twotonedstaffids:1454722243467804817> Para onde vai sua doação?",
         value=(
             "• Manutenção dos bots\n"
-            "• Hospedagem e servidores\n"
             "• Novas funcionalidades\n"
             "• Suporte aos projetos do servidor\n"
         ),
@@ -6071,7 +6143,7 @@ async def doacao(ctx):
         inline=False
     )
 
-    embed.set_footer(text="Meu pix:davidetroitff11@gmail.com <:552735imbroke:1457480936831582318>" )
+    embed.set_footer(text="Meu pix:davidetroitff11@gmail.com" )
 
     # Enviando a embed
     mensagem = await ctx.send(embed=embed)
@@ -6093,10 +6165,10 @@ async def entregar(ctx, membro: discord.Member, valor: int):
         return await ctx.send("Apenas o brabo pode usar <a:1199777523261775963:1451401949667655730>")
 
     tabela_conversao = {
-        5: 30,
-        10: 285,
-        25: 2710,
-        50: 30000
+        5: 300,
+        10: 700,
+        25: 2000,
+        50: 6000
     }
 
     if valor not in tabela_conversao:
@@ -6126,7 +6198,6 @@ async def entregar(ctx, membro: discord.Member, valor: int):
             status_cargo = "\n⚠️ Cargo **Apoiador Dev** não encontrado."
 
         await ctx.send(
-            f"<a:995589misathumb:1443956356846719119> "
             f"<a:105382toro:1454984271897825405> {membro.mention} recebeu **{pontos} pontos** por doar **R$ {valor},00**!"
             f"{status_cargo}"
         )
@@ -6164,12 +6235,12 @@ async def entregar(ctx, membro: discord.Member, valor: int):
 
         embed = discord.Embed(
             title="🙏 Obrigado pela Doação!",
-            description=f"<a:105382toro:1454984271897825405> Você recebeu **{pontos} pontos** por doar **R$ {valor},00** ao servidor!",
+            description=f"<a:74731moneywave:1454721352698433730> Você recebeu **{pontos} pontos** por doar **R$ {valor},00** ao desenvolvedor!",
             color=discord.Color.gold()
         )
         embed.add_field(name="Usuário", value=membro.mention, inline=True)
 
-        await ctx.send(embed=embed)
+        await membro.send(embed=embed)
 
     except Exception as e:
         await ctx.send("❌ Erro ao entregar pontos. Verifique os logs.")
@@ -6186,64 +6257,88 @@ async def entregar(ctx, membro: discord.Member, valor: int):
 async def conquistas(ctx, membro: discord.Member = None):
     alvo = membro or ctx.author
     user_id = alvo.id
-    
+
     try:
-        # Busca mensagens da semana atual
+        # =========================
+        # 🔹 FUNÇÕES AUXILIARES
+        # =========================
+
+        def format_progress_bar(current, total, length=15):
+            if total is None or total == 0:
+                return "[▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁] 0%"
+            if current is None:
+                current = 0
+            progress = min(current / total, 1.0)
+            filled = int(progress * length)
+            return f"[{'█' * filled}{'▁' * (length - filled)}] {int(progress * 100)}%"
+
+        def format_tempo(segundos):
+            if segundos is None:
+                return "0h 00m"
+            try:
+                h = int(segundos // 3600)
+                m = int((segundos % 3600) // 60)
+                return f"{h}h {m:02d}m"
+            except (ValueError, TypeError):
+                return "0h 00m"
+
+        # =========================
+        # 🔹 BUSCAS NO BANCO
+        # =========================
+
+        # --- VIP / ATIVIDADE ---
         con_vips = conectar_vips()
         cur_vips = con_vips.cursor(dictionary=True)
+
         semana_atual = datetime.now(timezone.utc).isocalendar()[1]
-        
+
         cur_vips.execute(
             "SELECT mensagens FROM atividade WHERE user_id = %s AND semana = %s",
             (user_id, semana_atual)
         )
-        resultado_msg = cur_vips.fetchone()
-        mensagens_semana = resultado_msg["mensagens"] if resultado_msg else 0
-        
-        # Busca acertos consecutivos
-        con_fut = conectar_futebol()
-        cur_fut = con_fut.cursor(dictionary=True)
-        
-        cur_fut.execute(
-            "SELECT acertos_consecutivos FROM apostas WHERE user_id = %s ORDER BY id DESC LIMIT 1",
-            (user_id,)
-        )
-        resultado_acertos = cur_fut.fetchone()
-        acertos_consecutivos = resultado_acertos["acertos_consecutivos"] if resultado_acertos else 0
-        
-        # Busca se fez doação — verificamos se existe um registro de doação de R$50
-        # Alternativa: criar tabela específica de doacoes se necessário
-        cur_fut.execute(
-            "SELECT pontos FROM pontuacoes WHERE user_id = %s",
-            (user_id,)
-        )
-        resultado_pontos = cur_fut.fetchone()
+        mensagens_semana = (cur_vips.fetchone() or {}).get("mensagens", 0)
 
-        # Verifica VIP
         cur_vips.execute(
             "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
             (user_id,)
         )
-        resultado_vip = cur_vips.fetchone()
-        tem_vip = resultado_vip is not None
+        tem_vip = cur_vips.fetchone() is not None
 
-        # Verifica se o usuário teve uma doação de R$50 registrada (item 'doacao_50')
+        # --- FUTEBOL / APOSTAS ---
+        con_fut = conectar_futebol()
+        cur_fut = con_fut.cursor(dictionary=True)
+
         cur_fut.execute(
-            "SELECT id FROM loja_pontos WHERE user_id = %s AND item = 'doacao_50' AND ativo = 1",
+            "SELECT acertos_consecutivos FROM apostas WHERE user_id = %s ORDER BY id DESC LIMIT 1",
             (user_id,)
         )
-        resultado_doacao50 = cur_fut.fetchone()
-        fez_doacao = resultado_doacao50 is not None
-        
-        # Busca tempo em call
-        tempo_em_call = calcular_tempo_total_em_call(user_id, ctx.guild.id)
-        
+        acertos_consecutivos = (cur_fut.fetchone() or {}).get("acertos_consecutivos", 0)
+
+        cur_fut.execute(
+            """
+            SELECT id FROM loja_pontos
+            WHERE user_id = %s AND item = 'doacao_50' AND ativo = 1
+            """,
+            (user_id,)
+        )
+        fez_doacao = cur_fut.fetchone() is not None
+
+        # --- TEMPO EM CALL ---
+        tempo_em_call = calcular_tempo_total_em_call(user_id, ctx.guild.id) if ctx.guild else 0
+        # Garantir que não seja None
+        if tempo_em_call is None:
+            tempo_em_call = 0
+
+        # Fechar conexões
         cur_vips.close()
         con_vips.close()
         cur_fut.close()
         con_fut.close()
-        
-        # Processa conquistas + entrega de cargos automática
+
+        # =========================
+        # 🔹 PROCESSAR CONQUISTAS
+        # =========================
+
         desbloqueadas, bloqueadas = await processar_conquistas(
             alvo,
             mensagens_semana,
@@ -6252,57 +6347,63 @@ async def conquistas(ctx, membro: discord.Member = None):
             tem_vip,
             tempo_em_call
         )
-        
-        # Função para criar barra de progresso
-        def format_progress_bar(current, total, length=15):
-            progress = min(current / total, 1.0)
-            filled = int(progress * length)
-            return f"[{'█' * filled}{'▁' * (length - filled)}] {int(progress * 100)}%"
-        
-        # Converter tempo em call para formato legível
-        horas_call = tempo_em_call // 3600
-        minutos_call = (tempo_em_call % 3600) // 60
-        segundos_restantes = max(180000 - tempo_em_call, 0)
-        horas_restantes = segundos_restantes // 3600
-        minutos_restantes = (segundos_restantes % 3600) // 60
-        
-        # Cria embed
+
+        # =========================
+        # 🔹 EMBED
+        # =========================
+
+        META_CALL = 180000  # 50 horas em segundos
+
         embed = discord.Embed(
-            title=f"<a:30348trophyfixed:1457473332843778220> Conquistas de {alvo.display_name}",
+            title=f"🏆 Conquistas • {alvo.display_name}",
             color=discord.Color.gold()
         )
+
+        progresso_call = format_progress_bar(tempo_em_call, META_CALL)
+        tempo_atual = format_tempo(tempo_em_call)
+        tempo_restante = format_tempo(max(META_CALL - tempo_em_call, 0))
         
-        progress_bar = format_progress_bar(tempo_em_call, 180000)
+        logging.debug(
+            "Valores para embed: tempo_em_call=%s, progresso_call=%s, tempo_atual=%s, tempo_restante=%s",
+            tempo_em_call,
+            progresso_call,
+            tempo_atual,
+            tempo_restante
+        )
+
         embed.add_field(
-            name="📞 Tempo em Call (Meta: 50h)",
+            name="📞 Tempo em Call",
             value=(
-                f"{progress_bar}\n"
-                f"⏱️ **{horas_call}h {minutos_call:02d}m** • "
-                f"⏳ Faltam {horas_restantes}h {minutos_restantes:02d}m"
+                f"{progresso_call}\n"
+                f"⏱️ **Atual:** {tempo_atual}\n"
+                f"🎯 **Meta:** 50h\n"
+                f"⏳ **Faltam:** {tempo_restante}"
             ),
             inline=False
         )
-        
+
         embed.add_field(
-            name="<a:thekings:1449048326937772147> Conquistas Desbloqueadas",
+            name="<a:30348trophyfixed:1457473332843778220> Conquistas Desbloqueadas",
             value="\n".join(desbloqueadas) if desbloqueadas else "Nenhuma ainda...",
             inline=False
         )
-        
+
         embed.add_field(
-            name="🔒 Conquistas Bloqueadas",
-            value="\n".join(bloqueadas) if bloqueadas else "Você desbloqueou tudo!",
+            name="<:3799_padlock:1457528547089584393> Conquistas Bloqueadas",
+            value="\n".join(bloqueadas) if bloqueadas else "Você desbloqueou tudo! 🎉",
             inline=False
         )
-        
-        embed.set_footer(text="Veja em conquistas.")
-        
-        await ctx.send(embed=embed)
-        
-    except Exception as e:
-        logging.error(f"Erro ao buscar conquistas de {alvo}: {e}")
-        await ctx.send(f"❌ Erro ao buscar conquistas: {e}")
 
+        embed.set_footer(text="Use !conquistas para acompanhar seu progresso")
+
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        logging.exception(
+            "Erro ao buscar conquistas de %s",
+            alvo
+        )
+        await ctx.send("❌ Ocorreu um erro ao buscar suas conquistas.")
 
 @bot.command()
 async def fuck_you(ctx, member: discord.Member = None):
