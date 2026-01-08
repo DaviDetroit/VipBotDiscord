@@ -276,6 +276,9 @@ async def processar_conquistas(
 
         if desbloqueada:
             desbloqueadas.append(texto)
+            
+            if ja_no_banco:
+                logging.info(f"Conquista '{conquista['nome']}' já existe no banco para {member.display_name} ({member.id})")
 
             # Registrar no banco se for nova
             if condicao_ok and not ja_no_banco:
@@ -296,10 +299,16 @@ async def processar_conquistas(
                 if cargo and cargo not in member.roles:
                     try:
                         await member.add_roles(cargo)
+                        logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name} ({member.id}) - conquista: {conquista['nome']}")
                     except Exception as e:
                         logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
+                elif cargo:
+                    logging.info(f"Usuário {member.display_name} ({member.id}) já possui o cargo '{cargo.name}' - conquista: {conquista['nome']}")
+                else:
+                    logging.warning(f"Cargo '{conquista['cargo']}' não encontrado no guild para conquista: {conquista['nome']}")
         else:
             bloqueadas.append(texto)
+            logging.debug(f"Conquista '{conquista['nome']}' não desbloqueada para {member.display_name} ({member.id}) - condição não atendida")
 
     cursor.close()
     conexao.close()
@@ -363,22 +372,30 @@ async def desbloquear_conquistas_em_grupo(guild, user_ids, conquista_id):
         )
 
         if cursor.fetchone():
+            logging.info(f"Conquista '{conquista['nome']}' já existe para usuário {user_id}")
             continue
         cursor.execute(
             "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
             (user_id, conquista_id)
         )
         conexao.commit()
+        logging.info(f"Conquista em grupo '{conquista['nome']}' concedida para usuário {user_id}")
         member = guild.get_member(user_id)
         if not member:
+            logging.warning(f"Membro {user_id} não encontrado no guild para conceder cargo")
             continue
         cargo = discord.utils.get(guild.roles, name=conquista['cargo'])
         if cargo and cargo not in member.roles:
             try:
                 await member.add_roles(cargo)
-            except:
-                pass
+                logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name} ({member.id})")
+            except Exception as e:
+                logging.error(f"Erro ao adicionar cargo {cargo.name} para {member.display_name}: {e}")
             novos.append(member)
+        elif cargo:
+            logging.info(f"Usuário {member.display_name} ({member.id}) já possui o cargo '{cargo.name}'")
+        else:
+            logging.warning(f"Cargo '{conquista['cargo']}' não encontrado no guild")
 
     cursor.close()
     conexao.close()
@@ -1511,6 +1528,11 @@ async def dar_vip(ctx, membro: discord.Member, duracao: str):
     except Exception as e:
         await ctx.send("❌ Erro ao salvar VIP no banco de dados.")
         logging.error(f"Erro dar_vip: {e}")
+        #Dar a conquista
+        try:
+            await conceder_conquista_manual(membro, "coroado")
+        except Exception as e:
+            logging.error(f"Erro ao conceder conquista coroado: {e}")
 
     
 
