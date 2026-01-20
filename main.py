@@ -124,6 +124,233 @@ CANAL_AVISO_ID=1387107714525827152
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+MAPEAMENTO_TIMES = {
+    "flamengo": "flamengo",
+    "fluminense": "fluminense",
+    "vasco": "vasco",
+    "botafogo": "botafogo",
+    "corinthians": "corinthians",
+    "santos": "santos",
+    "sao_paulo": "sao_paulo",
+    "palmeiras": "palmeiras",
+    "cruzeiro": "cruzeiro",
+    "atletico_mineiro": "atletico_mineiro",
+    "america_mg": "america_mg",
+    "bahia": "bahia",
+    "vitoria": "vitoria",
+    "chapecoense": "chapecoense",
+    "parana": "parana",
+    "atletico_pr": "atletico_pr",
+    "coritiba": "coritiba",
+    "figueirense": "figueirense",
+    "avai": "avai",
+    "joinville": "joinville",
+    "ponte_preta": "ponte_preta",
+    "santa_cruz": "santa_cruz",
+    "nautico": "nautico",
+    "sport": "sport",
+    "recife": "recife",
+    "cuiaba": "cuiaba",
+    "juventude": "juventude",
+    "fortaleza": "fortaleza",
+    "bragantino": "bragantino",
+    "goias": "goias",
+    "ceara": "ceara",
+    "atlético_goianiense": "atlético_goianiense",
+}
+
+EMOJI_TIMES = {
+
+    # =======================
+    # 🏟️ CLUBES DE FUTEBOL
+    # =======================
+    "sport": "<:Sport:1425992405227671593>",
+    "juventude": "<:Juventude:1425992333207539732>",
+    "fortaleza": "<:Fortaleza:1425992225128583218>",
+    "vitoria": "<:Vitri:1425992077702860905>",
+    "santos": "<:Santos:1425991974179045468>",
+    "internacional": "<:Internacional:1425991752468267158>",
+    "galo": "<:Galo:1425991683690074212>",
+    "gremio": "<:Gremio:1425991602438148187>",
+    "corinthians": "<:Corinthians:1425991139517010031>",
+    "vasco": "<:Vascodagama:1425991055941046373>",
+    "ceara": "<:Cear:1425990930254790718>",
+    "bragantino": "<:Bragantino:1425990800885678160>",
+    "sao_paulo": "<:SoPaulo:1425990707373674587>",
+    "fluminense": "<:Fluminense:1425990639128150106>",
+    "bahia": "<:Bahia:1425990545314021427>",
+    "botafogo": "<:Botafogo:1425990460589080617>",
+    "mirassol": "<:Mirassol:1425990400178393098>",
+    "cruzeiro": "<:Cruzeiro:1425990118816354405>",
+    "flamengo": "<:Flamengo:1425990044623044659>",
+    "palmeiras": "<:Palmeiras:1425989650513662044>",
+    "lanus": "<:Lanus:1441436509281718383>",
+    "atletico paranaense": "<:atlpr:1443398482516775055>",
+    "coritiba": "<:Coritibaa:1443398813820784660>",
+    "remo": "<:Remo:1443399201655492708>",
+    "chapecoense" :"<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
+
+
+    # =======================
+    # 🌍 SELEÇÕES (PAÍSES)
+    # =======================
+    "brasil": "<:imagem_20251111_091505344:1437777668320788501>",
+    "argentina": "<:imagem_20251111_091525637:1437777753205243936>",
+    "frança": "<:imagem_20251111_091547369:1437777844058194001>",
+    "alemanha": "<:imagem_20251111_091612275:1437777948907405332>",
+    "italia": "<:imagem_20251111_091635544:1437778046680699010>",
+    "inglaterra": "<:imagem_20251111_091700042:1437778149155803328>",
+    "espanha": "<:imagem_20251111_091727942:1437778266118422568>",
+    "portugal": "<:imagem_20251111_091755098:1437778380324864103>",
+    "holanda": "<:imagem_20251111_091822476:1437778495018106880>",
+    "uruguai": "<:imagem_20251111_091923082removeb:1437778793711534110>",
+    "belgica": "<:imagem_20251111_091958114:1437778895888846888>",
+    "croacia": "<:imagem_20251111_092025445:1437779010628222998>",
+    "mexico": "<:imagem_20251111_092057355:1437779144917127259>",
+    "japao": "<:imagem_20251111_092122937:1437779251729272903>",
+    "eua": "<:imagem_20251111_092151751:1437779372940464138>",
+    "senegal": "<:imagem_20251111_092227325:1437779522157281290>",
+    "tunisia": "<:imagem_20251111_092254095:1437779634191208518>",
+    "austria": "<:austria:1447019535415771228>",
+    "noruega": "<:noruega:1447019598020087979>",
+    "chile": "<:chile:1447019706467749998>",
+    "marrocos": "<:marrocos:1447019811132407859>",
+    "coreia do sul": "<:Coreiadosul:1447019914102833152>",
+    "china": "<:china:1447019999305793697>"
+    ,
+    # =======================
+    # 🌍 CLUBES INTERNACIONAIS (UEFA)
+    # =======================
+    "villarreal": "<:Villareal:1447341127257686076>",
+    "bayer_leverkusen": "<:Bayerliverkusen:1447341052481503342>",
+    "atalanta": "<:Atalanta:1447340975595720815>",
+    "olympique": "<:Olympic:1447340908017221713>",
+    "benfica": "<:Benfica:1447340742598201396>",
+    "ajax": "<:Ajax:1447340532140343397>",
+    "borussia": "<:Borussia:1447340278464909406>",
+    "borussia_dortmund": "<:Borussia:1447340278464909406>",
+    "napoli": "<:Napoli:1447340070934806742>",
+    "atletico_de_madrid": "<:Atleticodemadrid:1447339835084898365>",
+    "milan": "<:Millan:1447339769939099868>",
+    "juventus": "<:Juventus:1447339677391786044>",
+    "psg": "<:Psg:1447339575482646679>",
+    "city": "<:City:1447339515545911428>",
+    "arsenal": "<:Arsenal:1447339446021132398>",
+    "chelsea": "<:Chelsea:1447339384125915187>",
+    "liverpool": "<:Liverpool:1447339314798133361>",
+    "bayern_munich": "<:FC_Bayern_Mnchen_logo_2024:1447339006126854154>",
+    "barcelona": "<:Barcelona:1447338926548193483>",
+    "real_madrid": "<:Real_Madrid:1447338825180381389>"
+}
+
+
+
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    if not interaction.type == discord.InteractionType.component:
+        return
+
+    cid = interaction.data.get("custom_id")
+    
+    # Para simplificar, vamos armazenar os dados na mensagem quando criada
+    if hasattr(interaction.message, '_aposta_data'):
+        fixture_id, home, away = interaction.message._aposta_data
+        
+        if cid == "aposta_home":
+            await processar_aposta_botao(interaction, fixture_id, "home", home, away)
+        elif cid == "aposta_draw":
+            await processar_aposta_botao(interaction, fixture_id, "draw", home, away)
+        elif cid == "aposta_away":
+            await processar_aposta_botao(interaction, fixture_id, "away", home, away)
+
+
+class ApostaView(discord.ui.View):
+    def __init__(self, fixture_id, home, away):
+        super().__init__(timeout=600)
+        self.fixture_id = fixture_id
+        self.home = home
+        self.away = away
+
+        # Mapear emojis
+        nome_casa = MAPEAMENTO_TIMES.get(home.lower(), home.lower()).replace(" ", "_")
+        emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
+
+        nome_fora = MAPEAMENTO_TIMES.get(away.lower(), away.lower()).replace(" ", "_")
+        emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
+
+        # 🟦 Botão casa
+        self.add_item(discord.ui.Button(
+            label=home,
+            emoji=emoji_casa,
+            style=discord.ButtonStyle.primary,  # azul
+            custom_id="aposta_home"
+        ))
+
+        # ⚪ Botão empate
+        self.add_item(discord.ui.Button(
+            label="Empate",
+            emoji="🤝",
+            style=discord.ButtonStyle.secondary,  # cinza
+            custom_id="aposta_draw"
+        ))
+
+        # 🟦 Botão fora
+        self.add_item(discord.ui.Button(
+            label=away,
+            emoji=emoji_fora,
+            style=discord.ButtonStyle.primary,  # azul
+            custom_id="aposta_away"
+        ))
+    
+    async def on_timeout(self):
+        # Limpar botões quando timeout
+        self.clear_items()
+        await self.message.edit(view=self)
+    
+    def set_message(self, message):
+        """Armazena a mensagem e seus dados para uso posterior"""
+        self.message = message
+        # Armazenar dados diretamente na mensagem para o on_interaction acessar
+        message._aposta_data = (self.fixture_id, self.home, self.away)
+
+async def processar_aposta_botao(interaction, fixture_id, palpite, home, away):
+    # Verificar se ainda está aberto para apostas
+    con = conectar_futebol()
+    cur = con.cursor()
+    cur.execute("SELECT betting_open FROM jogos WHERE fixture_id = %s", (fixture_id,))
+    jogo = cur.fetchone()
+    con.close()
+
+    if not jogo or jogo[0] == 0:
+        await interaction.response.send_message(
+            "⏰ As apostas para esta partida estão encerradas!",
+            ephemeral=True
+        )
+        return
+
+    sucesso = registrar_aposta_db(interaction.user.id, fixture_id, palpite)
+
+    if not sucesso:
+        await interaction.response.send_message(
+            "❌ Você já apostou ou a aposta está encerrada.",
+            ephemeral=True
+        )
+        return
+
+    if palpite == "home":
+        escolhido = home
+    elif palpite == "away":
+        escolhido = away
+    else:
+        escolhido = "Empate"
+
+    await interaction.response.send_message(
+        f"🏟️ **{home} x {away}**\n"
+        f"<:Jinx:1390379001515872369> Palpite escolhido: **{escolhido}**\n"
+        "🍀 Boa sorte!",
+        ephemeral=True
+    )
+
 # ============================================================
 #                    SISTEMA DE CONQUISTAS
 # ============================================================
@@ -278,7 +505,7 @@ async def processar_conquistas(
             desbloqueadas.append(texto)
             
             if ja_no_banco:
-                logging.info(f"Conquista '{conquista['nome']}' já existe no banco para {member.display_name} ({member.id})")
+                logging.debug(f"Conquista '{conquista['nome']}' já existe no banco para {member.display_name} ({member.id})")
 
             # Registrar no banco se for nova
             if condicao_ok and not ja_no_banco:
@@ -296,16 +523,30 @@ async def processar_conquistas(
             # === ENTREGA DE CARGO (sempre que desbloqueada) ===
             if member.guild:
                 cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
-                if cargo and cargo not in member.roles:
-                    try:
-                        await member.add_roles(cargo)
-                        logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name} ({member.id}) - conquista: {conquista['nome']}")
-                    except Exception as e:
-                        logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
-                elif cargo:
-                    logging.info(f"Usuário {member.display_name} ({member.id}) já possui o cargo '{cargo.name}' - conquista: {conquista['nome']}")
+                if cargo:
+                    if cargo not in member.roles:
+                        try:
+                            await member.add_roles(cargo)
+                            logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name} ({member.id}) - conquista: {conquista['nome']}")
+                        except Exception as e:
+                            logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
+                    else:
+                        logging.debug(f"Membro {member.display_name} ({member.id}) já possui o cargo '{cargo.name}' - conquista: {conquista['nome']}")
                 else:
+                    # Log detalhado para depuração
                     logging.warning(f"Cargo '{conquista['cargo']}' não encontrado no guild para conquista: {conquista['nome']}")
+                    
+                    # Lista todos os cargos disponíveis para depuração (apenas na primeira vez)
+                    if not hasattr(processar_conquistas, '_cargos_listados'):
+                        processar_conquistas._cargos_listados = True
+                        todos_cargos = [role.name for role in member.guild.roles]
+                        logging.info(f"Cargos disponíveis no servidor: {todos_cargos}")
+                        
+                        # Verificar correspondências aproximadas
+                        cargo_procurado = conquista["cargo"].lower()
+                        correspondencias = [role for role in todos_cargos if cargo_procurado in role.lower()]
+                        if correspondencias:
+                            logging.info(f"Cargos com nomes similares a '{conquista['cargo']}': {correspondencias}")
         else:
             bloqueadas.append(texto)
             logging.debug(f"Conquista '{conquista['nome']}' não desbloqueada para {member.display_name} ({member.id}) - condição não atendida")
@@ -385,15 +626,16 @@ async def desbloquear_conquistas_em_grupo(guild, user_ids, conquista_id):
             logging.warning(f"Membro {user_id} não encontrado no guild para conceder cargo")
             continue
         cargo = discord.utils.get(guild.roles, name=conquista['cargo'])
-        if cargo and cargo not in member.roles:
-            try:
-                await member.add_roles(cargo)
-                logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name} ({member.id})")
-            except Exception as e:
-                logging.error(f"Erro ao adicionar cargo {cargo.name} para {member.display_name}: {e}")
-            novos.append(member)
-        elif cargo:
-            logging.info(f"Usuário {member.display_name} ({member.id}) já possui o cargo '{cargo.name}'")
+        if cargo:
+            if cargo not in member.roles:
+                try:
+                    await member.add_roles(cargo)
+                    logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name} ({member.id})")
+                except Exception as e:
+                    logging.error(f"Erro ao adicionar cargo {cargo.name} para {member.display_name}: {e}")
+                novos.append(member)
+            else:
+                logging.debug(f"Membro {member.display_name} ({member.id}) já possui o cargo '{cargo.name}'")
         else:
             logging.warning(f"Cargo '{conquista['cargo']}' não encontrado no guild")
 
@@ -444,7 +686,7 @@ mensagens_bom_dia = [
     "😂 Bom dia! Lembre-se: quem acorda cedo é recompensado… e quem manda PIX pro amigo é abençoado! **Orfeuson@hotmail.com**",
     "📈 Bom dia! Que sua vida suba igual gráfico da bolsa em alta. Pra ajudar no investimento: **PIX: Orfeuson@hotmail.com** 💹",
     "🎉 Bom diaaa! Que hoje você receba notícias boas, abraços sinceros… e, quem sabe, até um PIX. Pra não perder o costume: **Orfeuson@hotmail.com**",
-    "🧠 Você sabia? O cérebro humano gera eletricidade suficiente para acender uma lâmpada fraca!",
+    "🧠 Você sabia? O cérebro humano gera eletricidade suficiente pra acender uma lâmpada fraca!",
     "🌍 A Terra não é uma esfera perfeita — ela é levemente achatada nos polos por causa da rotação.",
     "🐙 O polvo tem **três corações** e o sangue dele é azul por causa do cobre na hemoglobina.",
     "🚀 A Estação Espacial Internacional viaja a mais de **27.000 km/h** e dá uma volta na Terra a cada 90 minutos.",
@@ -485,10 +727,26 @@ mensagens_curiosidade = [
     "👁️ Curiosidade visual: seu olho tem um ponto cego e você não percebe.",
     "🤯 Curioso como seu cérebro acredita no que ele mesmo inventa."
 ]
-
-@bot.event
 async def on_ready():
     logging.info(f"Bot conectado como {bot.user}")
+    
+    # Adicionar listeners para interações
+    bot.add_view(DoacaoView())  # Botões de doação
+    
+    # Restaurar mensagem de doação se existir
+    doacao_data = get_mensagem_doacao()
+    if doacao_data:
+        try:
+            channel = bot.get_channel(doacao_data["channel_id"])
+            if channel:
+                message = await channel.fetch_message(doacao_data["message_id"])
+                if message:
+                    # Re-adiciona a view à mensagem existente
+                    await message.edit(view=DoacaoView())
+                    logging.info(f"Mensagem de doação restaurada: message_id={doacao_data['message_id']}")
+        except Exception as e:
+            logging.error(f"Erro ao restaurar mensagem de doação: {e}")
+    
     jogos_pendentes = buscar_jogos_pendentes()
 
     # ===== Evita iniciar 2 vezes =====
@@ -506,6 +764,9 @@ async def on_ready():
 
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
+        
+    if not premiar_post_mais_votado.is_running():
+        premiar_post_mais_votado.start()
         
     if not check_evento_anime.is_running():
         check_evento_anime.start()
@@ -608,6 +869,7 @@ CARGOS_POR_REACAO = {
     "1437791755096293510": 1451378090025549976   # Pelúcia Dante
     
 }
+
 @bot.event
 async def on_reaction_add(reaction, user):
     if user.bot:
@@ -681,103 +943,6 @@ async def on_reaction_add(reaction, user):
     finally:
         cursor.close()
         conexao.close()
-
-
-    # ======================================================
-    # 2) SISTEMA DE APOSTAS
-    # ======================================================
-
-    # Verificar se a mensagem é de um jogo
-    con = conectar_futebol()
-    cur = con.cursor(dictionary=True)
-
-    cur.execute("""
-        SELECT fixture_id, bet_deadline, betting_open, home, away 
-        FROM jogos WHERE message_id = %s
-    """, (message.id,))
-    jogo = cur.fetchone()
-    con.close()
-
-    # Não é jogo → sai
-    if not jogo:
-        return
-
-    fixture_id = jogo["fixture_id"]
-    bet_deadline = jogo["bet_deadline"]
-    betting_open = jogo["betting_open"]
-    home = jogo["home"]
-    away = jogo["away"]
-
-    # --- Mapeia emojis ---
-    palpite = None
-
-    nome_casa = MAPEAMENTO_TIMES.get(home.lower(), home.lower()).replace(" ", "_")
-    emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
-
-    nome_fora = MAPEAMENTO_TIMES.get(away.lower(), away.lower()).replace(" ", "_")
-    emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
-
-    emoji_empate = EMOJI_EMPATE
-
-    if emoji == emoji_casa:
-        palpite = "home"
-    elif emoji == emoji_fora:
-        palpite = "away"
-    elif emoji == emoji_empate:
-        palpite = "draw"
-    else:
-        return  # não é emoji de aposta
-
-    # --- Verifica prazo (baseado na hora da mensagem) ---
-    agora = datetime.now(timezone.utc)
-    deadline_msg = message.created_at.replace(tzinfo=timezone.utc) + timedelta(minutes=10)
-
-    if betting_open == 0 or agora > deadline_msg:
-        if betting_open == 1:
-            con = conectar_futebol()
-            cur = con.cursor()
-            cur.execute("UPDATE jogos SET betting_open = 0 WHERE fixture_id=%s", (fixture_id,))
-            con.commit()
-            con.close()
-
-        try:
-            await user.send("⏰ Já se passaram os 10 minutos para apostar nesta partida.")
-        except:
-            pass
-        try:
-            await reaction.remove(user)
-        except:
-            pass
-        return
-
-    # --- Registra aposta ---
-    sucesso = registrar_aposta_db(user.id, fixture_id, palpite)
-
-    if not sucesso:
-        try:
-            await reaction.remove(user)
-        except:
-            pass
-        return
-
-    # --- DM de confirmação ---
-    try:
-        if palpite == "home":
-            time_escolhido = home
-        elif palpite == "away":
-            time_escolhido = away
-        else:
-            time_escolhido = "draw"
-        await user.send(
-            f"🏟️ Partida: **{home} x {away}**\n"
-            f"<:Jinx:1390379001515872369> Palpite escolhido: **{time_escolhido}**\n"
-            "🍀 Boa sorte!"
-        )
-    except:
-        pass
-
-
-
 
 
 @bot.event
@@ -931,10 +1096,6 @@ async def sincronizar_reacoes():
     cursor.close()
     conexao.close()
 
-async def conceder_conquista_manual(member, conquista_id):
-    conquista = CONQUISTAS.get(conquista_id)
-    if not conquista:
-        return
     conexao = conectar_vips()
     cursor = conexao.cursor()
     cursor.execute("""
@@ -951,9 +1112,15 @@ async def conceder_conquista_manual(member, conquista_id):
     """, (member.id, conquista_id))
     conexao.commit()
     logging.info(f"Conquista manual concedida: {conquista['nome']} para {member.display_name} ({member.id})")
-    cargo = discord.utils.get(member.guild.roles, name = conquista ["cargo"])
-    if cargo and cargo not in member.roles:
-        await member.add_roles(cargo)
+    cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
+    if cargo:
+        if cargo not in member.roles:
+            await member.add_roles(cargo)
+            logging.info(f"Cargo '{cargo.name}' adicionado manualmente para {member.display_name} ({member.id})")
+        else:
+            logging.info(f"Membro {member.display_name} ({member.id}) já possui o cargo '{cargo.name}'")
+    else:
+        logging.warning(f"Cargo '{conquista['cargo']}' não encontrado no guild para conquista manual")
 
     embed = discord.Embed(
         title="🏆 Nova Conquista!",
@@ -971,94 +1138,135 @@ async def conceder_conquista_manual(member, conquista_id):
 
 @tasks.loop(hours=24)
 async def ranking_mensal():
-    agora = datetime.now()
-    # define o mês anterior
+    agora = datetime.utcnow()
+
+    # Só roda no dia 1
+    if agora.day != 1:
+        return
+
+    # Define mês anterior
     if agora.month == 1:
         mes = 12
         ano = agora.year - 1
     else:
         mes = agora.month - 1
         ano = agora.year
-    primeiro_dia = datetime(ano, mes, 1)
-    ultimo_dia = datetime(ano, mes, monthrange(ano, mes)[1], 23, 59, 59)
-    # Usando a conexão correta (vips para posts e ranking mensal)
+
+    primeiro_dia = datetime(ano, mes, 1, 0, 0, 0)
+    ultimo_dia = datetime(
+        ano,
+        mes,
+        monthrange(ano, mes)[1],
+        23, 59, 59
+    )
+
+    PONTOS_PREMIO = 400
+
     conexao = conectar_vips()
     cursor = conexao.cursor(dictionary=True)
+
     try:
-        # 1️⃣ maior número de upvotes
+        # 1️⃣ Post com mais upvotes no mês anterior
         cursor.execute("""
-            SELECT MAX(upvotes) AS max_upvotes
+            SELECT id, user_id, upvotes, timestamp
             FROM posts
-            WHERE removed = FALSE
+            WHERE channel_id = %s
+              AND removed = FALSE
               AND timestamp BETWEEN %s AND %s
-        """, (primeiro_dia, ultimo_dia))
-        resultado = cursor.fetchone()
-        max_upvotes = resultado["max_upvotes"] if resultado and resultado["max_upvotes"] is not None else 0
-        if max_upvotes == 0:
-            logging.info(f"Nenhum post encontrado para o mês {mes}/{ano}")
+              AND upvotes > 0
+            ORDER BY upvotes DESC, timestamp ASC
+            LIMIT 1
+        """, (CANAL_MURAL_ID, primeiro_dia, ultimo_dia))
+
+        melhor_post = cursor.fetchone()
+
+        if not melhor_post:
+            logging.info(f"Nenhum post elegível encontrado em {mes}/{ano}.")
             return
-        # 2️⃣ todos os posts empatados
+
+        # 2️⃣ Verifica se já foi premiado
         cursor.execute("""
-            SELECT user_id, id, upvotes
-            FROM posts
-            WHERE removed = FALSE
-              AND timestamp BETWEEN %s AND %s
-              AND upvotes = %s
-        """, (primeiro_dia, ultimo_dia, max_upvotes))
-        top_posts = cursor.fetchall()
-        channel = bot.get_channel(1386805780140920954)
-        for post in top_posts:
-            try:
-                # Convertendo o post_id para inteiro para garantir que está no formato correto
-                post_id = int(post["id"])
-                
-                # Inserindo no ranking mensal
-                cursor.execute("""
-                    INSERT INTO post_mensal (user_id, post_id, upvotes, mes, ano)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    int(post["user_id"]),
-                    post_id,
-                    int(post["upvotes"]),
-                    int(mes),
-                    int(ano)
-                ))
-                user = await bot.fetch_user(post["user_id"])
-                await channel.send(
-                    f"🏆 **Post mais curtido do mês {mes}/{ano}**\n"
-                    f"{user.mention} com **{post['upvotes']} votos**!"
-                )
-                member = channel.guild.get_member(post["user_id"])
-                if member:
-                    await conceder_conquista_manual(member, "rei_do_mural")
-                    try:
-                        embed = Embed(
-                            title="🏆 Conquista desbloqueada!",
-                            description=(
-                                f"Parabéns! 🎉\n\n"
-                                f"Seu post foi o **mais curtido do mês {mes}/{ano}**.\n"
-                                f"Você recebeu a conquista **Rei do Mural** 👑"
-                            ),
-                            color=Color.gold()
-                        )
-                        embed.set_footer(text="Continue postando no mural!")
-                        await member.send(embed=embed)
-                    except discord.Forbidden:
-                        logging.error(f"Não foi possível enviar mensagem para {member} (DM fechada)")
-            except Exception as e:
-                logging.error(f"Erro ao processar post {post['id']}: {e}")
-                continue
-        # 3️⃣ limpa posts do mês (UMA vez)
+            SELECT COUNT(*) AS total
+            FROM posts_premiados
+            WHERE post_id = %s
+              AND MONTH(premiado_em) = %s
+              AND YEAR(premiado_em) = %s
+        """, (melhor_post["id"], agora.month, agora.year))
+
+        ja_premiado = cursor.fetchone()["total"] > 0
+
+        if ja_premiado:
+            logging.info(f"Post {melhor_post['id']} já premiado neste mês.")
+            return
+
+        # 3️⃣ Adiciona pontos ao autor
+        adicionar_pontos_db(
+            user_id=melhor_post["user_id"],
+            pontos=PONTOS_PREMIO,
+            nome_discord=None
+        )
+
+        # 4️⃣ Registra a premiação
         cursor.execute("""
-            DELETE FROM posts
-            WHERE timestamp BETWEEN %s AND %s
-        """, (primeiro_dia, ultimo_dia))
+            INSERT INTO posts_premiados
+            (post_id, user_id, upvotes, pontos_ganhos, premiado_em)
+            VALUES (%s, %s, %s, %s, UTC_TIMESTAMP())
+        """, (
+            melhor_post["id"],
+            melhor_post["user_id"],
+            melhor_post["upvotes"],
+            PONTOS_PREMIO
+        ))
+
         conexao.commit()
+
+        # 5️⃣ Anúncio no canal
+        try:
+            canal = await bot.fetch_channel(CANAL_MURAL_ID)
+            autor = await bot.fetch_user(melhor_post["user_id"])
+            post_msg = await canal.fetch_message(melhor_post["id"])
+
+            nomes_meses = [
+                "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
+            ]
+
+            nome_mes = nomes_meses[mes - 1]
+
+            embed = discord.Embed(
+                title="🏆 Post Mais Votado do Mês!",
+                description=(
+                    f"<a:489897catfistbump:1414720257720848534> "
+                    f"Parabéns {autor.mention} pelo post mais curtido de "
+                    f"**{nome_mes}/{ano}**!\n\n"
+                    f"📊 **{melhor_post['upvotes']} upvotes** 👍\n"
+                    f"💰 **+{PONTOS_PREMIO} pontos** ganhos!\n\n"
+                    f"[Ver post]({post_msg.jump_url})"
+                ),
+                color=discord.Color.gold()
+            )
+
+            embed.set_thumbnail(url=autor.display_avatar.url)
+            embed.set_footer(text="Sistema de pontos do mural • Premiação mensal")
+
+            await canal.send(embed=embed)
+
+            logging.info(
+                f"Premiação mensal concluída: "
+                f"post {melhor_post['id']} | "
+                f"user {melhor_post['user_id']} | "
+                f"+{PONTOS_PREMIO} pontos"
+            )
+
+        except Exception as e:
+            logging.error(f"Erro ao anunciar premiação mensal: {e}")
+
     except Exception as e:
         logging.error(f"Erro no ranking_mensal: {e}")
         if conexao.is_connected():
             conexao.rollback()
         raise
+
     finally:
         cursor.close()
         conexao.close()
@@ -1146,11 +1354,105 @@ def embed_clipe_resultado(tipo:str, autor: discord.Member, pontos: int):
 
     return embed
 
-vip_message_id = None
+@bot.command()
+async def clipes(ctx):
+    """Explica como funciona o sistema de clipes"""
+    embed = discord.Embed(
+        title="🎬 Sistema de Clipes",
+        description="Como funciona o sistema de clipes do servidor!",
+        color=discord.Color.blue()
+    )
+    
+    embed.add_field(
+        name="📤 Como enviar um clipe",
+        value=(
+            "1. Vá ao canal de clipes\n"
+            "2. Envie seu clipe (vídeo)"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="😄 Reações e Pontos",
+        value=(
+            f"👍 **Risada**: +{PONTOS_RISADA} pontos para o autor\n"
+            f"👎 **Bosta**: {PONTOS_BOSTA} pontos para o autor\n"
+            f"• Precisa de {RISADAS_NECESSARIAS} risadas para ganhar pontos\n"
+            f"• {BOSTAS_NECESSARIAS} bostas remove o clipe automaticamente"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="⚠️ Regras Importantes",
+        value=(
+            "• O autor não pode reagir no próprio clipe\n"
+            "• Clipes com muitas bostas são removidos\n"
+            "• A moderação pode remover clipes inapropriados"
+        ),
+        inline=False
+    )
+    
+    embed.set_footer(text="Use os clipes com responsabilidade! 😉")
+    await ctx.send(embed=embed)
 
 
-apostas_ativas = {}
-#============PONTUACOES DO SISTEMA DE CLIPES============
+@bot.command()
+async def futebol(ctx):
+    """Explica o sistema completo de futebol e apostas"""
+    embed = discord.Embed(
+        title="⚽ Sistema de Futebol e Apostas",
+        description="Tudo sobre o sistema de apostas e times do servidor!",
+        color=discord.Color.green()
+    )
+    
+    embed.add_field(
+        name="🏆 Como Funciona as Apostas",
+        value=(
+            "• Aposte nos jogos disponíveis clicando nos botões\n"
+            "• Ganhe pontos baseado na odds do time\n"
+            "• Resultados processados automaticamente\n"
+            "• Veja seus pontos com `!meuspontos`"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🛒 Sistema de Loja",
+        value=(
+            "• Use `!loja` para ver itens disponíveis\n"
+            "• Compre com `!comprar <item>`\n"
+            "• Itens especiais: Festa de Vitória, VIP, etc"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="👥 Times e Comandos",
+        value=(
+            f"• `!time <nome>` — Escolha seu time\n"
+            f"• `!sair_time` — Saia do time atual\n"
+            f"• `!lista_times` — Veja todos os times disponíveis\n"
+            f"• `!torcedores` — Veja quem torce para cada time\n"
+            f"• `!top_apostas` — Melhores apostadores\n"
+            f"• `!bad_apostas` — Piores apostadores"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🔔 Notificações de Gol",
+        value=(
+            "• Escolha seu time com `!time <nome>`\n"
+            "• Receba notificação automática quando seu time fizer gol\n"
+            "• Sistema integrado com API de futebol em tempo real"
+        ),
+        inline=False
+    )
+    
+    embed.set_footer(text="Aposte com responsabilidade! 🍀")
+    await ctx.send(embed=embed)
+    
 PONTOS_RISADA = 100
 PONTOS_BOSTA = -50
 RISADAS_NECESSARIAS = 5
@@ -1346,122 +1648,11 @@ async def on_raw_reaction_add(payload):
 
 
 
-    # ========================================
-    # 2) ----- SISTEMA DE APOSTAS POR REAÇÃO --
-    # ========================================
-    if payload.message_id in apostas_ativas:
-
-        aposta = apostas_ativas[payload.message_id]
-        emoji = str(payload.emoji)
-        user_id = payload.user_id
-
-        # Se passou do tempo → ignora
-        from datetime import datetime
-        if datetime.utcnow() > aposta["tempo_fechamento"]:
-            try:
-                user = await bot.fetch_user(user_id)
-                await user.send("⏰ Já se passaram os 10 minutos para apostar nesta partida.")
-            except:
-                pass
-            return
-
-        escolha = None
-
-        # Checar qual emoji o usuário clicou
-        if emoji == aposta["emoji_home"]:
-            escolha = aposta["home"]
-        elif emoji == aposta["emoji_away"]:
-            escolha = aposta["away"]
-        elif emoji == aposta["emoji_empate"]:
-            escolha = "draw"
-        else:
-            return  # Reação irrelevante
-
-        # -------- SALVAR NO MYSQL --------
-        try:
-            con = conectar_futebol()
-            cursor = con.cursor()
-
-            # 1) Verifica modo clown
-            cursor.execute("SELECT ativo FROM clown_bet WHERE user_id = %s", (user_id,))
-            row = cursor.fetchone()
-
-            modo_clown = 1 if (row and row[0] == 1) else 0
-
-            # Se usou o clown, consome
-            if modo_clown == 1:
-                cursor.execute("UPDATE clown_bet SET ativo = 0 WHERE user_id = %s", (user_id,))
-
-            # 2) Salva aposta com modo_clown
-            sql = """
-                INSERT INTO apostas (user_id, fixture_id, palpite, modo_clown)
-                VALUES (%s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                    palpite = VALUES(palpite),
-                    modo_clown = VALUES(modo_clown)
-            """
-
-            cursor.execute(sql, (user_id, aposta["fixture_id"], escolha, modo_clown))
-            con.commit()
-
-            cursor.close()
-            con.close()
-
-        except Exception as e:
-            logging.error("Erro ao salvar aposta:", e)
-            return
-
-        # Envia confirmação no DM
-        user = await bot.fetch_user(user_id)
-        try:
-            await user.send(f"⚽ Sua aposta foi registrada: **{escolha.title()}**")
-        except:
-            pass
-
-# ================================================
-#--------------- SISTEMA DE DOAÇÃO ---------------
-# ================================================
-    mensagem_salva_id = get_mensagem_doacao()
-    
-    if payload.message_id == mensagem_salva_id:
-        emoji_clicado = str(payload.emoji)
-        
-        if emoji_clicado in EMOJIS_VALORES:
-            valor = EMOJIS_VALORES[emoji_clicado]
-            
-            guild = bot.get_guild(payload.guild_id)
-            
-            # Tenta pegar o objeto Member (dentro do servidor) ou User (se der falha)
-            if guild:
-                usuario = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
-            else:
-                usuario = await bot.fetch_user(payload.user_id)
-            
-            # Define o ID do dono (Certifique-se de que a variável MEU_ID está definida no topo do código)
-            # Se não estiver, substitua MEU_ID pelo número direto: ex: 614476239683584004
-            dono = await bot.fetch_user(MEU_ID)
-
-            if dono and usuario:
-                try:
-                    
-                    await dono.send(
-                        f"🔔 **Interesse em Doação!**\n"
-                        f"O usuário {usuario.mention} (ID: `{usuario.id}`) clicou na opção de **R$ {valor},00**.\n"
-                        f"⚠️ **Ação Necessária:** Negociação pendente. Entre em contato com ele para receber."
-                    )
-                except Exception as e:
-                    logging.error(f"Erro ao notificar doação: {e}")
-
-            # Remove a reação do usuário para limpar a mensagem
-            try:
-                channel = bot.get_channel(payload.channel_id)
-                message = await channel.fetch_message(payload.message_id)
-                await message.remove_reaction(payload.emoji, usuario)
-            except Exception:
-                pass
-
-
-
+    # ================================================
+    #--------------- SISTEMA DE DOAÇÃO ---------------
+    # ================================================
+    # Sistema de doação agora usa botões em vez de reações
+    # As interações são tratadas pela DoacaoView e seus callbacks
 
 
 
@@ -1517,6 +1708,8 @@ async def dar_vip(ctx, membro: discord.Member, duracao: str):
         conexao.commit()
         cursor.close()
         conexao.close()
+    except:
+        pass
 
         try:
             await membro.send(f"<:Jinx_Watching:1390380695712694282> Você recebeu VIP por {duracao}!")
@@ -1525,14 +1718,23 @@ async def dar_vip(ctx, membro: discord.Member, duracao: str):
             pass
         await ctx.send(f"<:Jinx_Watching:1390380695712694282> {membro.display_name} agora é VIP por {duracao}.")
         logging.info(f"VIP concedido com sucesso: {membro.display_name} ({membro.id}) por {duracao}")
-    except Exception as e:
-        await ctx.send("❌ Erro ao salvar VIP no banco de dados.")
-        logging.error(f"Erro dar_vip: {e}")
-        #Dar a conquista
+        
+        # Conceder conquista "Coroado" automaticamente após dar o cargo
         try:
-            await conceder_conquista_manual(membro, "coroado")
+            await processar_conquistas(
+                member=ctx.author,
+                mensagens_semana=0,  # valores padrão
+                acertos_consecutivos=0,
+                fez_doacao=False,
+                tem_vip=True,  # ACABOU DE GANHAR VIP
+                tempo_em_call=0,
+                mencionou_miisha=False,
+                tocou_musica=False,
+                mencoes_bot=0
+            )
+            logging.info(f"{ctx.author.name} acabou de ganhar a conquista")
         except Exception as e:
-            logging.error(f"Erro ao conceder conquista coroado: {e}")
+            logging.error(f"Erro ao conceder conquista coroado para {membro.display_name}: {e}")
 
     
 
@@ -1556,14 +1758,12 @@ async def remover_vip(ctx, membro: discord.Member):
     try:
         await membro.remove_roles(cargo_vip)
 
-        conexao = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME_VIPS")
-        )
+        conexao = conectar_vips()
         cursor = conexao.cursor()
-        cursor.execute("DELETE FROM vips WHERE id = %s", (membro.id,))
+        cursor.execute(
+            "DELETE FROM vips WHERE id = %s",
+            (membro.id,)
+        )
         conexao.commit()
         cursor.close()
         conexao.close()
@@ -1700,7 +1900,7 @@ BOT_REACTION = [
 
 CANAL_SEJA_VIP = 1381380248511447040
 ID_CARGO_MUTE = 1445066766144376934
-CANAL_CLIPES = 1452062186016079903  # ID do canal de clipes
+CANAL_CLIPES = 1462401595604996156  # ID do canal de clipes
 EMOJI_RISADA = "😂"
 EMOJI_BOSTA = "💩"
 @bot.event
@@ -1737,7 +1937,7 @@ async def on_message(message):
             except discord.Forbidden:
                 pass
             return
-    
+
     # ======================
     #  SISTEMA DE CLIPES 
     # ======================
@@ -1765,11 +1965,6 @@ async def on_message(message):
         except Exception as e:
             logging.error(f"Erro ao salvar clip: {e}")
 
-    
-    
-
-
-    
     
     global ultimo_reagir
 
@@ -1815,7 +2010,6 @@ async def on_message(message):
                 logging.warning("Sem permissão para deletar/enviar mensagens")
             return
 
-    
     # ============================
     #  SISTEMA MONITORAMENTO
     # ============================
@@ -2013,7 +2207,7 @@ async def on_message(message):
         except Exception as e:
             logging.error(f"Erro mencoes_bot: {e}")
 
-        
+
 
     # ============================
     #  IGNORAR CARGO ESPECÍFICO
@@ -2618,7 +2812,7 @@ async def iniciar_batalha_auto():
         lutadores = random.sample(PERSONAGENS, 2)
         p1, p2 = lutadores[0], lutadores[1]
         
-        canal = bot.get_channel(CANAL_EVENTO_ID)
+        canal = await bot.fetch_channel(CANAL_EVENTO_ID)
         if not canal:
             logging.error("Canal de evento anime não encontrado!")
             return
@@ -2629,7 +2823,7 @@ async def iniciar_batalha_auto():
                 f"🔴 **{p1['nome']}** vs 🔵 **{p2['nome']}**\n\n"
                 f"1️⃣ Reaja com {p1['emoji']} para votar no **{p1['nome']}**\n"
                 f"2️⃣ Reaja com {p2['emoji']} para votar no **{p2['nome']}**\n\n"
-                f"🏆 **Prêmio:** 30 Pontos na tabela geral!\n"
+                f"🏆 **Prêmio:** +Pontos na tabela geral!\n"
                 f"⏰ **Resultado:** Hoje às 22:00!"
             ),
             color=discord.Color.red()
@@ -2672,7 +2866,7 @@ async def finalizar_batalha_auto():
         logging.warning("Nenhuma batalha ativa para finalizar")
         return
     
-    canal = bot.get_channel(CANAL_EVENTO_ID)
+    canal = await bot.fetch_channel(CANAL_EVENTO_ID)
     if not canal:
         logging.error("Canal de evento não encontrado")
         return
@@ -2747,11 +2941,8 @@ async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_premio
     """Atualiza a pontuação dos ganhadores no banco de dados."""
     if not ganhadores_ids:
         return
-    for uid in ganhadores_ids:
-        adicionar_pontos_db(uid, pontos_premio)
     
     try:
-
         # Atualiza pontos chamando helper reutilizável por usuário
         for uid in ganhadores_ids:
             try:
@@ -2813,7 +3004,6 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
     }
     
     # --- Anúncio Final ---
-    pontos_premio = 30
     gif_vitoria = GIFS_VITORIA.get(vencedor['nome'], "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjAxc2R3c3QwMWV2M2VhY2R5cWZ5Z3N4Z2d4dXh4eWJ0eXZ0aHh6d2JmYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xT5LMHxhOfscxPfIfm/giphy.gif")
 
     # Criar a mensagem de resultado
@@ -2846,14 +3036,6 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
 )
     
     await canal.send(embed=embed_res)
-    
-    # Reseta
-    batalha_info = {"ativa": False, "msg_id": None}
-
-
-
-
-
 filas = {}
 timers_desconectar = {}
 
@@ -3802,7 +3984,9 @@ def garantir_tabelas():
     con = conectar_futebol()
     cur = con.cursor()
 
+    # ----------------------------
     # Tabela jogos
+    # ----------------------------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS jogos (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -3821,7 +4005,9 @@ def garantir_tabelas():
         )
     """)
 
-    # Tabela apostas (corrigida: inclui modo_clown)
+    # ----------------------------
+    # Tabela apostas
+    # ----------------------------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS apostas (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -3834,6 +4020,7 @@ def garantir_tabelas():
         )
     """)
 
+    # Garantias extras (caso tabela já exista)
     try:
         cur.execute("ALTER TABLE jogos ADD COLUMN processado TINYINT DEFAULT 0")
     except Exception:
@@ -3844,11 +4031,13 @@ def garantir_tabelas():
     except Exception:
         pass
 
+    # ----------------------------
     # Tabela pontuacoes
+    # ----------------------------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS pontuacoes (
-            nome_discord VARCHAR(50) NOT NULL,
             user_id BIGINT PRIMARY KEY,
+            nome_discord VARCHAR(50) NOT NULL,
             pontos INT NOT NULL DEFAULT 0
         )
     """)
@@ -3857,6 +4046,22 @@ def garantir_tabelas():
         cur.execute("ALTER TABLE pontuacoes ADD COLUMN nome_discord VARCHAR(50) NOT NULL")
     except Exception:
         pass
+
+    # ----------------------------
+    # Tabela posts_premiados 
+    # ----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS posts_premiados (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            post_id BIGINT NOT NULL,
+            user_id BIGINT NOT NULL,
+            upvotes INT NOT NULL,
+            pontos_ganhos INT NOT NULL,
+            premiado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            premiado_dia DATE NOT NULL,
+            UNIQUE KEY uniq_post_dia (post_id, premiado_dia)
+        )
+    """)
 
     con.commit()
     con.close()
@@ -4568,6 +4773,7 @@ async def verificar_gols():
                 mensagem = await canal_apostas.send(
                     content=cargo_futebol,
                     embed=embed,
+                    view=ApostaView(fixture_id, casa, fora),
                     allowed_mentions=discord.AllowedMentions(roles=True)
                 )
                 if partida["league"]["id"] == 1:
@@ -4587,12 +4793,12 @@ async def verificar_gols():
                     
                 )
                 
-                await mensagem.add_reaction(emoji_casa)
-                logging.info(f"✅ Reação {emoji_casa} adicionada à mensagem {mensagem.id}")
-                await mensagem.add_reaction(emoji_fora)
-                logging.info(f"✅ Reação {emoji_fora} adicionada à mensagem {mensagem.id}")
-                await mensagem.add_reaction(EMOJI_EMPATE)
-                logging.info(f"✅ Reação {EMOJI_EMPATE} adicionada à mensagem {mensagem.id}")
+                # Armazenar dados na mensagem para o on_interaction acessar
+                view = mensagem.components[0].children[0].view if mensagem.components else None
+                if view:
+                    view.set_message(mensagem)
+                
+                
 
                 marcar_jogo_como_open(
                     fixture_id=fixture_id,
@@ -5714,15 +5920,6 @@ async def info(ctx):
         inline=False
     )
 
-    embed.add_field(
-        name="💖 Doações & Aniversário",
-        value=(
-            "`!feliz_aniversario` 🎂 — Envia uma mensagem especial de aniversário para o usuário.\n"
-            "`!entregar @usuario <valor>` 💸 — Entrega pontos ao usuário após uma doação aprovada."
-        ),
-        inline=False
-    )
-
     await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou a lista de comandos.")
 
@@ -6034,12 +6231,20 @@ async def admin(ctx):
     )
 
     embed.add_field(
-        name="📨 Utilidades",
-        value=("**!enviar_mensagem** — envia uma mensagem para um canal\n"
-        "**!ticket ** — gerencia tickets de suporte\n" \
-        "**entregar** — entrega pontos de doação manualmente"
+        name="💖 Doações & Aniversário",
+        value=(
+            "**!feliz_aniversario @usuario** — Envia mensagem especial de aniversário\n"
+            "**!entregar @usuario <valor>** — Entrega pontos ao usuário após doação aprovada"
         ),
-        
+        inline=False
+    )
+
+    embed.add_field(
+        name="📨 Utilidades",
+        value=(
+            "**!enviar_mensagem** — envia uma mensagem para um canal\n"
+            "**!ticket** — gerencia tickets de suporte"
+        ),
         inline=False
     )
 
@@ -6047,9 +6252,6 @@ async def admin(ctx):
     logging.info(f"Administrador {ctx.author} solicitou o painel de comandos administrativos.")
 
     await ctx.send(embed=embed)
-
-
-
 
 
 async def enviar_alerta(moderador_id: int, total: int):
@@ -6078,27 +6280,164 @@ async def enviar_alerta(moderador_id: int, total: int):
 #                    SISTEMA DE DOAÇÕES
 # ============================================================
 
-# Helpers para salvar/ler a mensagem de doação (persistência simples em arquivo JSON)
+# FUNÇÕES PARA PERSISTÊNCIA DE DOAÇÕES (MySQL)
+# ============================================================
+
 def salvar_mensagem_doacao(message_id, channel_id):
+    """Salva a mensagem de doação no MySQL"""
     try:
-        with open("doacao.json", "w", encoding="utf-8") as f:
-            json.dump({"message_id": int(message_id), "channel_id": int(channel_id)}, f)
+        conn = conectar_vips()
+        cursor = conn.cursor()
+        
+        # Cria tabela se não existir
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS doacao_mensagem (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                message_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_message (message_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        
+        # Limpa registros antigos (só pode existir 1)
+        cursor.execute("DELETE FROM doacao_mensagem")
+        
+        # Insere novo registro
+        cursor.execute(
+            "INSERT INTO doacao_mensagem (message_id, channel_id) VALUES (%s, %s)",
+            (message_id, channel_id)
+        )
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        logging.info(f"Mensagem de doação salva: message_id={message_id}, channel_id={channel_id}")
+        
     except Exception as e:
         logging.error(f"Erro ao salvar mensagem de doação: {e}")
 
-
 def get_mensagem_doacao():
+    """Recupera a mensagem de doação do MySQL"""
     try:
-        with open("doacao.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("message_id")
-    except Exception:
+        conn = conectar_vips()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT message_id, channel_id FROM doacao_mensagem ORDER BY id DESC LIMIT 1")
+        result = cursor.fetchone()
+        
+        cursor.close()
+        conn.close()
+        
+        if result:
+            return {"message_id": result[0], "channel_id": result[1]}
+        return None
+        
+    except Exception as e:
+        logging.error(f"Erro ao buscar mensagem de doação: {e}")
         return None
 
 
 MEU_ID = 428006047630884864
 
-# Mapeamento dos Emojis para Valores
+# View para botões de doação
+class DoacaoView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)  # View persistente
+
+    @discord.ui.button(
+        label="R$ 5,00",
+        style=discord.ButtonStyle.secondary,
+        emoji="5️⃣",
+        custom_id="doacao_5"
+    )
+    async def doacao_5_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.processar_doacao(interaction, 5)
+
+    @discord.ui.button(
+        label="R$ 10,00",
+        style=discord.ButtonStyle.secondary,
+        emoji="🔟",
+        custom_id="doacao_10"
+    )
+    async def doacao_10_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.processar_doacao(interaction, 10)
+
+    @discord.ui.button(
+        label="R$ 25,00",
+        style=discord.ButtonStyle.secondary,
+        emoji="💶",
+        custom_id="doacao_25"
+    )
+    async def doacao_25_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.processar_doacao(interaction, 25)
+
+    @discord.ui.button(
+        label="R$ 50,00",
+        style=discord.ButtonStyle.primary,
+        emoji="💰",
+        custom_id="doacao_50"
+    )
+    async def doacao_50_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.processar_doacao(interaction, 50)
+
+    async def processar_doacao(self, interaction: discord.Interaction, valor: int):
+        user = interaction.user
+        dono = await bot.fetch_user(MEU_ID)
+
+        try:
+            embed = discord.Embed(
+                title="🔔 Interesse em Doação",
+                description=f"O usuário {user.mention} demonstrou interesse em realizar uma doação.",
+                color=discord.Color.green()
+            )
+
+            embed.add_field(
+                name="💰 Valor Selecionado",
+                value=f"R$ {valor},00",
+                inline=True
+            )
+
+            embed.add_field(
+                name="👤 Usuário",
+                value=f"{user.mention}\n`ID: {user.id}`",
+                inline=True
+            )
+
+            embed.add_field(
+                name="⚠️ Ação Necessária",
+                value=(
+                    "Negociação pendente.\n"
+                    "Entre em contato com o usuário para prosseguir com a doação."
+                ),
+                inline=False
+            )
+
+            embed.set_footer(text="Sistema de Doações")
+
+            await dono.send(embed=embed)
+
+            await interaction.response.send_message(
+                f"💸 Obrigado pelo interesse! O dono foi notificado sobre sua doação de "
+                f"**R$ {valor},00** e entrará em contato em breve.",
+                ephemeral=True
+            )
+
+            logging.info(
+                f"Usuário {user.display_name} ({user.id}) solicitou doação de R$ {valor},00"
+            )
+
+        except Exception as e:
+            logging.error(f"Erro ao notificar doação: {e}")
+            await interaction.response.send_message(
+                "❌ Ocorreu um erro ao processar sua solicitação. "
+                "Tente novamente mais tarde.",
+                ephemeral=True
+            )
+
+
+# Mapeamento dos Emojis para Valores (mantido para compatibilidade)
 EMOJIS_VALORES = {
     "5️⃣": 5,
     "🔟": 10,
@@ -6167,12 +6506,9 @@ async def doacao(ctx):
 
     embed.set_footer(text="Meu pix:davidetroitff11@gmail.com" )
 
-    # Enviando a embed
-    mensagem = await ctx.send(embed=embed)
-
-    # Reações
-    for emoji in EMOJIS_VALORES.keys():
-        await mensagem.add_reaction(emoji)
+    # Enviando a embed com botões
+    view = DoacaoView()
+    mensagem = await ctx.send(embed=embed, view=view)
 
     salvar_mensagem_doacao(mensagem.id, ctx.channel.id)
 
@@ -6275,6 +6611,7 @@ async def entregar(ctx, membro: discord.Member, valor: int):
 #                  COMANDO DE CONQUISTAS
 # ============================================================
 
+
 @bot.command()
 async def conquistas(ctx, membro: discord.Member = None):
     alvo = membro or ctx.author
@@ -6356,6 +6693,22 @@ async def conquistas(ctx, membro: discord.Member = None):
         con_vips.close()
         cur_fut.close()
         con_fut.close()
+
+        # =========================
+        # 🔹 VERIFICAR STATUS DOS CARGOS
+        # =========================
+        
+        logging.info(f"Usuário {alvo.display_name} ({alvo.id}) solicitou conquistas. Verificando status dos cargos:")
+        
+        for key, conquista in CONQUISTAS.items():
+            cargo = discord.utils.get(alvo.guild.roles, name=conquista["cargo"])
+            if cargo:
+                if cargo in alvo.roles:
+                    logging.info(f"  ✅ {conquista['nome']}: Cargo '{cargo.name}' JÁ POSSUÍDO")
+                else:
+                    logging.info(f"  ❌ {conquista['nome']}: Cargo '{cargo.name}' NÃO POSSUÍDO")
+            else:
+                logging.warning(f"  ⚠️ {conquista['nome']}: Cargo '{conquista['cargo']}' NÃO ENCONTRADO no servidor")
 
         # =========================
         # 🔹 PROCESSAR CONQUISTAS
