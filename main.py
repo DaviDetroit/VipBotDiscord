@@ -273,10 +273,10 @@ class ApostaView(discord.ui.View):
 
         # Mapear emojis
         nome_casa = MAPEAMENTO_TIMES.get(home.lower(), home.lower()).replace(" ", "_")
-        emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
+        emoji_casa = EMOJI_TIMES.get(nome_casa, "🔵")
 
         nome_fora = MAPEAMENTO_TIMES.get(away.lower(), away.lower()).replace(" ", "_")
-        emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
+        emoji_fora = EMOJI_TIMES.get(nome_fora, "🔴")
 
         # 🟦 Botão casa
         self.add_item(discord.ui.Button(
@@ -302,16 +302,49 @@ class ApostaView(discord.ui.View):
             custom_id="aposta_away"
         ))
     
-    async def on_timeout(self):
-        # Limpar botões quando timeout
-        self.clear_items()
-        await self.message.edit(view=self)
-    
     def set_message(self, message):
         """Armazena a mensagem e seus dados para uso posterior"""
         self.message = message
         # Armazenar dados diretamente na mensagem para o on_interaction acessar
         message._aposta_data = (self.fixture_id, self.home, self.away)
+
+    async def on_timeout(self):
+        # Conectar ao banco e pegar todas as apostas desse jogo
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "SELECT user_id, palpite FROM apostas WHERE fixture_id = %s",
+            (self.fixture_id,)
+        )
+        apostas = cur.fetchall()
+        con.close()
+
+        # Separar por tipo de palpite
+        home_list = []
+        draw_list = []
+        away_list = []
+
+        for user_id, palpite in apostas:
+            mention = f"<@{user_id}>"
+            if palpite == "home":
+                home_list.append(mention)
+            elif palpite == "draw":
+                draw_list.append(mention)
+            else:
+                away_list.append(mention)
+
+        # Montar mensagem final
+        msg_text = (
+            f"🏟️ **{self.home} x {self.away}**\n\n"
+            f"{EMOJI_TIMES.get(MAPEAMENTO_TIMES.get(self.home.lower(), self.home.lower()).replace(' ', '_'), '🔵')} {self.home}: {', '.join(home_list) if home_list else 'Nenhum'}\n"
+            f"🤝 Empate: {', '.join(draw_list) if draw_list else 'Nenhum'}\n"
+            f"{EMOJI_TIMES.get(MAPEAMENTO_TIMES.get(self.away.lower(), self.away.lower()).replace(' ', '_'), '🔴')} {self.away}: {', '.join(away_list) if away_list else 'Nenhum'}\n\n"
+            "⏰ As apostas foram encerradas!"
+        )
+
+        # Limpar os botões e editar a mensagem
+        self.clear_items()
+        await self.message.edit(content=msg_text, view=self)
 
 async def processar_aposta_botao(interaction, fixture_id, palpite, home, away):
     # Verificar se ainda está aberto para apostas
@@ -4733,8 +4766,8 @@ async def verificar_gols():
 
         nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
         nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
-        emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
-        emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
+        emoji_casa = EMOJI_TIMES.get(nome_casa, "🔵")
+        emoji_fora = EMOJI_TIMES.get(nome_fora, "🔴")
 
         utc_time = datetime.fromisoformat(partida['fixture']['date'].replace("Z", "+00:00"))
         br_time = utc_time.astimezone(pytz.timezone("America/Sao_Paulo"))
@@ -4786,12 +4819,7 @@ async def verificar_gols():
                         "**APOSTAS ABERTAS PARA A UEFA CHAMPIONS LEAGUE!**\n"
                         "https://tenor.com/view/uefa-champions-league-opening-football-gif-5552229"
                     )
-                mensagem = await canal_apostas.send(
-                    content =cargo_futebol,
-                    embed=embed,
-                    allowed_mentions=discord.AllowedMentions(roles=True)
-                    
-                )
+                
                 
                 # Armazenar dados na mensagem para o on_interaction acessar
                 view = mensagem.components[0].children[0].view if mensagem.components else None
@@ -4822,7 +4850,7 @@ async def verificar_gols():
 
             if gols_casa > gols_anteriores_casa:
                 key_home = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower())
-                frase_home = PALAVRAS_GOL.get(key_home, f"⚽ GOOOOOOOL DO {casa.upper()}!")
+                frase_home = PALAVRAS_GOL.get(key_home, f"🔵 GOOOOOOOL DO {casa.upper()}!")
                 embed = discord.Embed(
                     title=frase_home,
                     color=discord.Color.green()
@@ -4833,13 +4861,13 @@ async def verificar_gols():
                     inline=False
                 )
                 role_home_name = key_home
-                role_home = discord.utils.get(canal.guild.roles, name=role_home_name)
+                role_home = discord.utils.get(canal_jogos.guild.roles, name=role_home_name)
                 mention_home = role_home.mention if role_home else f"@{role_home_name}"
-                await canal.send(content=f"{mention_home} {emoji_casa}", embed=embed)
+                await canal_jogos.send(content=f"{mention_home} {emoji_casa}", embed=embed)
 
             if gols_fora > gols_anteriores_fora:
                 key_away = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower())
-                frase_away = PALAVRAS_GOL.get(key_away, f"⚽ GOOOOOOOL DO {fora.upper()}!")
+                frase_away = PALAVRAS_GOL.get(key_away, f"🔴 GOOOOOOOL DO {fora.upper()}!")
                 embed = discord.Embed(
                     title=frase_away,
                     color=discord.Color.green()
@@ -4850,9 +4878,9 @@ async def verificar_gols():
                     inline=False
                 )
                 role_away_name = key_away
-                role_away = discord.utils.get(canal.guild.roles, name=role_away_name)
+                role_away = discord.utils.get(canal_jogos.guild.roles, name=role_away_name)
                 mention_away = role_away.mention if role_away else f"@{role_away_name}"
-                await canal.send(content=f"{mention_away} {emoji_fora}", embed=embed)
+                await canal_jogos.send(content=f"{mention_away} {emoji_fora}", embed=embed)
 
         except Exception as e:
             logging.error(f"❌ Erro ao enviar notificação de gol: {e}")
@@ -4961,7 +4989,7 @@ async def verificar_gols():
                     color=discord.Color.orange()
                 )
                 embed_final.set_footer(text="Obrigado por participar das apostas!")
-                await canal.send(embed=embed_final)
+                await canal_jogos.send(embed=embed_final)
 
                 # Enviar DMs
                 for user_id, msg in mensagens_pv:
@@ -4992,10 +5020,13 @@ PRECOS = {
     "segunda_chance": 45,
     "clown_bet": 60,
     "emoji_personalizado": 4500,
-    "comemoracao":1000
+    "comemoracao":1000,
+    "mute_jinxed": 1500,
+    "apelido": 1500
 }
-#LOJA DE PONTOS----------------------------------
-
+#==========================              ==========================  
+#                          LOJA DE PONTOS
+#==========================              ==========================  
 
 def atualizar_pontos(user_id: int, valor: int, nome_discord: str = None):
     conn = conectar_futebol()
@@ -5010,104 +5041,6 @@ def atualizar_pontos(user_id: int, valor: int, nome_discord: str = None):
     )
     conn.commit()
     conn.close()
-
-
-@bot.command()
-async def comprar_item(ctx, item_nome: str):
-    user_id = ctx.author.id
-    item = item_nome.lower()
-
-    if item not in PRECOS:
-        await ctx.send("<:3894307:1443956354698969149> Item não encontrado na loja!")
-        return
-
-    preco = PRECOS[item]
-
-    try:
-        # Abrir conexão
-        conn = conectar_futebol()
-        cursor = conn.cursor()
-
-        # Buscar pontos do usuário na tabela correta
-        cursor.execute("SELECT pontos FROM pontuacoes WHERE user_id = %s", (user_id,))
-        resultado = cursor.fetchone()
-        pontos = resultado[0] if resultado else 0
-
-        if pontos < preco:
-            await ctx.send(f"<:Jinxsip1:1390638945565671495> Você precisa de {preco} pontos para comprar este item. Você tem {pontos} pontos.")
-            return
-
-        # Descontar pontos
-        atualizar_pontos(user_id, -preco)
-
-        # ===========================
-        # ITEM VIP
-        # ===========================
-        if item == "jinxed_vip":
-            cargo = discord.utils.get(ctx.guild.roles, name="Jinxed Vip")
-            if cargo:
-                data_compra = datetime.utcnow()
-                data_expira = data_compra + timedelta(days=15)
-                cursor.execute(
-                    "INSERT INTO loja_vip (user_id, cargo_id, data_compra, data_expira, ativo) VALUES (%s, %s, %s, %s, 1)",
-                    (user_id, cargo.id, data_compra, data_expira)
-                )
-                await ctx.author.add_roles(cargo)
-                await ctx.send(f"✅ Parabéns! Você comprou o cargo **Jinxed Vip** por 15 dias!")
-            else:
-                await ctx.send("⚠️ Cargo 'Jinxed Vip' não encontrado no servidor.")
-
-        # ===========================
-        # ITEM SEGUNDA CHANCE
-        # ===========================
-        elif item == "segunda_chance":
-            cursor.execute(
-                "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-                (user_id, item, preco, datetime.utcnow())
-            )
-            await ctx.send("🎯 Você comprou **Segunda Chance**! Ela será usada automaticamente na sua próxima aposta perdida.")
-
-        # ===========================
-        # ITEM CAIXINHA DE SURPRESA
-        # ===========================
-        elif item == "caixinha":
-            cursor.execute(
-                "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'caixinha' AND DATE(data_compra) = UTC_DATE()",
-                (user_id,)
-            )
-            limite_hoje = cursor.fetchone()[0]
-            if limite_hoje >= 3:
-                atualizar_pontos(user_id, preco)
-                await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes hoje. Tente novamente amanhã.")
-                return
-
-            pontos_sorteados = random.randint(1, 200)
-            atualizar_pontos(user_id, pontos_sorteados)
-            cursor.execute(
-                "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-                (user_id, item, preco, datetime.utcnow())
-            )
-            await ctx.send(f"🎁 Você abriu a **Caixinha de Surpresa** e ganhou **{pontos_sorteados} pontos**!")
-
-        # ===========================
-        # ITEM CLOWN BET
-        # ===========================
-        elif item == "clown_bet":
-            cursor.execute(
-                "INSERT INTO clown_bet (user_id, ativo) VALUES (%s, 1) ON DUPLICATE KEY UPDATE ativo = 1",
-                (user_id,)
-            )
-            await ctx.send("🤡 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
-
-        # Commit e fechar
-        conn.commit()
-
-    except Exception as e:
-        await ctx.send(f"❌ Ocorreu um erro ao comprar o item: {e}")
-
-    finally:
-        cursor.close()
-        conn.close()
 
 
 @tasks.loop(minutes=30)
@@ -5125,7 +5058,7 @@ async def verificar_vips_expirados():
     for user_id, cargo_id in resultados:
         for guild in bot.guilds:
             member = guild.get_member(user_id)
-            cargo = discord.utils.get(guild.roles, id=cargo_id)
+            cargo = discord.utils.get(guild.roles, id=cargo_id) 
             if member and cargo:
                 try:
                     await member.remove_roles(cargo)
@@ -5142,6 +5075,9 @@ async def verificar_vips_expirados():
     conn.close()
 
 CANAL_PERMITIDO_ID = 1380564680774385724
+
+# Cooldown para comando !troll
+ultimo_troll = {}
 
 @bot.command()
 async def loja(ctx):
@@ -5185,6 +5121,16 @@ async def loja(ctx):
     embed.add_field(
         name="🎉 Comemoração de Vitória — 1000 pontos",
         value="• Escolha um time.\n• Se ele vencer o próximo jogo, o bot posta um GIF festejando além de comemorar!\n• Use: `!comprar comemoracao` e depois `!comemorar <time>`",
+        inline=False
+    )
+    embed.add_field(
+        name="🔇 Mute Jinxed — 1500 pontos",
+        value="• Mute alguém por 3 minutos usando !troll\n• Funciona mesmo se o bot não tiver permissão\n• Uso único\n• Use: `!comprar mute_jinxed`",
+        inline=False
+    )
+    embed.add_field(
+        name="👤 Apelido — 1500 pontos",
+        value="• Troque o apelido de alguém usando !apelido\n• Uso único\n• Use: `!comprar apelido`",
         inline=False
     )
 
@@ -5281,6 +5227,9 @@ async def comprar(ctx, item_nome: str):
         con.close()
         await ctx.send(f"🎁 Você abriu a **Caixinha de Surpresa** e ganhou **{pontos_sorteados} pontos!**")
 
+    
+
+
     elif item == "clown_bet":
         con = conectar_futebol()
         cur = con.cursor()
@@ -5293,7 +5242,19 @@ async def comprar(ctx, item_nome: str):
         await ctx.send("🤡 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
 
     elif item == "emoji_personalizado":
-        await ctx.send("🎨 Você comprou **Emoji Personalizado** por 4.500 pontos! Agora registre seu cargo usando: `!setemoji <nome_cargo> <emoji>`\nExemplo: `!setemoji Fúria 🔥`")
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (user_id, item, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+
+        await ctx.send(
+            "🎨 Você comprou **Emoji Personalizado** por 4.500 pontos!\n"
+            "Agora use **`!setemoji`** para criar seu cargo com ícone personalizado."
+        )
 
     elif item == "comemorar":
         con = conectar_futebol()
@@ -5305,6 +5266,80 @@ async def comprar(ctx, item_nome: str):
         con.commit()
         con.close()
         await ctx.send(f"✅ **Compra realizada!** Agora use `!comemorar <nome_do_time>` para agendar a festa no próximo jogo!")
+
+    elif item == "mute_jinxed":
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (user_id, item, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        await ctx.send("🔇 Você comprou o Mute Jinxed! Use !troll @usuario para mutar alguém por 3 minutos.")
+    elif item == "apelido":
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (user_id, item, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        await ctx.send("👤 Você comprou o Apelido! use !apelido @user <nome_do_apelido>")
+
+@bot.command()
+async def apelido(ctx, alvo: discord.Member, *, novo_apelido: str):
+
+    # não permitir bots
+    if alvo.bot:
+        return await ctx.send("🤖 Bots não podem ser trolados.")
+
+    con = conectar_futebol()
+    cur = con.cursor()
+
+    # verifica se o usuário tem o item ativo
+    cur.execute(
+        "SELECT id FROM loja_pontos "
+        "WHERE user_id = %s AND item = 'apelido' AND ativo = 1 "
+        "LIMIT 1",
+        (ctx.author.id,)
+    )
+    item = cur.fetchone()
+
+    if not item:
+        con.close()
+        return await ctx.send("❌ Você não possui um item **Apelido**.")
+
+    # tenta trocar o apelido
+    try:
+        apelido_antigo = alvo.nick  # pode ser None
+
+        await alvo.edit(
+            nick=novo_apelido,
+            reason=f"Apelido troll usado por {ctx.author}"
+        )
+
+        await ctx.send(
+            f"👤 {alvo.mention} agora se chama **{novo_apelido}** 😈"
+        )
+
+        
+
+    except discord.Forbidden:
+        await ctx.send(
+            f"😈 Tentou trocar o apelido de {alvo.mention}, "
+            "mas ele é poderoso demais!"
+        )
+
+    finally:
+        # consome o item (mesmo se falhar — estilo Jinxed 😏)
+        cur.execute(
+            "UPDATE loja_pontos SET ativo = 0 WHERE id = %s",
+            (item[0],)
+        )
+        con.commit()
+        con.close()
 
 @bot.command()
 async def comemorar(ctx, *, time_nome: str):
@@ -5537,6 +5572,65 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7):
 
     conn.commit()
     conn.close()
+    
+    # Verificar conquistas automaticamente após processar aposta
+    try:
+        # Obter os dados atuais do usuário para verificar conquistas
+        conn_fut = conectar_futebol()
+        cur_fut = conn_fut.cursor(dictionary=True)
+        
+        # Buscar acertos consecutivos atualizados
+        cur_fut.execute(
+            "SELECT acertos_consecutivos FROM apostas WHERE user_id = %s ORDER BY id DESC LIMIT 1",
+            (user_id,)
+        )
+        resultado_acertos = cur_fut.fetchone()
+        acertos_consecutivos = resultado_acertos["acertos_consecutivos"] if resultado_acertos else 0
+        
+        # Verificar se tem doação ativa
+        cur_fut.execute(
+            "SELECT id FROM loja_pontos WHERE user_id = %s AND item = 'doacao_50' AND ativo = 1",
+            (user_id,)
+        )
+        fez_doacao = cur_fut.fetchone() is not None
+        
+        cur_fut.close()
+        conn_fut.close()
+        
+        # Verificar VIP
+        conn_vips = conectar_vips()
+        cur_vips = conn_vips.cursor(dictionary=True)
+        cur_vips.execute(
+            "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
+            (user_id,)
+        )
+        tem_vip = cur_vips.fetchone() is not None
+        cur_vips.close()
+        conn_vips.close()
+        
+        # Tentar obter o usuário do bot
+        user_obj = None
+        for guild in bot.guilds:
+            user_obj = guild.get_member(user_id)
+            if user_obj:
+                break
+        
+        if user_obj:
+            # Verificar conquistas de forma assíncrona
+            asyncio.create_task(
+                processar_conquistas(
+                    member=user_obj,
+                    mensagens_semana=0,  
+                    acertos_consecutivos=acertos_consecutivos,
+                    fez_doacao=fez_doacao,
+                    tem_vip=tem_vip,
+                    tempo_em_call=0  
+                )
+            )
+            logging.info(f"Verificação automática de conquistas iniciada para usuário {user_id} com {acertos_consecutivos} acertos consecutivos")
+    
+    except Exception as e:
+        logging.error(f"Erro ao verificar conquistas automáticas para usuário {user_id}: {e}")
 
 
 @bot.command()
@@ -5765,8 +5859,8 @@ async def terminar_jogo(ctx, fixture_id: int = None):
 
             nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
             nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
-            emoji_casa = EMOJI_TIMES.get(nome_casa, "⚽")
-            emoji_fora = EMOJI_TIMES.get(nome_fora, "⚽")
+            emoji_casa = EMOJI_TIMES.get(nome_casa, "🔵")
+            emoji_fora = EMOJI_TIMES.get(nome_fora, "🔴")
 
             embed_final = discord.Embed(
                 title=f"🏁 Fim de jogo — {casa} x {fora}",
@@ -6893,7 +6987,68 @@ async def feliz_aniversario(ctx, membro: discord.Member):
     await ctx.send("É big, é big É big, é big, é big É hora, é hora É hora, é hora, é hora Rá-tim-bum!")
 
 
+@bot.command()
+async def troll(ctx, member: discord.Member):
+    user_id = ctx.author.id
+    agora = datetime.utcnow()
     
+    # Verificar cooldown (5 minutos)
+    if user_id in ultimo_troll:
+        tempo_desde_ultimo = agora - ultimo_troll[user_id]
+        if tempo_desde_ultimo < timedelta(minutes=5):
+            return await ctx.send("⏳ Você deve esperar 5 minutos entre usos do comando !troll.")
+    
+    # Verificar se o usuário comprou o item
+    con = conectar_futebol()
+    cur = con.cursor()
+    cur.execute(
+        "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'mute_jinxed' AND ativo = 1",
+        (user_id,)
+    )
+    comprado = cur.fetchone()[0]
+    if comprado == 0:
+        con.close()
+        return await ctx.send("❌ Você precisa comprar o item **Mute Jinxed** primeiro usando `!comprar mute_jinxed`.")
+    
+    # Verificar se o alvo é um bot
+    if member.bot:
+        con.close()
+        return await ctx.send("🤖 Você não pode usar o comando !troll em bots.")
+    
+    # Consumir o item
+    cur.execute(
+        "UPDATE loja_pontos SET ativo = 0 WHERE user_id = %s AND item = 'mute_jinxed' AND ativo = 1 LIMIT 1",
+        (user_id,)
+    )
+    con.commit()
+    con.close()
+    
+    # Atualizar cooldown
+    ultimo_troll[user_id] = agora
+    
+    # Tentar aplicar o mute
+    try:
+        # Verificar se o bot tem permissão para mutar
+        if ctx.guild.me.guild_permissions.mute_members:
+            await member.edit(timeout=timedelta(minutes=3), reason=f"Mute Jinxed usado por {ctx.author.name}")
+            await ctx.send(f"🔇 **{member.mention} foi silenciado por 3 minutos!** (Usado por {ctx.author.mention})")
+        else:
+            # Bot não tem permissão, enviar mensagem troll
+            await ctx.send(f"🎭 **{ctx.author.mention} tentou mutar {member.mention} mas o bot não tem permissão!**\n"
+                          f"😏 Ainda assim, o item foi consumido! Tente em um servidor onde o bot tenha permissões!")
+    except discord.Forbidden:
+        await ctx.send(f"🚫 **Não foi possível mutar {member.mention}** (cargo superior ou falta de permissão)\n"
+                      f"😅 O item foi consumido mesmo assim! Tente em alguém com cargo inferior!")
+    except Exception as e:
+        await ctx.send(f"❌ Ocorreu um erro ao tentar mutar {member.mention}: {str(e)[:50]}")
+    
+    # Enviar mensagem pública anunciando o uso
+    try:
+        anuncio_channel = ctx.guild.get_channel(CANAL_PERMITIDO_ID)
+        if anuncio_channel:
+            await anuncio_channel.send(f"🔇 **{ctx.author.mention} usou Mute Jinxed em {member.mention}!**")
+    except:
+        pass
 
 
 bot.run(TOKEN)
