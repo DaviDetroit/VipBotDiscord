@@ -27,18 +27,23 @@ logging.basicConfig(
 )
 
 
-
 def conectar(database_name: str):
     return mysql.connector.connect(
         host=os.getenv("DB_HOST"),
         user=os.getenv("DB_USER"),
+        port=os.getenv("DB_PORT"),
         password=os.getenv("DB_PASSWORD"),
-        database=database_name
+        database=database_name,
+        ssl_disabled=True,
+        auth_plugin="mysql_native_password",
+        autocommit=True,
+        connection_timeout=10,
+        use_pure=True  
     )
+
 
 def conectar_vips():
     return conectar(os.getenv("DB_VIPS"))
-
 
 
 def conectar_futebol():
@@ -109,9 +114,6 @@ def pegar_torcedores(time):
     conn.close()
     return [row["user_id"] for row in rows]
 
-
-
-
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
@@ -121,6 +123,7 @@ intents.presences = True
 intents.reactions = True
 intents.voice_states = True
 CANAL_AVISO_ID=1387107714525827152
+fuso_br = pytz.timezone("America/Sao_Paulo")
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -186,7 +189,10 @@ EMOJI_TIMES = {
     "palmeiras": "<:Palmeiras:1425989650513662044>",
     "lanus": "<:Lanus:1441436509281718383>",
     "atletico paranaense": "<:atlpr:1443398482516775055>",
-    "coritiba": "<:Coritibaa:1443398813820784660>",
+    "atlético paranaense": "<:atlpr:1443398482516775055>",
+    "athletico paranaense": "<:atlpr:1443398482516775055>",
+    "atletico-pr": "<:atlpr:1443398482516775055>",
+    "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
     "remo": "<:Remo:1443399201655492708>",
     "chapecoense" :"<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
 
@@ -245,16 +251,20 @@ EMOJI_TIMES = {
 
 
 
+# Dicionário global para armazenar dados das apostas
+apostas_data = {}
+
 @bot.event
-async def on_interaction(interaction: discord.Interaction):
-    if not interaction.type == discord.InteractionType.component:
+async def on_interaction(interaction):
+    if not interaction.data:
         return
 
     cid = interaction.data.get("custom_id")
     
-    # Para simplificar, vamos armazenar os dados na mensagem quando criada
-    if hasattr(interaction.message, '_aposta_data'):
-        fixture_id, home, away = interaction.message._aposta_data
+    # Usar dicionário global em vez de atributo da mensagem
+    message_id = interaction.message.id
+    if message_id in apostas_data:
+        fixture_id, home, away = apostas_data[message_id]
         
         if cid == "aposta_home":
             await processar_aposta_botao(interaction, fixture_id, "home", home, away)
@@ -294,19 +304,19 @@ class ApostaView(discord.ui.View):
             custom_id="aposta_draw"
         ))
 
-        # 🟦 Botão fora
+        # 🟦 Botão visitante
         self.add_item(discord.ui.Button(
             label=away,
             emoji=emoji_fora,
             style=discord.ButtonStyle.primary,  # azul
             custom_id="aposta_away"
         ))
-    
+
     def set_message(self, message):
         """Armazena a mensagem e seus dados para uso posterior"""
         self.message = message
-        # Armazenar dados diretamente na mensagem para o on_interaction acessar
-        message._aposta_data = (self.fixture_id, self.home, self.away)
+        # Armazenar dados no dicionário global
+        apostas_data[message.id] = (self.fixture_id, self.home, self.away)
 
     async def on_timeout(self):
         # Conectar ao banco e pegar todas as apostas desse jogo
@@ -378,11 +388,13 @@ async def processar_aposta_botao(interaction, fixture_id, palpite, home, away):
         escolhido = "Empate"
 
     await interaction.response.send_message(
-        f"🏟️ **{home} x {away}**\n"
-        f"<:Jinx:1390379001515872369> Palpite escolhido: **{escolhido}**\n"
-        "🍀 Boa sorte!",
-        ephemeral=True
-    )
+    f"━━━━━━━━━━━━━━━\n"
+    f"🏟️ **{home} x {away}**\n"
+    f"━━━━━━━━━━━━━━━\n\n"
+    f"<:514694happycatemoji:1466570662603915359> **Palpite:** `{escolhido}`\n"
+    f"🍀 _Boa sorte! Que venha o gol!_\n",
+    ephemeral=True
+)
 
 # ============================================================
 #                    SISTEMA DE CONQUISTAS
@@ -425,6 +437,12 @@ CONQUISTAS = {
         "condicao": lambda d: d['tem_vip'],
         "cargo": "Coroado"
     },
+    "azarao": {
+        "nome": "🐗 O Azarão",
+        "descricao": "Aposte no azarão e ele vença a batalha.",
+        "condicao": lambda d: d['azarao_vitoria'],
+        "cargo": "O Azarão"
+    },
     "conversador_em_call": {
         "nome": "📞 Conversador em Call",
         "descricao": "Fique 50 horas em call de voz (acumulado).",
@@ -444,7 +462,7 @@ CONQUISTAS = {
         "cargo": "DJ da Sarah"
     },
     "insistente_pelucia": {
-        "nome": "🧸 Insistente da Pelúcia",
+        "nome": "💬 Mestre das Menções",
         "descricao": "Mencione o bot 100 vezes.",
         "condicao": lambda d: d["mencoes_bot"] >= 100 and not d.get("bloqueado", False),
         "cargo": "Pelúcia Darwin"
@@ -483,7 +501,8 @@ async def processar_conquistas(
     tempo_em_call=0,
     mencionou_miisha=False,
     tocou_musica=False,
-    mencoes_bot=0
+    mencoes_bot=0,
+    azarao_vitoria=False
 ):
     dados = {
         "mensagens_semana": mensagens_semana,
@@ -494,6 +513,7 @@ async def processar_conquistas(
         "mencionou_miisha": mencionou_miisha,
         "tocou_musica": tocou_musica,
         "mencoes_bot": mencoes_bot,
+        "azarao_vitoria": azarao_vitoria,
         "bloqueado": False
     }
 
@@ -760,8 +780,15 @@ mensagens_curiosidade = [
     "👁️ Curiosidade visual: seu olho tem um ponto cego e você não percebe.",
     "🤯 Curioso como seu cérebro acredita no que ele mesmo inventa."
 ]
+@bot.event
 async def on_ready():
     logging.info(f"Bot conectado como {bot.user}")
+    
+    # Verificar usuários em call quando bot inicia
+    await verificar_usuarios_em_call_inicial()
+    #Verifica jogos em questao
+    if not verificar_jogos_automaticamente.is_running():
+        verificar_jogos_automaticamente.start()
     
     # Adicionar listeners para interações
     bot.add_view(DoacaoView())  # Botões de doação
@@ -798,14 +825,17 @@ async def on_ready():
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
         
-    if not premiar_post_mais_votado.is_running():
-        premiar_post_mais_votado.start()
+    # Task premiar_post_mais_votado removida - não existe no código
         
     if not check_evento_anime.is_running():
         check_evento_anime.start()
 
-
-    
+    if not loop_top_ativos.is_running():
+        loop_top_ativos.start()
+        
+    if not resetar_ativos_semanal.is_running():
+        resetar_ativos_semanal.start()
+        
 
     # ===== Verificador de gols =====
     if await jogos_ao_vivo():
@@ -821,22 +851,17 @@ async def on_ready():
     dia_semana = agora.weekday()
     semana_atual = agora.isocalendar()[1]
     
-    if hora < 12:
+    if hora == 10:
         canal = bot.get_channel(1380564680552091789)
         if canal:
             mensagem = random.choice(mensagens_bom_dia)
             await canal.send(mensagem)
-    if 12 <= hora < 18:
-        canal = bot.get_channel(1380564680552091789)
-        if canal:
+    if hora == 16:
             mensagem = random.choice(mensagens_curiosidade)
             await canal.send(mensagem)
 
     # ===== TOP ATIVOS DOMINGO =====
-    if dia_semana == 6:  # domingo
-        canal = bot.get_channel(CANAL_TOP_ID)
-        if canal:
-            await enviar_top_ativos_semanal_once(semana_atual, canal)
+    # Removido - agora handled por loop_top_ativos
 
     conn = conectar_vips()
     c = conn.cursor()
@@ -869,6 +894,7 @@ async def on_ready():
             await enviar_alerta(moderador_id, total)
     except Exception as e:
         logging.error(f"Falha ao reconstruir contadores/alertas: {e}")
+    
     
 @tasks.loop(minutes=3)
 async def limpar_canal_tickets():
@@ -1126,45 +1152,6 @@ async def sincronizar_reacoes():
         )
 
     conexao.commit()
-    cursor.close()
-    conexao.close()
-
-    conexao = conectar_vips()
-    cursor = conexao.cursor()
-    cursor.execute("""
-        SELECT 1 FROM conquistas_desbloqueadas
-        WHERE user_id = %s AND conquista_id = %s
-    """, (member.id, conquista_id))
-    if cursor.fetchone():
-        cursor.close()
-        conexao.close()
-        return
-    cursor.execute("""
-        INSERT INTO conquistas_desbloqueadas (user_id, conquista_id)
-        VALUES (%s, %s)
-    """, (member.id, conquista_id))
-    conexao.commit()
-    logging.info(f"Conquista manual concedida: {conquista['nome']} para {member.display_name} ({member.id})")
-    cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
-    if cargo:
-        if cargo not in member.roles:
-            await member.add_roles(cargo)
-            logging.info(f"Cargo '{cargo.name}' adicionado manualmente para {member.display_name} ({member.id})")
-        else:
-            logging.info(f"Membro {member.display_name} ({member.id}) já possui o cargo '{cargo.name}'")
-    else:
-        logging.warning(f"Cargo '{conquista['cargo']}' não encontrado no guild para conquista manual")
-
-    embed = discord.Embed(
-        title="🏆 Nova Conquista!",
-        description=f"**{conquista['nome']}**\n{conquista['descricao']}",
-        color=discord.Color.gold()
-    )
-    embed.set_footer(text="Parabéns pelo destaque no servidor!")
-    try:
-        await member.send(embed=embed)
-    except:
-        pass
     cursor.close()
     conexao.close()
 
@@ -1680,18 +1667,6 @@ async def on_raw_reaction_add(payload):
                 await canal_fallback.send(f"<:discotoolsxyzicon_6:1444750406763679764> {member.mention} quer ser VIP!")
 
 
-
-    # ================================================
-    #--------------- SISTEMA DE DOAÇÃO ---------------
-    # ================================================
-    # Sistema de doação agora usa botões em vez de reações
-    # As interações são tratadas pela DoacaoView e seus callbacks
-
-
-
-    
-
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def dar_vip(ctx, membro: discord.Member, duracao: str):
@@ -1769,7 +1744,7 @@ async def dar_vip(ctx, membro: discord.Member, duracao: str):
         except Exception as e:
             logging.error(f"Erro ao conceder conquista coroado para {membro.display_name}: {e}")
 
-    
+
 
 
 
@@ -2241,7 +2216,6 @@ async def on_message(message):
             logging.error(f"Erro mencoes_bot: {e}")
 
 
-
     # ============================
     #  IGNORAR CARGO ESPECÍFICO
     # ============================
@@ -2260,18 +2234,27 @@ async def on_message(message):
     conexao = conectar_vips()
     cursor = conexao.cursor(dictionary=True)
 
-    cursor.execute("""
-        INSERT INTO atividade (user_id, nome_discord, mensagens, semana)
-        VALUES (%s, %s, 1, %s)
-        ON DUPLICATE KEY UPDATE 
-            mensagens = mensagens + 1,
-            nome_discord = %s,
-            semana = %s
-    """, (user_id, nome, semana_atual, nome, semana_atual))
+    try:
+        cursor.execute("""
+            INSERT INTO atividade (user_id, nome_discord, mensagens, semana)
+            VALUES (%s, %s, 1, %s)
+            ON DUPLICATE KEY UPDATE 
+                mensagens = mensagens + 1,
+                nome_discord = %s,
+                semana = %s
+        """, (user_id, nome, semana_atual, nome, semana_atual))
 
-    conexao.commit()
-    cursor.close()
-    conexao.close()
+        conexao.commit()
+    except Exception as e:
+        logging.error(f"Erro ao salvar atividade do usuário: {e}")
+        if conexao:
+            try:
+                conexao.rollback()
+            except:
+                pass
+    finally:
+        cursor.close()
+        conexao.close()
 
 
 #=========================Conquista=========================
@@ -2370,18 +2353,19 @@ def registrar_saida_call(user_id: int, guild_id: int) -> int:
         
         # Buscar o tempo de entrada mais recente
         cursor.execute(
-            "SELECT entry_time FROM user_voice_status WHERE user_id = %s AND guild_id = %s ORDER BY entry_time DESC LIMIT 1",
+            "SELECT entry_time, channel_id FROM user_voice_status WHERE user_id = %s AND guild_id = %s ORDER BY entry_time DESC LIMIT 1",
             (user_id, guild_id)
         )
         resultado = cursor.fetchone()
         
         if resultado:
             entry_time = resultado['entry_time']
+            channel_id = resultado['channel_id']
             exit_time = datetime.now()
             tempo_em_call_segundos = int((exit_time - entry_time).total_seconds())
             cursor.execute(
-                "INSERT INTO voice_time_history (user_id, guild_id, session_duration) VALUES (%s, %s, %s)",
-                (user_id, guild_id, tempo_em_call_segundos)
+                "INSERT INTO voice_time_history (user_id, guild_id, channel_id, session_duration) VALUES (%s, %s, %s, %s)",
+                (user_id, guild_id, channel_id, tempo_em_call_segundos)
             )
             # Deletar o registro de entrada
             cursor.execute(
@@ -2402,6 +2386,7 @@ def registrar_saida_call(user_id: int, guild_id: int) -> int:
         logging.error(f"Erro ao registrar saída de call: {e}")
         return 0
 
+
 def calcular_tempo_total_em_call(user_id: int, guild_id: int) -> int:
     try:
         logging.debug(f"Calculando tempo total para user_id={user_id}, guild_id={guild_id}")
@@ -2418,14 +2403,43 @@ def calcular_tempo_total_em_call(user_id: int, guild_id: int) -> int:
         resultados_ativos = cursor.fetchall()
         logging.debug(f"Entradas ativas encontradas: {len(resultados_ativos)}")
         
-        # Histórico
-        cursor.execute(
-            "SELECT SUM(session_duration) AS total FROM voice_time_history WHERE user_id = %s AND guild_id = %s",
-            (user_id, guild_id)
-        )
-        resultado = cursor.fetchone()
-        historico = resultado.get('total', 0) if resultado and resultado.get('total') is not None else 0
-        logging.debug(f"Histórico de tempo: {historico}s")
+        # Verificar se a tabela voice_time_history existe
+        cursor.execute("SHOW TABLES LIKE 'voice_time_history'")
+        tabela_existe = cursor.fetchone()
+        
+        if tabela_existe:
+            # Histórico (só se a tabela existir)
+            cursor.execute(
+                "SELECT SUM(session_duration) AS total FROM voice_time_history WHERE user_id = %s AND guild_id = %s",
+                (user_id, guild_id)
+            )
+            resultado = cursor.fetchone()
+            historico = resultado.get('total', 0) if resultado and resultado.get('total') is not None else 0
+            logging.debug(f"Histórico de tempo: {historico}s")
+        else:
+            # Tabela não existe, criar log e usar 0
+            logging.warning(f"Tabela voice_time_history não existe para user_id={user_id}, guild_id={guild_id}")
+            historico = 0
+            
+            # Criar tabela automaticamente
+            try:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS voice_time_history (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        guild_id BIGINT NOT NULL,
+                        channel_id BIGINT NOT NULL,
+                        session_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        session_end TIMESTAMP NULL,
+                        session_duration INT DEFAULT 0,
+                        INDEX idx_user (user_id),
+                        INDEX idx_guild (guild_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+                conn.commit()
+                logging.info("Tabela voice_time_history criada automaticamente")
+            except Exception as e:
+                logging.error(f"Erro ao criar tabela voice_time_history: {e}")
         
         tempo_total = historico if historico is not None else 0
         agora = datetime.now()
@@ -2453,6 +2467,58 @@ def calcular_tempo_total_em_call(user_id: int, guild_id: int) -> int:
             exc_info=True
         )
         return 0
+
+
+async def verificar_usuarios_em_call_inicial():
+    """Verifica usuários que já estão em call quando o bot inicia"""
+    try:
+        guild = bot.get_guild(1380564679084081175)  # ID_DO_SERVIDOR
+        if not guild:
+            return
+            
+        conn = conectar_vips()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Limpar entradas órfãs (usuários que não estão mais em call)
+        cursor.execute("SELECT user_id, entry_time FROM user_voice_status")
+        entradas_banco = cursor.fetchall()
+        
+        for entrada in entradas_banco:
+            user_id = entrada['user_id']
+            member = guild.get_member(user_id)
+            
+            # Se usuário não está mais em call ou não existe mais, limpar entrada
+            if not member or not member.voice:
+                cursor.execute("DELETE FROM user_voice_status WHERE user_id = %s", (user_id,))
+                logging.info(f"Removida entrada órfã do usuário {user_id}")
+        
+        # Verificar usuários atualmente em call
+        for member in guild.members:
+            if member.bot or not member.voice:
+                continue
+                
+            # Verificar se já tem registro ativo
+            cursor.execute(
+                "SELECT entry_time FROM user_voice_status WHERE user_id = %s AND guild_id = %s",
+                (member.id, guild.id)
+            )
+            resultado = cursor.fetchone()
+            
+            if not resultado:
+                # Criar entrada para quem já está em call
+                cursor.execute(
+                    "INSERT INTO user_voice_status (user_id, guild_id, channel_id, entry_time) VALUES (%s, %s, %s, %s)",
+                    (member.id, guild.id, member.voice.channel.id, datetime.now())
+                )
+                logging.info(f"Criada entrada para usuário {member.name} já em call no canal {member.voice.channel.name}")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logging.info("✅ Verificação inicial de usuários em call concluída")
+        
+    except Exception as e:
+        logging.error(f"Erro ao verificar usuários em call inicial: {e}")
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -2599,6 +2665,49 @@ async def enviar_top_ativos_semanal_once(semana_atual, canal):
             )
 
         await canal.send(embed=embed)
+        logging.info(f"Top ativos semanal enviado - Semana {semana_atual}")
+
+@tasks.loop(minutes=1)
+async def resetar_ativos_semanal():
+    agora = datetime.now(fuso_br)
+
+    # Segunda-feira = 0
+    if agora.weekday() == 6 and agora.hour == 15 and agora.minute == 0:
+        conn = conectar_vips()
+        cursor = conn.cursor()
+
+        cursor.execute("TRUNCATE TABLE atividade")
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        logging.info("Atividade semanal resetada com sucesso")
+
+
+
+
+    
+
+ID_DO_CANAL = 1380564680552091789
+
+
+
+@tasks.loop(minutes=1)
+async def loop_top_ativos():
+    agora = datetime.now(fuso_br)
+
+    # Domingo às 14:59 (horário BR) - 1 minuto antes do reset
+    if agora.weekday() == 6 and agora.hour == 14 and agora.minute == 59:
+        semana_atual = agora.isocalendar().week
+        canal = bot.get_channel(ID_DO_CANAL)
+
+        if canal:
+            await enviar_top_ativos_semanal_once(semana_atual, canal)
+
+@loop_top_ativos.before_loop
+async def before_loop_top_ativos():
+    await bot.wait_until_ready()
 
 
 jogando = {}
@@ -2645,7 +2754,7 @@ async def on_presence_update(before, after):
                 f"<a:5ad2b0ea20074b8c80a3fa600b4e8ec4:1410657064430075975> "
                 f"Os jogadores {mentions} estão jogando **{jogo_atual}** na call! Jogue você também!"
             )
-            await desbloquear_conquista_em_grupo(
+            await desbloquear_conquistas_em_grupo(
                 guild=channel.guild,
                 user_ids=jogando[jogo_atual],
                 conquista_id="party_na_call"
@@ -2764,40 +2873,100 @@ async def vip_list(ctx):
 CANAL_EVENTO_ID = 1380564680552091789 
 FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 
-# Lista de Personagens (Mantendo sua estrutura)
+# =========================
+# BERSERK
+# =========================
 PERSONAGENS = [
-    {"nome": "Griffith", "emoji": "<:GRIFFITH:1408187671179821128>", "forca": 85},
-    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 86},
-    {"nome": "Goku", "emoji": "<a:Goku:1448782376670068766>", "forca": 99},
-    {"nome" : "Cell","emoji": "<a:3549cellthink:1450487722094362817>", "forca": 89},
-    {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 88},
-    {"nome": "Naruto", "emoji": "<:Narutin:1408189027437379655>", "forca": 90},
-    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 92},
-    {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 95},
+    {"nome": "Griffith", "emoji": "<:GRIFFITH:1408187671179821128>", "forca": 65},
+    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 75},
+
+# =========================
+# DRAGON BALL
+# =========================
+    {"nome": "Goku", "emoji": "<a:Goku:1448782376670068766>", "forca": 100},
+    {"nome": "Vegeta", "emoji": "<:Majin_vegeta53:1448781902545813566>", "forca": 95},
+    {"nome": "Cell", "emoji": "<a:3549cellthink:1450487722094362817>", "forca": 90},
+
+# =========================
+# NARUTO
+# =========================
+    {"nome": "Naruto", "emoji": "<:Narutin:1408189027437379655>", "forca": 85},
+    {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 88},
+    {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 80},
+    {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 78},
+
+# =========================
+# BLEACH
+# =========================
+    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 90},
+    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 92},
+    {"nome": "Zaraki Kenpachi", "emoji": "<:Zaraki:1466974469976231987>", "forca": 88},
+
+# =========================
+# JUJUTSU KAISEN
+# =========================
+    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 92},
+    {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 90},
+
+# =========================
+# ONE PIECE
+# =========================
+    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 85},
+    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 80},
+
+# =========================
+# ONE PUNCH MAN
+# =========================
     {"nome": "Saitama", "emoji": "<a:Saitama:1408190053846356038>", "forca": 100},
-    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 80},
-    # Novos personagens adicionados
-    {"nome": "Vegeta", "emoji": "<:Majin_vegeta53:1448781902545813566>", "forca": 97},
-    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 93},
-    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 91},
-    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 85},
-    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 82},
-    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 98},
-    {"nome": "Asta", "emoji": "<:Asta_Glare13:1448783934639964402>", "forca": 89},
-    {"nome": "Killua", "emoji": "<a:killua_rage:1448784148796932166>", "forca": 84},
-    {"nome": "Gon", "emoji": "<:vrz_rage:1448784303248113734>", "forca": 86},
-    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 96},
-    {"nome": "Escanor", "emoji": "<:icon_stamp_escanor_0787:1448784567799517216>", "forca": 100},
-    {"nome": "Light Yagami", "emoji": "<:Hahahahah:1448785029537730560>", "forca": 40},
-    {"nome": "L", "emoji": "<:L_:1448785130431975444>", "forca": 45},
-    {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 97},
-    {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 92},
-    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 83},
-    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 96},
-    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 88},
-    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 87},
-    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 98},
-    {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 99},
+    {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 88},
+
+# =========================
+# ATTACK ON TITAN
+# =========================
+    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 78},
+    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 70},
+
+# =========================
+# DEMON SLAYER
+# =========================
+    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 65},
+    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 68},
+
+# =========================
+# BLACK CLOVER
+# =========================
+    {"nome": "Asta", "emoji": "<:Asta_Glare13:1448783934639964402>", "forca": 88},
+
+# =========================
+# HUNTER X HUNTER
+# =========================
+    {"nome": "Gon", "emoji": "<:vrz_rage:1448784303248113734>", "forca": 75},
+    {"nome": "Killua", "emoji": "<a:killua_rage:1448784148796932166>", "forca": 73},
+
+# =========================
+# NANATSU NO TAIZAI
+# =========================
+    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 82},
+    {"nome": "Escanor", "emoji": "<:icon_stamp_escanor_0787:1448784567799517216>", "forca": 90},
+
+# =========================
+# DEATH NOTE
+# =========================
+    {"nome": "Light Yagami", "emoji": "<:Hahahahah:1448785029537730560>", "forca": 20},
+    {"nome": "L", "emoji": "<:L_:1448785130431975444>", "forca": 18},
+
+# =========================
+# MY HERO ACADEMIA
+# =========================
+    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 80},
+    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 78},
+    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 88},
+
+# =========================
+# FULLMETAL ALCHEMIST
+# =========================
+    {"nome": "Edward Elric", "emoji": "<:erick:1466970104905334784>", "forca": 60},
+    {"nome": "Roy Mustang", "emoji": "<:Roy:1466971340098765059>", "forca": 55},
 ]
 
 # Variável para guardar o estado da batalha na memória
@@ -2811,13 +2980,12 @@ batalha_info = {
 CARGO_ANIME = "<@&1448805535573872751>"
 
 GIFS_ANIME = [
-    "https://tenor.com/view/anime-one-punch-man-fight-bang-garou-gif-16359839",
-    "https://tenor.com/view/sasuke-orochimaru-naruto-og-naruto-anime-fight-gif-25013743",
-    "https://tenor.com/view/goku-cell-dbz-dragon-ball-z-perfect-cell-gif-26574911",
-    "https://tenor.com/view/goku-cell-dbz-dragon-ball-z-perfect-cell-gif-26574911",
-    "https://tenor.com/view/anime-battle-arena-aba-gif-21526070",
-    "https://tenor.com/view/itadori-yuji-kokusen-jujutsu-kaisen-anime-hanami-fight-gif-20544438",
-    "https://tenor.com/view/sasuke-naruto-susanoo-shippenden-naruto-sasuke-fight-gif-22099394"
+    "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/anime-battle-arena-aba.gif",
+    "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/anime-one-punch-man.gif",
+    "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/goku-cell.gif",
+    "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/itadori-yuji-kokusen-jujutsu-kaisen.gif",
+    "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/sasuke-naruto.gif",
+    "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/sasuke-orochimaru.gif"
 ]
 
 @tasks.loop(minutes=1)
@@ -2827,11 +2995,11 @@ async def check_evento_anime():
         agora = datetime.now(FUSO_HORARIO)
         
         # --- INÍCIO: Sexta-feira às 18:00 ---
-        if agora.weekday() == 4 and agora.hour == 18 and agora.minute == 0:
+        if agora.weekday() in (4, 5) and agora.hour == 18 and agora.minute == 0:
             if not batalha_info.get("ativa", False):
                 await iniciar_batalha_auto()
         # --- FIM: Sexta-feira às 22:00 ---
-        if agora.weekday() == 4 and agora.hour == 22 and agora.minute == 0:
+        if agora.weekday() in (4, 5) and agora.hour == 22 and agora.minute == 0:
             if batalha_info.get("ativa", False):
                 await finalizar_batalha_auto()
     except Exception as e:
@@ -2850,12 +3018,12 @@ async def iniciar_batalha_auto():
             logging.error("Canal de evento anime não encontrado!")
             return
         embed = discord.Embed(
-            title="⚔️ A BATALHA DE SEXTA COMEÇOU!",
+            title="<:27148wingandswordids:1466910086072107159> A BATALHA DO FINDE COMEÇOU!",
             description=(
                 f"{CARGO_ANIME} Vote reagindo no personagem que você acha que vai vencer!\n\n"
-                f"🔴 **{p1['nome']}** vs 🔵 **{p2['nome']}**\n\n"
-                f"1️⃣ Reaja com {p1['emoji']} para votar no **{p1['nome']}**\n"
-                f"2️⃣ Reaja com {p2['emoji']} para votar no **{p2['nome']}**\n\n"
+                f"{p1['emoji']} ``{p1['nome']}`` vs {p2['emoji']} ``{p2['nome']}``\n\n"
+                f"Reaja com {p1['emoji']} para votar no **{p1['nome']}**\n"
+                f"Reaja com {p2['emoji']} para votar no **{p2['nome']}**\n\n"
                 f"🏆 **Prêmio:** +Pontos na tabela geral!\n"
                 f"⏰ **Resultado:** Hoje às 22:00!"
             ),
@@ -2863,7 +3031,9 @@ async def iniciar_batalha_auto():
         )
         gifs_batalha = random.choice(GIFS_ANIME)
         embed.set_image(url=gifs_batalha)
-        msg = await canal.send(embed=embed)
+        
+        # Enviar mensagem com menção do cargo FORA da embed para notificar
+        msg = await canal.send(f"{CARGO_ANIME} **Batalha de Anime iniciada!**", embed=embed)
         
         # Adiciona as reações automaticamente
         try:
@@ -2956,8 +3126,20 @@ async def finalizar_batalha_auto():
             async for user in reaction_vencedora.users():
                 if not user.bot:
                     ganhadores_ids.append(user.id)
+        
+        # Processa os perdedores
+        perdedores_ids = []
+        for reaction in msg.reactions:
+            if str(reaction.emoji) == perdedor["emoji"]:
+                async for user in reaction.users():
+                    if not user.bot:
+                        perdedores_ids.append(user.id)
+        
         # Atualiza pontos no banco de dados
         await atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_vitoria)
+        
+        # Envia mensagem para perdedores
+        await enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor, pontos_vitoria)
         
         # Anuncia o resultado
         # calcula porcentagem já como inteiro para evitar depender de p1 dentro da função
@@ -2970,6 +3152,7 @@ async def finalizar_batalha_auto():
     finally:
         # Garante que o estado seja resetado mesmo em caso de erro
         batalha_info = {"ativa": False, "msg_id": None}
+        
 async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_premio):
     """Atualiza a pontuação dos ganhadores no banco de dados."""
     if not ganhadores_ids:
@@ -2980,68 +3163,207 @@ async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_premio
         for uid in ganhadores_ids:
             try:
                 adicionar_pontos_db(uid, pontos_premio)
-                user = bot.get_user(uid)
-                if user:
-                    try:
-                        await user.send(f"🎉 Vitória épica! O azarão **{vencedor['nome']}** venceu e você faturou **+{pontos_premio} pontos**!")
-                    except: pass
             except Exception as e:
                 logging.error(f"Falha ao adicionar pontos para {uid}: {e}")
 
-        # Notifica os ganhadores (tentativa individual para não falhar todo o fluxo)
-        for uid in ganhadores_ids:
-            user = bot.get_user(uid)
-            if user:
-                try:
-                    await user.send(f"🎉 Você venceu a aposta no **{vencedor['nome']}** e ganhou +{pontos_premio} pontos!")
-                except Exception:
-                    logging.warning(f"Não foi possível enviar DM para o usuário {uid}")
+        # Envia mensagem única e bonita para todos os ganhadores
+        await enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, pontos_premio)
     except Exception as e:
         logging.error(f"Erro ao atualizar pontuação: {e}")
         raise
-async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent, pontos_premio):
 
+async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, pontos_premio):
+    """Envia mensagem embed de vitória para todos os ganhadores via DM"""
+    
+    # Verificar se foi uma vitória de azarão (força < 85)
+    foi_azarao = perdedor["forca"] < vencedor["forca"]
+    
+    # Se foi azarão, verificar conquista para cada ganhador
+    if foi_azarao:
+        guild = bot.get_guild(1380564680552091789)  # ID do servidor
+        if guild:
+            for uid in ganhadores_ids:
+                member = guild.get_member(uid)
+                if member:
+                    try:
+                        await processar_conquistas(
+                            member=member,
+                            mensagens_semana=0,
+                            acertos_consecutivos=0,
+                            fez_doacao=False,
+                            tem_vip=False,
+                            tempo_em_call=0,
+                            mencionou_miisha=False,
+                            tocou_musica=False,
+                            mencoes_bot=0,
+                            azarao_vitoria=True 
+                        )
+                    except Exception as e:
+                        logging.error(f"Erro ao processar conquista azarão para {uid}: {e}")
+    
+    # Criar embed bonito
+    embed = discord.Embed(
+        title="🎉 VITÓRIA NA BATALHA DE ANIME!" if not foi_azarao else "⚡ VITÓRIA DE AZARÃO!",
+        description=(
+            f"{CARGO_ANIME}🏆 **{vencedor['nome']}** venceu a batalha épica!\n\n"
+            f"💰 **Sua recompensa:** **+{pontos_premio} pontos**\n"
+            f"⚔️ **Força do campeão:** `{vencedor['forca']}/100`\n\n"
+            f"{'🎯 **Aposta de azarão bem-sucedida!**' if foi_azarao else '🎊 **Aposta certeira no favorito!**'}\n\n"
+            f"✨ **Parabéns pela sua intuição guerreira! Veja !meuspontos para ver seus pontos!**"
+        ),
+        color=discord.Color.gold() if not foi_azarao else discord.Color.purple(),
+        timestamp=datetime.now(FUSO_HORARIO)
+    )
+    
+    # Adicionar thumbnail com GIF do vencedor
+    GIFS_VITORIA = {
+        "Goku":"https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-goku.gif",
+        "Cell": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/cell-dragon-ball.gif",
+        "Griffith": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/grifith-berserk.gif",
+        "Guts": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/guts-berserk-berserk.gif",
+        "Itachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lol-itachi.gif",
+        "Naruto": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/naruto.gif",
+        "Ichigo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ichigo.gif",
+        "Sukuna": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/sukuna-smile-grin-jjk-yuji-itadori.gif",
+        "Saitama": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/saitama-onepunchman.gif",
+        "Eren": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/eren-fortnite-eren-fortnite-dance.gif",
+        "Vegeta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-majin-vegeta.gif",
+        "Luffy": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/luffy-wano.gif",
+        "Zoro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/zoro.gif",
+        "Tanjiro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/tanjiro-tanjiro-kamado.gif",
+        "Nezuko": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/nezuko-demon-slayer.gif",
+        "Gojo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/anime-jujutsu-kaisen.gif",
+        "Asta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/asta-swordofthewizardking.gif",
+        "Killua": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/killua-gon.gif",
+        "Gon": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/gon.gif",
+        "Meliodas": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/meliodas-seven-deadly-sins.gif",
+        "Escanor": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/escanor.gif",
+        "Light Yagami": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-kira.gif",
+        "L": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-animeL.gif",
+        "Madara": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/madara.gif",
+        "Pain": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/pain.gif",
+        "Levi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ackerman-levi-rage.gif",
+        "Aizen": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ali-aizen.gif",
+        "Bakugo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bakugou.gif",
+        "Deku": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/deku-midoriya.gif",
+        "All Might": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/all-might-one-for-all.gif",
+        "Mob": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/mob-psycho100-mob-psycho.gif",
+        "Edward Elric": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/edward-elric-fma.gif",
+        "Roy Mustang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Roy%20Mustang.gif",
+        "Zaraki Kenpachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bleach-zaraki-kenpachi.gif"
+
+    }
+    
+    gif_vitoria = GIFS_VITORIA.get(vencedor['nome'])
+    if gif_vitoria:
+        embed.set_thumbnail(url=gif_vitoria)
+    
+    # Adicionar footer
+    embed.set_footer(
+        text=f"🎮 Batalha do Finde | {len(ganhadores_ids)} apostadores vencedores"
+    )
+    
+    # Enviar para cada ganhador
+    for uid in ganhadores_ids:
+        user = bot.get_user(uid)
+        if user:
+            try:
+                await user.send(embed=embed)
+            except Exception:
+                logging.warning(f"Não foi possível enviar DM para o usuário {uid}")
+
+async def enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor):
+    """Envia mensagem embed de derrota para todos os perdedores via DM e aplica perda de pontos"""
+    
+    # Verificar se foi uma derrota de azarão (comparar força relativa)
+    foi_azarao = perdedor["forca"] < vencedor["forca"]
+    
+    # Calcular perda de pontos (baseado na diferença de força)
+    base_perda = 15
+    pontos_perdidos = int(base_perda * (vencedor["forca"] / perdedor["forca"]))
+    pontos_perdidos = max(10, min(pontos_perdidos, 50))  # Entre 10 e 50 pontos
+    
+    # Aplicar perda de pontos para cada perdedor
+    for uid in perdedores_ids:
+        try:
+            adicionar_pontos_db(uid, -pontos_perdidos)
+        except Exception as e:
+            logging.error(f"Falha ao remover pontos para {uid}: {e}")
+    
+    # Criar embed de derrota
+    embed = discord.Embed(
+        title="💔 DERROTA NA BATALHA DE ANIME!" if not foi_azarao else "😢 AZARÃO NÃO CONSEGUIU!",
+        description=(
+            f"⚔️ **{perdedor['nome']}** foi derrotado na batalha épica!\n\n"
+            f"😔 **Seu personagem:** **{perdedor['nome']}**\n"
+            f"🏆 **Vencedor:** **{vencedor['nome']}**\n"
+            f"⚔️ **Força do seu lutador:** `{perdedor['forca']}/100`\n"
+            f"⚔️ **Força do campeão:** `{vencedor['forca']}/100`\n\n"
+            f"💸 **Perda de pontos:** **-{pontos_perdidos} pontos**\n\n"
+            f"{'💔 **Seu azarão lutou bem, mas não foi suficiente!**' if foi_azarao else '😢 **Seu favorito não conseguiu desta vez!**'}\n\n"
+            f"🎯 **Não desista! Na próxima batalha a vitória pode ser sua!**"
+        ),
+        color=discord.Color.red() if not foi_azarao else discord.Color.dark_grey(),
+        timestamp=datetime.now(FUSO_HORARIO)
+    )
+    
+    # Adicionar footer
+    embed.set_footer(
+        text=f"🎮 Batalha do Finde | {len(perdedores_ids)} apostadores derrotados"
+    )
+    
+    # Enviar para cada perdedor
+    for uid in perdedores_ids:
+        user = bot.get_user(uid)
+        if user:
+            try:
+                await user.send(embed=embed)
+            except Exception:
+                logging.warning(f"Não foi possível enviar DM para o usuário {uid}")
+
+async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent, pontos_premio):
+    """Anuncia o resultado da batalha."""
     # --- Dicionário de GIFs de Vitória ---
     GIFS_VITORIA = {
-        "Goku":"https://tenor.com/view/dragon-ball-z-goku-super-saiyan-3-ssj3-goku-wrath-of-the-dragon-gif-18038162613052152157",
-        "Cell": "https://tenor.com/view/cell-dragon-ball-dbz-laugh-anime-gif-15917449",
-        "Griffith": "https://tenor.com/view/grifith-berserk-anime-smile-fruit-gif-16718903",
-        "Guts": "https://tenor.com/view/guts-berserk-berserk-guts-manga-the-black-swordsman-gif-14688097520350447982",
-        "Itachi": "https://tenor.com/view/lol-itachi-itachi-uchiha-akatsuki-uchiha-gif-25032746",
-        "Naruto": "https://tenor.com/view/naruto-gif-19427546",
-        "Ichigo": "https://tenor.com/view/ichigo-gif-25627343",
-        "Sukuna": "https://tenor.com/view/sukuna-smile-grin-jjk-yuji-itadori-gif-18924114",
-        "Saitama": "https://tenor.com/view/saitama-onepunchman-saitama-eyebrows-onepunchman-eyebrows-saitama-one-punch-man-gif-18075903",
-        "Eren": "https://tenor.com/view/eren-fortnite-eren-fortnite-dance-fortnite-dance-eren-fortnite-default-dance-eren-default-dance-gif-2117932551875228669",
-        "Vegeta": "https://tenor.com/view/dragon-ball-z-majin-vegeta-gif-23914077",
-        "Luffy": "https://tenor.com/view/luffy-one-piece-laughing-gif-14379599",
-        "Zoro": "https://tenor.com/view/hi-gif-12100539796871028656",
-        "Tanjiro": "https://tenor.com/view/tanjiro-tanjiro-kamado-demon-slayer-kimetsu-no-yaiba-infinity-castle-gif-6261136431515542308",
-        "Nezuko": "https://tenor.com/view/nezuko-demon-slayer-nezuko-kamado-kimetsu-no-yaiba-gif-5833263962802383681",
-        "Gojo": "https://tenor.com/view/anime-jujutsu-kaisen-gojo-satoru-gif-11266806221853937193",
-        "Asta": "https://tenor.com/view/asta-swordofthewizardking-blackclover-gif-1014307794274155748",
-        "Killua": "https://tenor.com/view/killua-gon-hisoka-sleepy-tired-gif-11379221412510070948",
-        "Gon": "https://tenor.com/view/gon-gif-26526094",
-        "Meliodas": "https://tenor.com/view/meliodas-seven-deadly-sins-nanatsu-no-taizai-assault-mode-escanor-gif-19718161",
-        "Escanor": "https://tenor.com/view/seven-deadly-sins-laughing-the-gif-18226096",
-        "Light Yagami": "https://tenor.com/view/death-note-kira-anime-light-laugh-gif-22099540",
-        "L": "https://tenor.com/view/death-note-anime-lawliet-gif-22225737",
-        "Madara": "https://tenor.com/view/ok-gif-26107516",
-        "Pain": "https://tenor.com/view/naruto-pain-pain-nagato-6paths-zuventi-gif-25900484",
-        "Levi": "https://tenor.com/view/ackerman-levi-rage-levi-ackerman-attack-on-titan-aot-gif-13085460751014147681",
-        "Aizen": "https://tenor.com/view/ali-aizen-gif-24883090",
-        "Bakugo": "https://tenor.com/view/talking-anime-boy-bakugo-smug-confident-gif-723555706707506995",
-        "Deku": "https://tenor.com/view/deku-midoriya-mha-my-hero-academia-fortnite-gif-27254430",
-        "All Might": "https://tenor.com/view/all-might-one-for-all-all-for-one-deku-my-hero-academia-gif-26423801",
-        "Mob": "https://tenor.com/view/mob-psycho100-mob-psycho-shigeo-shigeo-kageyama-mob-gif-26480670"
+        "Goku":"https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-goku.gif",
+        "Cell": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/cell-dragon-ball.gif",
+        "Griffith": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/grifith-berserk.gif",
+        "Guts": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/guts-berserk-berserk.gif",
+        "Itachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lol-itachi.gif",
+        "Naruto": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/naruto.gif",
+        "Ichigo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ichigo.gif",
+        "Sukuna": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/sukuna-smile-grin-jjk-yuji-itadori.gif",
+        "Saitama": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/saitama-onepunchman.gif",
+        "Eren": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/eren-fortnite-eren-fortnite-dance.gif",
+        "Vegeta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-majin-vegeta.gif",
+        "Luffy": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/luffy-wano.gif",
+        "Zoro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/zoro.gif",
+        "Tanjiro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/tanjiro-tanjiro-kamado.gif",
+        "Nezuko": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/nezuko-demon-slayer.gif",
+        "Gojo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/anime-jujutsu-kaisen.gif",
+        "Asta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/asta-swordofthewizardking.gif",
+        "Killua": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/killua-gon.gif",
+        "Gon": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/gon.gif",
+        "Meliodas": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/meliodas-seven-deadly-sins.gif",
+        "Escanor": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/escanor.gif",
+        "Light Yagami": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-kira.gif",
+        "L": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-animeL.gif",
+        "Madara": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/madara.gif",
+        "Pain": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/pain.gif",
+        "Levi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ackerman-levi-rage.gif",
+        "Aizen": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ali-aizen.gif",
+        "Bakugo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bakugou.gif",
+        "Deku": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/deku-midoriya.gif",
+        "All Might": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/all-might-one-for-all.gif",
+        "Mob": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/mob-psycho100-mob-psycho.gif"
     }
     
     # --- Anúncio Final ---
-    gif_vitoria = GIFS_VITORIA.get(vencedor['nome'], "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjAxc2R3c3QwMWV2M2VhY2R5cWZ5Z3N4Z2d4dXh4eWJ0eXZ0aHh6d2JmYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xT5LMHxhOfscxPfIfm/giphy.gif")
+    gif_vitoria = GIFS_VITORIA.get(vencedor['nome'].lower())
 
     # Criar a mensagem de resultado
     mensagem_vitoria = (
-        f"**{vencedor['nome'].upper()} SUPEROU AS EXPECTATIVAS!** 🏆\n\n"
+        f"{CARGO_ANIME}**{vencedor['nome'].upper()} SUPEROU AS EXPECTATIVAS!** 🏆\n\n"
         f"💰 **Prêmio por Voto:** `{pontos_premio} pontos`\n"
         f"👥 **Ganhadores:** {len(ganhadores_ids)}\n"
         f"📉 **Probabilidade inicial:** {chance_percent}%\n\n"
@@ -3062,13 +3384,15 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             f"💪 **Força:** `{vencedor['forca']}/100`\n"
             f"🎲 **Chance de Vitória:** `{chance_percent}%`\n"
             f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"🔥 {vencedor['nome']} dominou a batalha e saiu **VITORIOSO**!\n\n"
+            f"🔥 {vencedor['nome']} DESTRUIU na batalha e saiu **VITORIOSO**!\n\n"
             f"🎊 Parabéns a todos que apostaram no campeão!"
+            
         ),
     color=discord.Color.gold()
 )
     
     await canal.send(embed=embed_res)
+
 filas = {}
 timers_desconectar = {}
 
@@ -3150,11 +3474,9 @@ async def ticket_mensagem(ctx):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ticket_mensagem (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            message_id BIGINT NOT NULL,
-            autor_mensagem_id BIGINT NOT NULL,
-            autor_mensagem_nome VARCHAR(255) NOT NULL,
-            data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_message (message_id)
+            message_id BIGINT NOT NULL UNIQUE,
+            autor_mensagem_id BIGINT NULL,
+            data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
@@ -3183,10 +3505,10 @@ async def ticket_mensagem(ctx):
 
         cursor.execute(
             """
-            INSERT INTO ticket_mensagem (message_id, autor_mensagem_id, autor_mensagem_nome)
-            VALUES (%s, %s, %s)
+            INSERT INTO ticket_mensagem (message_id, autor_mensagem_id)
+            VALUES (%s, %s)
             """,
-            (msg.id, ctx.author.id, str(ctx.author))
+            (msg.id, ctx.author.id)
         )
         conn.commit()
 
@@ -3760,6 +4082,9 @@ EMOJI_TIMES = {
     "palmeiras": "<:Palmeiras:1425989650513662044>",
     "lanus": "<:Lanus:1441436509281718383>",
     "atletico paranaense": "<:atlpr:1443398482516775055>",
+    "atlético paranaense": "<:atlpr:1443398482516775055>",
+    "athletico paranaense": "<:atlpr:1443398482516775055>",
+    "atletico-pr": "<:atlpr:1443398482516775055>",
     "coritiba": "<:Coritibaa:1443398813820784660>",
     "remo": "<:Remo:1443399201655492708>",
     "chapecoense" :"<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
@@ -3864,13 +4189,8 @@ async def jogos_ao_vivo():
     data = await fazer_request(status="live")
     return bool(data.get("response"))
 
-
-
-
-
 #   Ligar o loop e agendar
 tz_br = pytz.timezone("America/Sao_Paulo")
-
 
 @commands.has_permissions(administrator=True)
 @bot.command()
@@ -3995,12 +4315,12 @@ async def apistop(ctx, horario: str = None):
 @bot.command()
 async def meuspontos(ctx):
     pontos = pegar_pontos(ctx.author.id)
-    await ctx.send(f"💳 {ctx.author.mention}, você tem **{pontos} pontos**!")
+    await ctx.send(f"<a:creditocartao:1465441133294391489> {ctx.author.mention}, você tem **{pontos} pontos**!")
     logging.info(f"Usuário {ctx.author.name} ({ctx.author.id}) solicitou os pontos.")
 
 
 
-CANAL_JOGOS_ID = 1380564680552091789
+
 
 CANAL_APOSTAS_ID = 1442495893365330138 
 # ---------- CONFIG ----------
@@ -4009,8 +4329,8 @@ URL = "https://v3.football.api-sports.io/fixtures"
 HEADERS = {"x-apisports-key": API_TOKEN}
 CANAL_JOGOS_ID = 1380564680552091789
 
-EMOJI_EMPATE = "⚪"  # seu emoji de empate
-# Use seus EMOJI_TIMES e MAPEAMENTO_TIMES já definidos anteriormente
+EMOJI_EMPATE = "🤝"  # emoji de mãos apertando para empate
+
 
 # ---------- DB helper (usa sua função conectar_futebol) ----------
 def garantir_tabelas():
@@ -4037,6 +4357,60 @@ def garantir_tabelas():
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # Verificar e adicionar coluna message_id se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'message_id'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN message_id BIGINT")
+        logging.info("Coluna 'message_id' adicionada à tabela jogos")
+    
+    # Verificar e adicionar coluna bet_deadline se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'bet_deadline'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN bet_deadline DATETIME")
+        logging.info("Coluna 'bet_deadline' adicionada à tabela jogos")
+    
+    # Verificar e adicionar coluna betting_open se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'betting_open'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN betting_open TINYINT DEFAULT 0")
+        logging.info("Coluna 'betting_open' adicionada à tabela jogos")
+    
+    # Verificar e adicionar coluna finalizado se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'finalizado'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN finalizado TINYINT DEFAULT 0")
+        logging.info("Coluna 'finalizado' adicionada à tabela jogos")
+    
+    # Verificar e adicionar coluna processado se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'processado'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN processado TINYINT DEFAULT 0")
+        logging.info("Coluna 'processado' adicionada à tabela jogos")
+    
+    # Verificar e adicionar coluna canal_id se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'canal_id'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN canal_id BIGINT")
+        logging.info("Coluna 'canal_id' adicionada à tabela jogos")
+    
+    # Verificar e adicionar coluna data se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'data'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN data DATE")
+        logging.info("Coluna 'data' adicionada à tabela jogos")
+    
+    # Verificar e adicionar coluna horario se não existir
+    cur.execute("SHOW COLUMNS FROM jogos LIKE 'horario'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE jogos ADD COLUMN horario TIME")
+        logging.info("Coluna 'horario' adicionada à tabela jogos")
+    
+    # Garantias extras (caso tabela já exista)
+    try:
+        cur.execute("ALTER TABLE jogos ADD COLUMN processado TINYINT DEFAULT 0")
+    except Exception:
+        pass
 
     # ----------------------------
     # Tabela apostas
@@ -4052,6 +4426,12 @@ def garantir_tabelas():
             UNIQUE KEY uniq_aposta (user_id, fixture_id)
         )
     """)
+
+    # Verificar e adicionar coluna modo_clown se não existir
+    cur.execute("SHOW COLUMNS FROM apostas LIKE 'modo_clown'")
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE apostas ADD COLUMN modo_clown TINYINT(1) DEFAULT 0")
+        logging.info("Coluna 'modo_clown' adicionada à tabela apostas")
 
     # Garantias extras (caso tabela já exista)
     try:
@@ -4081,6 +4461,26 @@ def garantir_tabelas():
         pass
 
     # ----------------------------
+    # Tabela posts (sistema de upvotes/downvotes)
+    # ----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id BIGINT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            channel_id BIGINT NOT NULL,
+            upvotes INT DEFAULT 0,
+            downvotes INT DEFAULT 0,
+            removed BOOLEAN DEFAULT FALSE,
+            motivo_remocao TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_id (user_id),
+            INDEX idx_channel_id (channel_id),
+            INDEX idx_timestamp (timestamp),
+            INDEX idx_removed (removed)
+        )
+    """)
+
+    # ----------------------------
     # Tabela posts_premiados 
     # ----------------------------
     cur.execute("""
@@ -4093,6 +4493,83 @@ def garantir_tabelas():
             premiado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             premiado_dia DATE NOT NULL,
             UNIQUE KEY uniq_post_dia (post_id, premiado_dia)
+        )
+    """)
+
+    # ----------------------------
+    # Tabela inversoes (sistema inverter pontos)
+    # ----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS inversoes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            target_user_id BIGINT NOT NULL,
+            creator_user_id BIGINT NOT NULL,
+            fixture_id BIGINT NULL,
+            used TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_target_user (target_user_id),
+            INDEX idx_used (used)
+        )
+    """)
+
+    # ----------------------------
+    # Tabela comemoracoes (sistema de comemoração de gols)
+    # ----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS comemoracoes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            team_key VARCHAR(50) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_team (user_id, team_key),
+            INDEX idx_team (team_key)
+        )
+    """)
+
+    # ----------------------------
+    # Tabela loja_pontos (sistema de compras da loja)
+    # ----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS loja_pontos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            item VARCHAR(50) NOT NULL,
+            pontos_gastos INT NOT NULL,
+            data_compra DATETIME DEFAULT CURRENT_TIMESTAMP,
+            ativo TINYINT(1) DEFAULT 1,
+            nome_cargo VARCHAR(100),
+            cargo_id BIGINT,
+            emoji VARCHAR(200),
+            INDEX idx_user_item (user_id, item),
+            INDEX idx_ativo (ativo)
+        )
+    """)
+
+    # ----------------------------
+    # Tabela clown_bet (sistema modo clown)
+    # ----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS clown_bet (
+            user_id BIGINT PRIMARY KEY,
+            ativo TINYINT(1) DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # ----------------------------
+    # Tabela loja_vip (sistema VIP)
+    # ----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS loja_vip (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            cargo_id BIGINT NOT NULL,
+            data_compra DATETIME DEFAULT CURRENT_TIMESTAMP,
+            data_expira DATETIME NOT NULL,
+            ativo TINYINT(1) DEFAULT 1,
+            INDEX idx_user (user_id),
+            INDEX idx_expira (data_expira),
+            INDEX idx_ativo (ativo)
         )
     """)
 
@@ -4167,6 +4644,7 @@ def pegar_apostas_fixture(fixture_id: int):
     rows = cur.fetchall()
     con.close()
     return rows
+
 
 def marcar_jogo_como_open(fixture_id: int, message_id: int, home: str, away: str,
                           deadline_utc: datetime, canal_id: int, data_jogo: str, horario_jogo: str):
@@ -4284,6 +4762,8 @@ MAPEAMENTO_TIMES = {
     "associação chapecoense de futebol": "chapecoense",
     "chapecoense": "chapecoense",
     "chapecoense fc": "chapecoense",
+    "chapecoense-sc": "chapecoense",
+    "chapecoense sc": "chapecoense",
 
     # Mirassol
     "mirassol sp": "mirassol",
@@ -4343,6 +4823,7 @@ MAPEAMENTO_TIMES = {
     "juventus": "juventus",
     "psg": "psg",
     "paris saint-germain": "psg",
+    "paris saint germain": "psg",
     "manchester city": "city",
     "city": "city",
     "arsenal": "arsenal",
@@ -4407,55 +4888,55 @@ def get_estadio_time_casa(nome_time_api: str):
     ESTADIOS_CASA = {
         "galo": {
             "estadio": "Arena MRV",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630112570642442/Atletico-MG-x-Vasco-Arena-MRV-scaled-aspect-ratio-512-320-1.png?ex=69433c12&is=6941ea92&hm=f1e94aca0ff077b31ebba4e81ab7885181c222ea4d52601cf5e1a8bb848f9e93&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Arena%20Mrv.png"
         },
         "flamengo": {
             "estadio": "Maracanã",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630216887046260/maracana-3.png?ex=69433c2b&is=6941eaab&hm=b75fbf731d905d9fe5dfb46464249769c421f4acfd78e3b286fe8d2e89cab9a8&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Maracanã.jpg"
         },
         "corinthians": {
             "estadio": "Neo Química Arena",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630489772920902/semifinal-do-paulistao.png?ex=69433c6c&is=6941eaec&hm=9dbad229595c20db4ac934f46ae6d88f29d9a54992284de23c492ca6b3e57fa9&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Neo%20Química%20Arena.png"
         },
         "palmeiras": {
             "estadio": "Allianz Parque",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630593170898994/allianz-parque-1.png?ex=69433c84&is=6941eb04&hm=59d9c923e6a31f32b45aa3c2c0ec886cd9b504dbc45ff312446196e10af2ca4c&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Allianz%20Parque.png"
         },
         "sao paulo": {
-            "estadio": "Morumbis",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630680575873107/677bfba7d0e445c4997dcedf_shows-linkin-park-morumbis.png?ex=69433c99&is=6941eb19&hm=71ee9eb15dfa539a361bb85fbe8ec784aa6b137d873c01a3445ed98086e49d66&"
+            "estadio": "Morumbi",
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Morumbi.png"
         },
         "fluminense": {
             "estadio": "Maracanã",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630216887046260/maracana-3.png?ex=69433c2b&is=6941eaab&hm=b75fbf731d905d9fe5dfb46464249769c421f4acfd78e3b286fe8d2e89cab9a8&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Maracanã.jpg"
         },
         "vasco": {
             "estadio": "São Januário",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630838483161098/20250709-183535-1-.png?ex=69433cbf&is=6941eb3f&hm=5ec546990ae5194f53d4f7f759201867efdc35f7be049bcf4bbf91f9e3c3957b&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/São%20Januário.png"
         },
         "botafogo": {
             "estadio": "Nilton Santos",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450630996226474188/32313942052_b9e440bc57_o.png?ex=69433ce4&is=6941eb64&hm=707c15845b7e9104590c913e6e644eadcad02c8cc3ee77d3ff6d71ce0e2bfb74&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Nilton%20Santos.png"
         },
         "gremio": {
             "estadio": "Arena do Grêmio",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631115306963006/arena_gremio-aspect-ratio-512-320.png?ex=69433d01&is=6941eb81&hm=894b6d9d2e725d9c3bb80ad763648d6903baa380006819c9ffa7fe80b6f44dd1&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Arena%20do%20Grêmio.png"
         },
         "internacional": {
             "estadio": "Beira-Rio",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631360090996798/estdio_beira_rio_cover.png?ex=69433d3b&is=6941ebbb&hm=a264bbba7813a131aa381683d1a5e460f9bed0ce2ab64ff4efbe2c52856754d8&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Beira-Rio.png"
         },
         "cruzeiro": {
             "estadio": "Mineirão",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631501233520660/mineirao-breno-pataro-_acervo-pbh-356.png?ex=69433d5d&is=6941ebdd&hm=90347ad60c0a93fe9ddd8c9b4cb9fd16c2cab48bd8e61c5a5d81ac3af9265f58&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Mineirão.png"
         },
         "bahia": {
             "estadio": "Arena Fonte Nova",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631618070057043/52792335402-1a7ff7cab0-k.png?ex=69433d79&is=6941ebf9&hm=d0efeb1a28086734b37d05065bc3bb60e221d6b615741c9181ea0ecdc05d57fd&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Arena%20Fonte%20Nova.jpg"
         },
         "fortaleza": {
             "estadio": "Castelão",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631739784302795/Iluminacao-Cenica-Arena-Castelao-1-2.png?ex=69433d96&is=6941ec16&hm=c99255ee07e333516585304fc42214ea251ba8b31e00a2af44855c0193b01180&"
+            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1466222443512201276/images.jpg?ex=697bf58f&is=697aa40f&hm=f466583fe65a6ae50b1d03b63180c7dcb24ac6ec62012744c5b57f6d9e067b32&"
         },
         "sport": {
             "estadio": "Ilha do Retiro",
@@ -4463,19 +4944,19 @@ def get_estadio_time_casa(nome_time_api: str):
         },
         "vitoria": {
             "estadio": "Barradão",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450631935452774441/Diretoria-do-Vitoria-aprova-projeto-da-Arena-Barra0136694900202511031829.png?ex=69433dc4&is=6941ec44&hm=0efc8d7324422a627d209d0c311b06dc223d7db0c5bef435ddb9ff5a4ec5c996&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Barradão.jpg"
         },
         "athletico paranaense": {
             "estadio": "Ligga Arena",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632038649434235/iluminacao-noturna-da.png?ex=69433ddd&is=6941ec5d&hm=c9ca1b011998a6a98d2eb5d882dcd0680a5c57f9f50ce6f15fc7d26e340dabc2&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Ligga%20Arena.png"
         },
         "coritiba": {
             "estadio": "Couto Pereira",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632125748609034/Vista_AC3A9rea_do_Couto_Pereira_em_2021.png?ex=69433df2&is=6941ec72&hm=d186c8626af7ff3724d4677d122a6aca20f2f73f9110a110823bbddc622f3ec7&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Couto%20Pereira.jpg"
         },
         "bragantino": {
             "estadio": "Nabi Abi Chedid",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632323778482248/EstC3A1dio_Nabi.png?ex=69433e21&is=6941eca1&hm=2cb264a4431ef038cbbea1a6064b8cae38f76e939e4c6456bc06b82925eca379&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Nabi%20Abi%20Chedid.png"
         },
         "juventude": {
             "estadio": "Alfredo Jaconi",
@@ -4487,11 +4968,11 @@ def get_estadio_time_casa(nome_time_api: str):
         },
         "remo": {
             "estadio": "Baenão",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632470155493376/whatsapp_image_2019-08-21_at_22.png?ex=69433e44&is=6941ecc4&hm=502ca438c1d945149a7738299a8690db712b5da7a2fb0822303aa6a05d766043&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Baenão.jpg"
         },
         "mirassol": {
             "estadio": "José Maria de Campos Maia",
-            "imagem": "https://cdn.discordapp.com/attachments/704107435295637605/1450632602963808266/1287592_med_jose_maria_de_campos_maia.png?ex=69433e63&is=6941ece3&hm=37e078d410ab4ab2ee06e13be38ccc11c5a9e4f6e3000a2c0d4d715f89820501&"
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/José%20Maria%20de%20Campos%20Maia.jpg"
         }
     }
 
@@ -4514,7 +4995,7 @@ PALAVRAS_GOL = {
     "galo":        "🐓 GOOOOOOOOOOL É DO GALO DOIDO!!! 🔥",
     "flamengo":    "🦅 GOOOOOOOL DO MENGÃO",
     "palmeiras":   "🐷 GOOOOOOOOOL DO VERDÃO",
-    "corinthians": "🦅 GOOOOOOOL DO TIMÃO!",
+    "corinthians": "🦅 GOOOOOOOOOL DO TIMÃO!",
     "cruzeiro":    "🦊 GOOOOOOOOOL DO CRUZEIRÃO CABULOSO!!!",
     "sao paulo":   "👑 GOOOOOL DO TRICOLOR!",
     "fortaleza":   "🦁 GOOOOOOOOL DO LEÃO DO PICI!!!",
@@ -4559,7 +5040,7 @@ GIFS_VITORIA_TIME = {
     # =======================
     # 🇧🇷 CLUBES BRASILEIROS 2025
     # =======================
-    "atlético mineiro": "https://cdn.discordapp.com/attachments/704107435295637605/1452323837890007070/atletico-mineiro-galo-doido.gif?ex=69496579&is=694813f9&hm=65d76d8ada459f0523286f43e5cde68c79468d63920b337b7e2bda4073f55f20&",  # galo
+    "atlético mineiro": "https://cdn.discordapp.com/attachments/704107435295637605/1465163457673298105/atletico-mineiro-ae.gif?ex=69781b4d&is=6976c9cd&hm=a10ed793ae4713d0edcaff293ee0ec838241125016367fad91b6d0cee560463a&",  # galo
     "athletico paranaense": "https://tenor.com/view/cuello-athletico-athletico-paranaense-furac%C3%A3o-libertadores-gif-27471283",
     "bahia": "https://tenor.com/view/bahia-bahea-estadio-arena-fonte-nova-torcida-gif-17380352373142877404",
     "botafogo": "https://tenor.com/view/mundial-de-clubes-brasil-hexa-hexa-brasil-textor-john-textor-gif-538715909373386053",
@@ -4578,7 +5059,7 @@ GIFS_VITORIA_TIME = {
     "santos": "https://tenor.com/view/baleinha-baleiao-mascote-santos-balei%C3%A3o-santos-gif-15750222744612259501",
     "são paulo": "https://tenor.com/view/s%C3%A3o-paulo-spfc-s%C3%A3o-paulo-fc-gabinevespfc-gif-9429201397661982240",
     "sport": "",
-    "vasco": "https://tenor.com/view/gigas0-vasc%C3%A3o-vasco-gif-17496526468882394694",
+    "vasco": "https://cdn.discordapp.com/attachments/704107435295637605/1465163869646491829/trem-bala-da-colina-vasco-da-gama.gif?ex=69781baf&is=6976ca2f&hm=7e05f3144f3457cb028699e7214d2645c71163129e66de40af161a3f5cc68fe3&",
     "vitoria": "https://tenor.com/view/esporte-clube-vit%C3%B3ria-vit%C3%B3ria-vitoria-gif-4427655074772874931",
     
     # Chave genérica para times sem gif específico
@@ -4587,85 +5068,92 @@ GIFS_VITORIA_TIME = {
 
 FALAS_BOT = {
     "atlético mineiro": [
-        "AQUUUUUUUUUUUUUUUUUUUI É GALO P#RRAAAAAAAAAAAAAAAAAAAAAAAAAA!!!! 🐓🔥🔥",
-        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALOOOO!!!!! ⚡⚡⚡",
-        "É GALO, É GAAAAAAAAAAALO, É MAIOR DE MINAS!!!! 🏆🏆🏆",
-        "VITÓRIAAAAA DO GALO CARAAAAAALHO!!! 🔥🔥🔥",
-        "GAAAAAAAAAAAAAAAAAAAAAALOOOOOOOOOO! TORCIDA EM ÊXTASE!!! 🙌🙌🙌"
+        "EU FALEI PORRA!!! AQUI É GALO!!! 🐓🔥",
+        "GALOOOOOOOO ATÉ MORRER!!! 🖤🤍",
+        "RESPEITA O MAIOR DE MINAS!!! 🏆",
+        "CHUPA SECADOR!!! DEU GALO!!! 😈🐓",
+        "ELE NÃO GANHA, ELE BICAAAAAAAAAAAA 🐓"
     ],
+
     "flamengo": [
-        "DALE DALE MENGOOOOOOOOOOOOOOOOOOO!!!! 🔥🔥🔥",
-        "GOL DO MENGO CARAAAAAAALHO!!! ⚡⚡⚡",
-        "VAMO MENGAAAAAAAAAO!!!! 🏆🏆🏆",
-        "VITÓRIAAAAA DO MENGO CARAAAAALHO!!!! 🔥🔥🔥",
-        "VAMOOOOO FLAMENGOOOOOO!!!! 🙌🙌🙌"
+        "VAMOOOOO PORRA!!! ISSO É FLAMENGO!!! 🔴⚫",
+        "NO MARACA OU FORA, DEU MENGÃO!!! 🔥",
+        "RESPEITA A MAIOR TORCIDA DO BRASIL!!! 🏆",
+        "MENGÃO NÃO PERDOA!!! 😈",
+        "CHORA SECADOR, HOJE TEM FLAMENGO!!! 🔴⚫",
+        "OUTRO DIA NORMAL PRA NAÇÃO!!! GANHAMO!!! 🏆"
     ],
+
     "corinthians": [
-        "É GOL DO TIMÃÃÃÃÃO CARAAAAALHO!!!! 🔥🔥🔥",
-        "TIMÃÃÃÃÃÃO DOMINANDO TUDO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DO TIMÃÃO!!! 🏆🏆🏆",
-        "FIELZAAAAAAAAA, QUE PARTIDA!!!! 🔥🔥🔥",
-        "TIMÃÃÃÃÃO!!! COMEMORAÇÃO GARANTIDA!!! 🙌🙌🙌"
+        "VAI CORINTHIANS PORRA!!! 🦅",
+        "AQUI É TIMÃO!!! RESPEITA!!! ⚫⚪",
+        "FIEL EM FESTA!!! DEU CORINTHIANS!!! 🔥",
+        "CORINTHIANS É ISSO AÍ!!! 😤",
+        "SECADOR PASSA MAL!!! 🦅"
     ],
+
     "palmeiras": [
-        "É GOL DO VERDÃOOOOOOO CARAAAAALHO!!!! 🔥🔥🔥",
-        "PALMEIRAS DOMINANDO TUDOOOOOOOOO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DO VERDÃO!!! 🏆🏆🏆",
-        "QUE JOGADA DO PALMEIRAAAAAAS! 🔥🔥🔥",
-        "PALMEIRAAAAAAAAAA! COMEMORAÇÃO TOTAL!!!! 🙌🙌🙌"
+        "AVANTI PORRA!!! DEU VERDÃO!!! 🟢⚪",
+        "PALMEIRAS IMPÕE RESPEITO!!! 😎",
+        "GANHAR É ROTINA!!! 🏆",
+        "VERDÃO NÃO PERDOA!!! 🔥",
+        "SECADOR CHORA MAIS UMA VEZ!!! 😈"
     ],
+
     "são paulo": [
-        "É GOL DO TRICOLOR CARAAAAALHO!!!! 🔥🔥🔥",
-        "SÃO PAULO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DO TRICOLOR!!! 🏆🏆🏆",
-        "QUE JOGADA DO SÃO PAULO!!! 🔥🔥🔥",
-        "TRICOLOR!!! COMEMORAÇÃO GARANTIDA!!!! 🙌🙌🙌"
+        "RESPEITA O SOBERANO!!! 🔴⚪⚫",
+        "TRICOLOR É TRICOLOR, PORRA!!!",
+        "CAMISA PESADA DEMAIS!!! 🏆",
+        "SÃO PAULO IMPÕE RESPEITO!!! 😎",
+        "GANHAMO!!! CHUPA SECADOR!!! 😈"
     ],
+
     "fluminense": [
-        "É GOL DO FLUUUUUUUUUUUUUUUU!!! 🔥🔥🔥",
-        "FLUMINENSE DOMINANDO TUDOOOOO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DO FLU!!! 🏆🏆🏆",
-        "QUE JOGADA DO FLUMINENSEEEE!!! 🔥🔥🔥",
-        "FLUUUUUUUU! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+        "VENCE O FLUMINENSE PORRA!!! 🇭🇺",
+        "NENSE JOGA BOLA!!! RESPEITA!!! 😎",
+        "FLU É DIFERENTE!!! 🔥",
+        "TRICOLOR DAS LARANJEIRAS!!! 🏆",
+        "SECADOR VAI TER QUE ENGOLIR!!! 😈"
     ],
+
     "cruzeiro": [
-        "MAIOR DE MINAS PORRA!!! 🔥🔥🔥",
-        "AqUi É cAbuLOSOOOOOOOOOOOOOOO!!! ⚡⚡⚡",
-        "RAPOSA TÁ COM FOMEE!!! 🏆🏆🏆",
-        "QUE JOGADA DO CRUZEIROOO!!! 🔥🔥🔥",
-        "RAPOSAAAAAA!!! COMEMORAÇÃO GARANTIDA!!! 🙌🙌🙌"
+        "AQUI É CABULOSO PORRA!!! 💙",
+        "CRUZEIRO IMPÕE RESPEITO!!! 🏆",
+        "RAPOSA EM FESTA!!! 🦊",
+        "VAMO CABULOSO, RAPOSA CAÇAAAAAA",
+        "SECADOR CHORA!!! 😈"
     ],
+
     "internacional": [
-        "É GOL DO INTER CARAAAAALHO!!! 🔥🔥🔥",
-        "COLORADOOOOOO DOMINANDO TUDO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DO INTER!!! 🏆🏆🏆",
-        "QUE JOGADA DO INTER!!! 🔥🔥🔥",
-        "INTER!!! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+        "VAMOOOO INTER PORRA!!! 🔴⚪",
+        "COLORADO IMPÕE RESPEITO!!! 🔥",
+        "NO BEIRA-RIO MANDA O INTER!!! 🏟️",
+        "DEU INTER!!! 🏆",
+        "SECADOR NÃO TEM VEZ!!! 😈"
     ],
+
     "botafogo": [
-        "É GOL DO FOGÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃÃO!!!! 🔥🔥🔥",
-        "FOGÃO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DO BOTAFOGO!!! 🏆🏆🏆",
-        "QUE JOGADA DO FOGÃOOOOOO!!! 🔥🔥🔥",
-        "FOGÃOOOOOO! COMEMORAÇÃO GARANTIDA!!! 🙌🙌🙌"
+        "FOGÃOOOOOO PORRA!!! 🔥⭐",
+        "O GLORIOSO VENCE!!! 🖤⚪",
+        "BOTAFOGO IMPÕE RESPEITO!!! 😎",
+        "ESTRELA SOLITÁRIA BRILHA!!! ⭐",
+        "SECADOR CHORA!!! 😈"
     ],
+
     "vasco": [
-        "É GOL DO VASCUUUUUUUUUU!!! 🔥🔥🔥",
-        "VASCO DOMINANDO TUDOOOOOOO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA DO VASCO!!! 🏆🏆🏆",
-        "GIGANTES VENCEM, PEQUENOS OLHAM!!! 🔥🔥🔥",
-        "VASCOOOOOO! COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+        "RESPEITA O GIGANTE PORRA!!! ⚓",
+        "VASCO É VASCO!!! 🔥",
+        "DEU VASCÃO!!! 🏆",
+        "O GIGANTE SE IMPÕE!!! 😤",
+        "SECADOR ENGASGA!!! 😈"
     ],
-    "são paulo":[
-        "VAMO SÃO PAULOOOOOOOOO",
-        "É ISSO SÃO PAULO PORRA"
-    ],
+
     "default": [
-        "É GOL CARAAAAALHO!!!! 🔥🔥🔥",
-        "TIME DOMINANDO!!! ⚡⚡⚡",
-        "VITÓRIAAAAA!!! 🏆🏆🏆",
-        "QUE JOGADA!!! 🔥🔥🔥",
-        "COMEMORAÇÃO TOTAL!!! 🙌🙌🙌"
+        "É GOL PORRA!!! 🔥",
+        "TIME EM FESTA!!! 🏆",
+        "VENCEEEEU!!! 😎",
+        "CHUPA SECADOR!!! 😈",
+        "COMEMORA TORCIDA!!! 🙌"
     ]
 }
 
@@ -4716,6 +5204,7 @@ async def verificar_gols():
     # 3) Canal de jogos
     # --------------------------------------------------------------------
     canal = bot.get_channel(CANAL_JOGOS_ID)
+    canal_jogos = canal  # Adicionar esta linha para compatibilidade
     if not canal:
         logging.error("❌ Canal de jogos não encontrado.")
         return
@@ -4785,17 +5274,17 @@ async def verificar_gols():
             try:
                 cargo_futebol = "<@&1437851100878344232>" 
                 embed = discord.Embed(
-                title="🏆 Apostas Abertas Agora!",
+                title="<a:283534greenheartcoin:1465428163722219601> Apostas Abertas Agora!",
                 description=(
                     f"⏰ Horário: {horario_br} (BR)\n\n"
-                    f"📢 {cargo_futebol} reaja para apostar:"
+                    f"{cargo_futebol} <a:347621pingbobstare:1465428636189327463> reaja para apostar:"
                 ),
                 color=discord.Color.blue()
             )
                 
                 embed.add_field(name=f"{emoji_casa} {casa}", value="Casa", inline=True)
-                embed.add_field(name=f"{emoji_fora} {fora}", value="Visitante", inline=True)
                 embed.add_field(name=f"{EMOJI_EMPATE} Empate", value="Empate", inline=True)
+                embed.add_field(name=f"{emoji_fora} {fora}", value="Visitante", inline=True)
                 embed.set_footer(text="Apostas abertas por 10 minutos!")
 
                 if partida["league"]["id"] == 13:
@@ -4803,12 +5292,19 @@ async def verificar_gols():
                         "🏆 **APOSTAS ABERTAS PARA A LIBERTADORES!**\n"
                         "https://tenor.com/view/libertadores-copa-libertadores-conmebol-libertadores-a-gl%C3%B3ria-eterna-gif-26983587"
                     )
+                # Criar view antes de enviar mensagem
+                view = ApostaView(fixture_id, casa, fora)
+                
                 mensagem = await canal_apostas.send(
                     content=cargo_futebol,
                     embed=embed,
-                    view=ApostaView(fixture_id, casa, fora),
+                    view=view,
                     allowed_mentions=discord.AllowedMentions(roles=True)
                 )
+                
+                # Vincular dados à mensagem
+                view.set_message(mensagem)
+                
                 if partida["league"]["id"] == 1:
                     await canal_apostas.send(
                         "**APOSTAS ABERTAS PARA A COPA DO MUNDO!**\n"
@@ -4822,9 +5318,9 @@ async def verificar_gols():
                 
                 
                 # Armazenar dados na mensagem para o on_interaction acessar
-                view = mensagem.components[0].children[0].view if mensagem.components else None
-                if view:
-                    view.set_message(mensagem)
+                #view = mensagem.components[0].children[0].view if mensagem.components else None
+                #if view:
+                #    view.set_message(mensagem)
                 
                 
 
@@ -4971,7 +5467,7 @@ async def verificar_gols():
                         mult = 4 if modo_clown == 1 else 1
                         pontos_preview = lose_pts * mult
                         mensagens_pv.append(
-                            (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **{pontos_preview} pontos**. Se tiver Segunda Chance ativa, será reembolsado.")
+                            (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **{pontos_preview} pontos**.")
                         )
 
                 # 🔥 Marca como processado
@@ -5017,12 +5513,12 @@ PRECOS = {
     "jinxed_vip": 1000,
     "caixa_misteriosa": 50,
     "caixinha": 50,
-    "segunda_chance": 45,
     "clown_bet": 60,
     "emoji_personalizado": 4500,
     "comemoracao":1000,
     "mute_jinxed": 1500,
-    "apelido": 1500
+    "apelido": 1500,
+    "inverter": 700
 }
 #==========================              ==========================  
 #                          LOJA DE PONTOS
@@ -5096,7 +5592,7 @@ async def loja(ctx):
     )
 
     embed.add_field(
-        name="🎁 Caixa Surpresa — 50 pontos",
+        name="<a:809469heartchocolate:1466494908243120256> Caixa Surpresa — 50 pontos",
         value="• Ganha pontos aleatórios de 1 a 200\n• Pode vir até negativo 👀\n• Use **caixinha** ",
         inline=False
     )
@@ -5104,12 +5600,6 @@ async def loja(ctx):
     embed.add_field(
         name="<:discotoolsxyzicon_6:1444750406763679764> Jinxed VIP — 1000 pontos",
         value="• Garante 15 dias do cargo VIP\n• Use **jinxed_vip**",
-        inline=False
-    )
-
-    embed.add_field(
-        name="⏪ Segunda Chance — 45 pontos",
-        value="• Recupera a última aposta perdida\n• Uso único\n• Use **segunda_chance**",
         inline=False
     )
 
@@ -5123,6 +5613,7 @@ async def loja(ctx):
         value="• Escolha um time.\n• Se ele vencer o próximo jogo, o bot posta um GIF festejando além de comemorar!\n• Use: `!comprar comemoracao` e depois `!comemorar <time>`",
         inline=False
     )
+    
     embed.add_field(
         name="🔇 Mute Jinxed — 1500 pontos",
         value="• Mute alguém por 3 minutos usando !troll\n• Funciona mesmo se o bot não tiver permissão\n• Uso único\n• Use: `!comprar mute_jinxed`",
@@ -5131,6 +5622,11 @@ async def loja(ctx):
     embed.add_field(
         name="👤 Apelido — 1500 pontos",
         value="• Troque o apelido de alguém usando !apelido\n• Uso único\n• Use: `!comprar apelido`",
+        inline=False
+    )
+    embed.add_field(
+        name="🔄 Inverter Pontos — 700 pontos",
+        value="• Inverte o resultado da próxima aposta de um usuário\n• Se ele ia ganhar, vai perder\n• Se ele ia perder, vai ganhar\n• Use: `!comprar inverter` e depois `!inverter @usuario`",
         inline=False
     )
 
@@ -5192,17 +5688,6 @@ async def comprar(ctx, item_nome: str):
         else:
             await ctx.send("⚠️ Cargo 'Jinxed Vip' não encontrado no servidor.")
 
-    elif item == "segunda_chance":
-        con = conectar_futebol()
-        cur = con.cursor()
-        cur.execute(
-            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, preco, datetime.utcnow())
-        )
-        con.commit()
-        con.close()
-        await ctx.send("🎯 Você comprou **Segunda Chance**! Pode recuperar pontos na próxima aposta perdida.")
-
     elif item == "caixinha":
         con = conectar_futebol()
         cur = con.cursor()
@@ -5217,18 +5702,20 @@ async def comprar(ctx, item_nome: str):
             await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes hoje. Tente novamente amanhã.")
             return
 
-        pontos_sorteados = random.randint(1, 200)
+        pontos_sorteados = random.randint(-40, 300)
         adicionar_pontos_db(user_id, pontos_sorteados)
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, preco, datetime.utcnow())
+            (user_id, item, pontos_sorteados, datetime.utcnow())
         )
         con.commit()
         con.close()
-        await ctx.send(f"🎁 Você abriu a **Caixinha de Surpresa** e ganhou **{pontos_sorteados} pontos!**")
-
-    
-
+        if pontos_sorteados > 0:
+            await ctx.send(f"🎁 Você abriu a **Caixinha de Surpresa** e ganhou **+{pontos_sorteados} pontos!** 💰")
+        elif pontos_sorteados < 0:
+            await ctx.send(f"😢 Você abriu a **Caixinha de Surpresa** e perdeu **{abs(pontos_sorteados)} pontos!** 💔")
+        else:
+            await ctx.send(f"😐 Você abriu a **Caixinha de Surpresa** e não ganhou nem perdeu pontos!** 📦")
 
     elif item == "clown_bet":
         con = conectar_futebol()
@@ -5287,6 +5774,74 @@ async def comprar(ctx, item_nome: str):
         con.commit()
         con.close()
         await ctx.send("👤 Você comprou o Apelido! use !apelido @user <nome_do_apelido>")
+    
+    elif item == "inverter":
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (user_id, item, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        await ctx.send("🔄 Você comprou **Inverter Pontos**! Use `!inverter @usuario` para inverter a próxima aposta de alguém.")
+
+@bot.command()
+async def inverter(ctx, target: discord.Member):
+    """Usa o item Inverter em um usuário específico"""
+    user_id = ctx.author.id
+    target_id = target.id
+    
+    # Verificar se o comando foi usado no canal permitido
+    if ctx.channel.id != CANAL_PERMITIDO_ID:
+        return await ctx.send(f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.")
+    
+    # Verificar se tem o item inverter disponível
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT id FROM loja_pontos WHERE user_id = %s AND item = 'inverter' AND ativo = 1",
+        (user_id,)
+    )
+    item_row = cursor.fetchone()
+    
+    if not item_row:
+        conn.close()
+        return await ctx.send("❌ Você não tem um item **Inverter** disponível. Use `!comprar inverter` para adquirir um.")
+    
+    # Verificar se o usuário alvo já tem uma inversão pendente
+    cursor.execute(
+        "SELECT id FROM inversoes WHERE target_user_id = %s AND used = 0",
+        (target_id,)
+    )
+    inversao_pendente = cursor.fetchone()
+    
+    if inversao_pendente:
+        conn.close()
+        return await ctx.send(f"⚠️ {target.mention} já tem uma inversão pendente!")
+    
+    # Criar a inversão
+    cursor.execute(
+        "INSERT INTO inversoes (target_user_id, creator_user_id, fixture_id, used) VALUES (%s, %s, NULL, 0)",
+        (target_id, user_id)
+    )
+    
+    # Marcar item como usado
+    cursor.execute("UPDATE loja_pontos SET ativo = 0 WHERE id = %s", (item_row[0],))
+    
+    conn.commit()
+    conn.close()
+    
+    await ctx.send(f"🔄 **Inversão ativada!** A próxima aposta de {target.mention} terá seus pontos invertidos!")
+    logging.info(f"{ctx.author.name} usou Inverter em {target.name}")
+    
+    # Esperar 3 segundos e apagar mensagens
+    await asyncio.sleep(3)
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
 @bot.command()
 async def apelido(ctx, alvo: discord.Member, *, novo_apelido: str):
@@ -5509,7 +6064,7 @@ async def setemoji(ctx):
     
     con.close()
 
-def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7):
+def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7, tem_inversao=False):
     conn = conectar_futebol()
     cursor = conn.cursor()
 
@@ -5534,41 +6089,46 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7):
                        (user_id, fixture_id))
         logging.info(f"Usuário {user_id} usou Clown Bet!")
 
-    # 3️⃣ Calcular pontos ganhos ou perdidos
-    if aposta_usuario == resultado:
+    # 3️⃣ Calcular pontos ganhos ou perdidos (sem inversão)
+    acertou = (aposta_usuario == resultado)
+    
+    if acertou:
         # Acertou a aposta
         pontos_final = pontos_base * multiplicador_vitoria
-        adicionar_pontos_db(user_id, pontos_final)
-        
-        # Incrementar acertos consecutivos
+    else:
+        # Errou a aposta
+        pontos_final = -abs(perda_base) * multiplicador_derrota
+    
+    # APLICAR INVERSÃO DE PONTOS
+    if tem_inversao:
+        pontos_final = -pontos_final  # Inverte os pontos: +50 vira -50, -40 vira +40
+    
+    # Aplicar pontos finais
+    adicionar_pontos_db(user_id, pontos_final)
+    
+    if acertou:
+        # Incrementar acertos consecutivos (global para todas as apostas do usuário)
         cursor.execute(
             "UPDATE apostas SET acertos_consecutivos = acertos_consecutivos + 1 WHERE user_id = %s AND fixture_id = %s",
             (user_id, fixture_id)
         )
         
-        logging.info(f"Usuário {user_id} acertou! Ganhou {pontos_final} pontos.")
+        resultado_texto = f"ganhou {pontos_final} pontos"
+        if tem_inversao:
+            resultado_texto += " 🔄 (invertido)"
+        
+        logging.info(f"Usuário {user_id} {resultado_texto}!")
     else:
-        # Errou a aposta - resetar acertos consecutivos
+        # Errou a aposta - resetar acertos consecutivos (global para todas as apostas do usuário)
         cursor.execute(
             "UPDATE apostas SET acertos_consecutivos = 0 WHERE user_id = %s AND fixture_id = %s",
             (user_id, fixture_id)
         )
         
-        # 4️⃣ Verificar Segunda Chance
-        cursor.execute(
-            "SELECT id FROM loja_pontos WHERE user_id = %s AND item = 'segunda_chance' AND ativo = 1",
-            (user_id,)
-        )
-        row_chance = cursor.fetchone()
-        if row_chance:
-            # Consumir Segunda Chance e devolver perda_base pontos (reembolsa a perda)
-            cursor.execute("UPDATE loja_pontos SET ativo = 0 WHERE id = %s", (row_chance[0],))
-            adicionar_pontos_db(user_id, abs(perda_base))
-            logging.info(f"Usuário {user_id} perdeu, mas usou Segunda Chance! Pontos devolvidos: {abs(perda_base)}")
-        else:
-            pontos_final = -abs(perda_base) * multiplicador_derrota
-            adicionar_pontos_db(user_id, pontos_final)
-            logging.info(f"Usuário {user_id} perdeu! Perdeu {abs(pontos_final)} pontos.")
+        resultado_texto = f"perdeu {abs(pontos_final)} pontos"
+        if tem_inversao:
+            resultado_texto += " 🔄 (invertido)"
+        logging.info(f"Usuário {user_id} {resultado_texto}!")
 
     conn.commit()
     conn.close()
@@ -5586,6 +6146,21 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7):
         )
         resultado_acertos = cur_fut.fetchone()
         acertos_consecutivos = resultado_acertos["acertos_consecutivos"] if resultado_acertos else 0
+        
+        # Estatísticas do usuário
+        cur_fut.execute(
+            "SELECT COUNT(*) as total FROM apostas WHERE user_id = %s",
+            (user_id,)
+        )
+        total_apostas = cur_fut.fetchone()["total"]
+        
+        cur_fut.execute(
+            "SELECT COUNT(*) as acertos FROM apostas WHERE user_id = %s AND palpite = resultado AND fixture_id IN (SELECT fixture_id FROM jogos WHERE finalizado = 1)",
+            (user_id,)
+        )
+        total_acertos = cur_fut.fetchone()["acertos"]
+        
+        taxa_acerto = (total_acertos / total_apostas * 100) if total_apostas > 0 else 0
         
         # Verificar se tem doação ativa
         cur_fut.execute(
@@ -5627,10 +6202,385 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7):
                     tempo_em_call=0  
                 )
             )
-            logging.info(f"Verificação automática de conquistas iniciada para usuário {user_id} com {acertos_consecutivos} acertos consecutivos")
+            logging.info(f"📊 Usuário {user_id}: {total_acertos}/{total_apostas} acertos ({taxa_acerto:.1f}%) - Verificação automática de conquistas iniciada")
     
     except Exception as e:
         logging.error(f"Erro ao verificar conquistas automáticas para usuário {user_id}: {e}")
+
+
+async def processar_jogo(fixture_id, ctx=None, automatico=False):
+    """
+    Função reutilizável para processar finalização de jogos
+    
+    Args:
+        fixture_id: ID do jogo a ser processado
+        ctx: Contexto do Discord (opcional, para modo manual)
+        automatico: Se True, não envia mensagens de status
+    
+    Returns:
+        dict: {'processado': bool, 'mensagem': str, 'erro': str}
+    """
+    try:
+        conn = conectar_futebol()
+        cursor = conn.cursor(dictionary=True)
+
+        # Verificar se jogo já foi processado
+        cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fixture_id,))
+        row = cursor.fetchone()
+        if row and row.get("processado") == 1:
+            conn.close()
+            return {'processado': False, 'mensagem': f"⚠️ Jogo {fixture_id} já foi processado.", 'erro': None}
+
+        # Buscar dados da API
+        async with aiohttp.ClientSession() as session:
+            async with session.get(URL, headers=HEADERS, params={"id": fixture_id}) as response:
+                data = await response.json()
+
+        if not data.get("response"):
+            conn.close()
+            return {'processado': False, 'mensagem': f"❌ Jogo {fixture_id} não encontrado na API.", 'erro': 'api_not_found'}
+
+        partida = data["response"][0]
+        casa = partida["teams"]["home"]["name"]
+        fora = partida["teams"]["away"]["name"]
+        gols_casa = partida["goals"]["home"] or 0
+        gols_fora = partida["goals"]["away"] or 0
+        status = partida["fixture"]["status"]["short"].lower()
+
+        # Verificar se jogo finalizou
+        if status not in ("ft", "aet", "pen"):
+            conn.close()
+            if not automatico and ctx:
+                await ctx.send(f"⚠️ Jogo {fixture_id} ainda não finalizou (status: {status}).")
+            return {'processado': False, 'mensagem': f"Jogo {fixture_id} não finalizado (status: {status})", 'erro': 'not_finished'}
+
+        # Determinar resultado
+        if gols_casa > gols_fora:
+            resultado_final = "home"
+            time_vencedor_nome = casa
+        elif gols_fora > gols_casa:
+            resultado_final = "away"
+            time_vencedor_nome = fora
+        else:
+            resultado_final = "draw"
+            time_vencedor_nome = None
+
+        # -----------------------------------------------------------
+        # LÓGICA: COMEMORAÇÃO DE VITÓRIA
+        # -----------------------------------------------------------
+        if time_vencedor_nome:  # Só comemora se não for empate
+            # Pega a chave normalizada do vencedor (ex: "galo")
+            chave_vencedor = MAPEAMENTO_TIMES.get(time_vencedor_nome.lower(), time_vencedor_nome.lower())
+            
+            conn_com = conectar_futebol()
+            cur_com = conn_com.cursor()
+            
+            # Busca quem pediu comemoração para esse time
+            cur_com.execute("SELECT id, user_id FROM comemoracoes WHERE team_key = %s", (chave_vencedor,))
+            rows_com = cur_com.fetchall()
+            
+            if rows_com:
+                # Pega o GIF
+                gif_url = GIFS_VITORIA_TIME.get(chave_vencedor, GIFS_VITORIA_TIME.get("default"))
+                
+                # Monta lista de menções dos usuários
+                usuarios_mencoes = []
+                ids_para_remover = []
+                
+                for row in rows_com:
+                    uid = row[0]  # ID do banco (para deletar)
+                    discord_id = row[1]
+                    ids_para_remover.append(uid)
+                    usuarios_mencoes.append(f"<@{discord_id}>")
+                
+                texto_mencoes = ", ".join(usuarios_mencoes)
+                
+                # Envia a mensagem no canal de jogos
+                canal_jogos = bot.get_channel(CANAL_JOGOS_ID)
+                if canal_jogos:
+                    await canal_jogos.send(
+                        f"🎇 **A FESTA COMEÇA!** Vitória do **{time_vencedor_nome.upper()}**!\n"
+                        f"Comemoração patrocinada por: {texto_mencoes}\n"
+                        f"{gif_url}"
+                    )
+                    
+                    # Envia 2 falas aleatórias do bot
+                    falas_time = FALAS_BOT.get(chave_vencedor, FALAS_BOT.get("default", []))
+                    if falas_time:
+                        falas_sorteadas = random.sample(falas_time, min(2, len(falas_time)))
+                        for fala in falas_sorteadas:
+                            await canal_jogos.send(fala)
+                
+                # Remove as comemorações usadas do banco (para não repetir no próximo jogo)
+                format_strings = ','.join(['%s'] * len(ids_para_remover))
+                cur_com.execute(f"DELETE FROM comemoracoes WHERE id IN ({format_strings})", tuple(ids_para_remover))
+                conn_com.commit()
+                logging.info(f"✅ Comemorações processadas para {chave_vencedor}")
+
+            cur_com.close()
+            conn_com.close()
+
+        # Buscar apostas
+        cursor.execute("SELECT user_id, palpite, modo_clown FROM apostas WHERE fixture_id = %s", (fixture_id,))
+        apostas = cursor.fetchall()
+
+        # Calcular bônus de minoria
+        contagem = {"home": 0, "away": 0, "draw": 0}
+        for a in apostas:
+            p = a["palpite"]
+            if p in contagem:
+                contagem[p] += 1
+        votos_vencedor = contagem.get(resultado_final, 0)
+        votos_max = max(contagem.values()) if contagem else 0
+        bonus_minoria = votos_vencedor > 0 and votos_vencedor < votos_max
+
+        mensagens_pv = []
+
+        # Pontuação por liga
+        pontos_por_liga = {
+            1:  (50, -40),
+            2:  (30, -25),
+            71: (15, -7),
+            73: (20, -12),
+            13: (35, -20),
+            11: (15, -7),
+        }
+
+        league_id = partida.get("league", {}).get("id") if partida else None
+        win_pts, lose_pts = pontos_por_liga.get(league_id, (15, -7))
+
+        # Processar cada aposta
+        for aposta in apostas:
+            user_id = aposta["user_id"]
+            palpite = aposta["palpite"]
+            modo_clown = int(aposta.get("modo_clown", 0))
+            
+            # -------------------------------------------------
+            # VERIFICAR INVERSÃO ATIVA
+            # -------------------------------------------------
+            cursor.execute(
+                "SELECT id FROM inversoes WHERE target_user_id = %s AND used = 0 LIMIT 1",
+                (user_id,)
+            )
+            inversao = cursor.fetchone()
+            tem_inversao = inversao is not None
+            
+            # Calcular acertou normal (sem inversão)
+            acertou_normal = (palpite == resultado_final)
+
+            # Se tem inversão, marcar como usada
+            if tem_inversao:
+                cursor.execute(
+                    "UPDATE inversoes SET used = 1, fixture_id = %s WHERE id = %s",
+                    (fixture_id, inversao[0])
+                )
+                logging.info(f"🔄 Inversão aplicada para usuário {user_id} no jogo {fixture_id}")
+
+            pontos_base_vitoria = (win_pts * 2) if (acertou_normal and bonus_minoria) else win_pts
+
+            # Aplicar pontuação via função central
+            try:
+                processar_aposta(user_id, fixture_id, resultado_final, pontos_base_vitoria, perda_base=lose_pts, tem_inversao=tem_inversao)
+            except Exception as e:
+                logging.error(f"Erro ao processar aposta de {user_id}: {e}")
+
+            # Mensagem DM (usar acertou_normal para mostrar resultado real)
+            if acertou_normal:
+                multiplicador = 6 if modo_clown == 1 else 1
+                pontos_preview = pontos_base_vitoria * multiplicador
+
+                try:
+                    embed = discord.Embed(
+                        title="<a:302229champagne:1454983960605233273> APOSTA CERTA!",
+                        description=(
+                            f"<a:105382toro:1454984271897825405> Você garantiu **+{pontos_preview} pontos"
+                            + (" (bônus de minoria)" if pontos_base_vitoria == (win_pts * 2) else "")
+                            + (" 🔄 (invertido)" if tem_inversao else "")
+                            + "!**"
+                        ),
+                        color=discord.Color.green()
+
+
+                    )
+
+                    embed.add_field(
+                        name="🏟️ Partida",
+                        value=f"`{casa} x {fora}`",
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="🏆 Resultado",
+                        value=f"**{time_vencedor_nome}** venceu!",
+                        inline=False
+                    )
+                    
+                    info = get_estadio_time_casa(casa)
+                    logging.info(f"🏟️ Info estádio para {casa}: {info}")
+                    
+                    if info["estadio"] != "Estádio indefinido":
+                        embed.add_field(
+                            name="🏟️ Estádio",
+                            value=info["estadio"],
+                            inline=False
+                        )
+                    
+                    if info["imagem"]:
+                        embed.set_image(url=info["imagem"])
+                        logging.info(f"🖼️ Imagem do estádio adicionada: {info['imagem']}")
+                    
+                    embed.add_field(
+                        name="📊 Ações",
+                        value=(
+                            "<:apchikabounce:1408193721907941426> **!meuspontos**\n"
+                            "<a:9612_aMCenchantedbook:1449948971916202125> **!info**\n"
+                            "🏪 **!loja**\n"
+                            "<a:17952trophycoolbrawlstarspin:1457784734074535946> **!conquistas**"
+                        ),
+                        inline=False
+                    )
+
+                    
+                    
+                    mensagens_pv.append((user_id, embed))
+                    logging.info(f"✅ Embed de acerto criada para usuário {user_id}")
+                    
+                except Exception as e:
+                    logging.error(f"❌ Erro ao criar embed de acerto para usuário {user_id}: {e}")
+                    # Criar embed simples sem arena
+                    embed_simples = discord.Embed(
+                        title="<a:302229champagne:1454983960605233273> APOSTA CERTA!",
+                        description=f"Você garantiu **+{pontos_preview} pontos**!",
+                        color=discord.Color.green()
+                    )
+                    mensagens_pv.append((user_id, embed_simples))
+
+            else:
+                multiplicador = 4 if modo_clown == 1 else 1
+                pontos_preview = lose_pts * multiplicador
+
+                try:
+                    embed = discord.Embed(
+                        title="<:43513absolutelydrained:1454984081438674954> Aposta Errada",
+                        description=(
+                            f"Você perdeu **{pontos_preview} pontos"
+                            + (" 🔄 (invertido)" if tem_inversao and acertou_normal else "")
+                        ),
+                        color=discord.Color.red()
+                    )
+
+                    embed.add_field(
+                        name="🏟️ Partida",
+                        value=f"`{casa} x {fora}`",
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="🏆 Resultado",
+                        value=f"**{time_vencedor_nome}** venceu!",
+                        inline=False
+                    )
+                    
+                    info = get_estadio_time_casa(casa)
+                    logging.info(f"🏟️ Info estádio para {casa}: {info}")
+                    
+                    if info["estadio"] != "Estádio indefinido":
+                        embed.add_field(
+                            name="🏟️ Estádio",
+                            value=info["estadio"],
+                            inline=False
+                        )
+                    
+                    if info["imagem"]:
+                        embed.set_image(url=info["imagem"])
+                        logging.info(f"🖼️ Imagem do estádio adicionada: {info['imagem']}")
+
+                    embed.add_field(
+                        name="📊 Comandos",
+                        value=(
+                            "<a:6582red:1449949837763154081> **!meuspontos**\n"
+                            "<a:9612_aMCenchantedbook:1449948971916202125> **!info**"
+                        ),
+                        inline=False
+                    )
+
+                    mensagens_pv.append((user_id, embed))
+                    logging.info(f"✅ Embed de erro criada para usuário {user_id}")
+                    
+                except Exception as e:
+                    logging.error(f"❌ Erro ao criar embed de erro para usuário {user_id}: {e}")
+                    # Criar embed simples
+                    embed_simples = discord.Embed(
+                        title="<:43513absolutelydrained:1454984081438674954> Aposta Errada",
+                        description=f"Você perdeu **{pontos_preview} pontos**!",
+                        color=discord.Color.red()
+                    )
+                    mensagens_pv.append((user_id, embed_simples))
+
+        # Marcar jogo como processado
+        cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fixture_id,))
+        conn.commit()
+
+        # Enviar embed final no canal de jogos
+        nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
+        nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
+        emoji_casa = EMOJI_TIMES.get(nome_casa, "🔵")
+        emoji_fora = EMOJI_TIMES.get(nome_fora, "🔴")
+
+        embed_final = discord.Embed(
+            title=f"🏁 Fim de jogo — {casa} x {fora}",
+            description=f"Placar final: {emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
+            color=discord.Color.dark_red()
+        )
+        embed_final.set_footer(text="Obrigado por participar das apostas!")
+
+        canal = bot.get_channel(CANAL_JOGOS_ID)
+        if canal:
+            try:
+                await canal.send(embed=embed_final)
+                logging.info(f"✅ Embed final enviado para o canal {CANAL_JOGOS_ID}")
+            except Exception as e:
+                logging.error(f"❌ Erro ao enviar embed final: {e}")
+                if ctx:
+                    await ctx.send(f"❌ Erro ao enviar embed final: {e}")
+        else:
+            logging.error(f"❌ Canal de jogos (ID: {CANAL_JOGOS_ID}) não encontrado!")
+            if ctx:
+                await ctx.send(f"❌ Canal de jogos (ID: {CANAL_JOGOS_ID}) não encontrado!")
+
+        # Enviar DMs para usuários
+        for user_id, msg in mensagens_pv:
+            usuario = bot.get_user(int(user_id))
+            if usuario:
+                try:
+                    # Verificar se msg é um Embed antes de enviar
+                    if isinstance(msg, discord.Embed):
+                        await usuario.send(embed=msg)
+                        logging.info(f"✅ DM com embed enviado para usuário {user_id}")
+                    else:
+                        await usuario.send(msg)
+                        logging.info(f"✅ DM com texto enviado para usuário {user_id}")
+                except Exception as e:
+                    logging.error(f"❌ Erro ao enviar DM para usuário {user_id}: {e}")
+                    if ctx:
+                        await ctx.send(f"❌ Erro ao enviar DM para usuário {user_id}: {e}")
+            else:
+                logging.warning(f"⚠️ Usuário {user_id} não encontrado para enviar DM")
+                if ctx:
+                    await ctx.send(f"⚠️ Usuário {user_id} não encontrado para enviar DM")
+
+        cursor.close()
+        conn.close()
+        
+        logging.info(f"✅ Jogo {fixture_id} processado com sucesso!")
+        return {'processado': True, 'mensagem': f"Jogo {fixture_id} processado com sucesso!", 'erro': None}
+
+    except Exception as e:
+        error_msg = f"Erro ao processar jogo {fixture_id}: {e}"
+        logging.error(error_msg)
+        if ctx and not automatico:
+            await ctx.send(f"❌ {error_msg}")
+        return {'processado': False, 'mensagem': error_msg, 'erro': str(e)}
 
 
 @bot.command()
@@ -5652,252 +6602,99 @@ async def terminar_jogo(ctx, fixture_id: int = None):
         else:
             alvos = [fixture_id]
 
+        cursor.close()
+        conn.close()
+
         processados = 0
+        erros = 0
+
         for fx in alvos:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(URL, headers=HEADERS, params={"id": fx}) as response:
-                    data = await response.json()
-
-            if not data.get("response"):
-                await ctx.send(f"❌ Jogo {fx} não encontrado na API.")
-                continue
-
-            partida = data["response"][0]
-            casa = partida["teams"]["home"]["name"]
-            fora = partida["teams"]["away"]["name"]
-            gols_casa = partida["goals"]["home"] or 0
-            gols_fora = partida["goals"]["away"] or 0
-            status = partida["fixture"]["status"]["short"].lower()
-
-            if status not in ("ft", "aet", "pen"):
-                await ctx.send(f"⚠️ Jogo {fx} ainda não finalizou (status: {status}).")
-                continue
-
-            if gols_casa > gols_fora:
-                resultado_final = "home"
-                time_vencedor_nome = casa
-            elif gols_fora > gols_casa:
-                resultado_final = "away"
-                time_vencedor_nome = fora
+            resultado = await processar_jogo(fx, ctx=ctx, automatico=False)
+            if resultado['processado']:
+                processados += 1
             else:
-                resultado_final = "draw"
-                time_vencedor_nome = None
+                erros += 1
+                if resultado['erro'] != 'not_finished':  # Não mostrar erro de jogo não finalizado
+                    await ctx.send(resultado['mensagem'])
 
-            # -----------------------------------------------------------
-            # LÓGICA: COMEMORAÇÃO DE VITÓRIA
-            # -----------------------------------------------------------
-            if time_vencedor_nome:  # Só comemora se não for empate
-                # Pega a chave normalizada do vencedor (ex: "galo")
-                chave_vencedor = MAPEAMENTO_TIMES.get(time_vencedor_nome.lower(), time_vencedor_nome.lower())
-                
-                conn_com = conectar_futebol()
-                cur_com = conn_com.cursor()
-                
-                # Busca quem pediu comemoração para esse time
-                cur_com.execute("SELECT id, user_id FROM comemoracoes WHERE team_key = %s", (chave_vencedor,))
-                rows_com = cur_com.fetchall()
-                
-                if rows_com:
-                    # Pega o GIF
-                    gif_url = GIFS_VITORIA_TIME.get(chave_vencedor, GIFS_VITORIA_TIME.get("default"))
-                    
-                    # Monta lista de menções dos usuários
-                    usuarios_mencoes = []
-                    ids_para_remover = []
-                    
-                    for row in rows_com:
-                        uid = row[0]  # ID do banco (para deletar)
-                        discord_id = row[1]
-                        ids_para_remover.append(uid)
-                        usuarios_mencoes.append(f"<@{discord_id}>")
-                    
-                    texto_mencoes = ", ".join(usuarios_mencoes)
-                    
-                    # Envia a mensagem no canal de jogos
-                    canal_jogos = bot.get_channel(CANAL_JOGOS_ID)
-                    if canal_jogos:
-                        await canal_jogos.send(
-                            f"🎇 **A FESTA COMEÇOU!** Vitória do **{time_vencedor_nome.upper()}**!\n"
-                            f"Comemoração patrocinada por: {texto_mencoes}\n"
-                            f"{gif_url}"
-                        )
-                        
-                        # Envia 2 falas aleatórias do bot
-                        falas_time = FALAS_BOT.get(chave_vencedor, FALAS_BOT.get("default", []))
-                        if falas_time:
-                            falas_sorteadas = random.sample(falas_time, min(2, len(falas_time)))
-                            for fala in falas_sorteadas:
-                                await canal_jogos.send(fala)
-                    
-                    # Remove as comemorações usadas do banco (para não repetir no próximo jogo)
-                    format_strings = ','.join(['%s'] * len(ids_para_remover))
-                    cur_com.execute(f"DELETE FROM comemoracoes WHERE id IN ({format_strings})", tuple(ids_para_remover))
-                    conn_com.commit()
-                    logging.info(f"✅ Comemorações processadas para {chave_vencedor}")
+        if processados == 0:
+            await ctx.send(" Nenhum jogo foi processado.")
+        elif processados == 1:
+            await ctx.send(" 1 jogo finalizado manualmente. Pontuações aplicadas.")
+            logging.info("1 jogo finalizado manualmente. Pontuações aplicadas.")
+        else:
+            await ctx.send(f" {processados} jogos finalizados manualmente. Pontuações aplicadas.")
+            logging.info(f"{processados} jogos finalizados manualmente. Pontuações aplicadas.")
 
-                cur_com.close()
-                conn_com.close()
+    except Exception as e:
+        await ctx.send(f" Erro ao finalizar jogos: {e}")
+        logging.error(f"Erro ao finalizar jogos: {e}")
 
-            cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fx,))
-            row = cursor.fetchone()
-            if row and row.get("processado") == 1:
-                await ctx.send(f"⚠️ Jogo {fx} já foi processado.")
-                continue
 
-            cursor.execute("SELECT user_id, palpite, modo_clown FROM apostas WHERE fixture_id = %s", (fx,))
-            apostas = cursor.fetchall()
+@tasks.loop(minutes=12)
+async def verificar_jogos_automaticamente():
+    """Loop automático que verifica e processa jogos finalizados a cada 12 minutos"""
+    try:
+        logging.info("🔄 Iniciando verificação automática de jogos...")
 
-            contagem = {"home": 0, "away": 0, "draw": 0}
-            for a in apostas:
-                p = a["palpite"]
-                if p in contagem:
-                    contagem[p] += 1
-            votos_vencedor = contagem.get(resultado_final, 0)
-            votos_max = max(contagem.values()) if contagem else 0
-            bonus_minoria = votos_vencedor > 0 and votos_vencedor < votos_max
+        conn = conectar_futebol()
+        cursor = conn.cursor(dictionary=True)  # use dictionary=True para consistência
 
-            mensagens_pv = []
-
-            # Pontuação por liga (mesma tabela usada no loop principal)
-            pontos_por_liga = {
-                1:  (50, -40),
-                2:  (30, -25),
-                71: (15, -7),
-                73: (20, -12),
-                13: (35, -20),
-                11: (15, -7),
-            }
-
-            league_id = partida.get("league", {}).get("id") if partida else None
-            win_pts, lose_pts = pontos_por_liga.get(league_id, (15, -7))
-
-            for aposta in apostas:
-                user_id = aposta["user_id"]
-                palpite = aposta["palpite"]
-                modo_clown = int(aposta.get("modo_clown", 0))
-                acertou = (palpite == resultado_final)
-
-                pontos_base_vitoria = (win_pts * 2) if (acertou and bonus_minoria) else win_pts
-
-                # Aplicar pontuação via função central (garante Clown e Segunda Chance)
-                try:
-                    processar_aposta(user_id, fx, resultado_final, pontos_base_vitoria, perda_base=lose_pts)
-                except Exception as e:
-                    logging.error(f"Erro ao processar aposta de {user_id}: {e}")
-
-                # Mensagem DM (preview do resultado)
-                if acertou:
-                    multiplicador = 6 if modo_clown == 1 else 1
-                    pontos_preview = pontos_base_vitoria * multiplicador
-
-                    embed = discord.Embed(
-                        title="<a:302229champagne:1454983960605233273> APOSTA CERTA!",
-                        description=(
-                            f"<a:105382toro:1454984271897825405> Você garantiu **+{pontos_preview} pontos"
-                            + (" (bônus de minoria)" if pontos_base_vitoria == (win_pts * 2) else "")
-                            + "!**"
-                        ),
-                        color=discord.Color.green()
-                    )
-                    info = get_estadio_time_casa(casa)
-                    if info["estadio"] != "Estádio indefinido":
-                        embed.add_field(
-                        name="🏟️ Estádio",
-                        value=info["estadio"],
-                        inline=False
-                        )
-                    if info["imagem"]:
-                        embed.set_image(url=info["imagem"])
-
-                    embed.add_field(
-                        name="📊 Ações",
-                        value=(
-                            "<:apchikabounce:1408193721907941426> **!meuspontos**\n"
-                            "📘 **!info**\n"
-                            "🏪 **!loja**\n"
-                            "⭐ **!conquistas**"
-                        ),
-                        inline=False
-                    )
-
-                    embed.set_thumbnail(url="https://i.imgur.com/SEU_GIF_OU_ICON.gif")
-
-                    mensagens_pv.append((user_id, embed))
-
-                else:
-                    multiplicador = 4 if modo_clown == 1 else 1
-                    pontos_preview = lose_pts * multiplicador
-
-                    embed = discord.Embed(
-                        title="<:43513absolutelydrained:1454984081438674954> Aposta Errada",
-                        description=(
-                            f"Você perdeu **{pontos_preview} pontos"
-                            + (". Se você tiver **Segunda Chance**, será reembolsado." if modo_clown == 1 else ".")
-                        ),
-                        color=discord.Color.red()
-                    )
-
-                    embed.add_field(
-                        name="🏟️ Partida",
-                        value=f"`{casa} x {fora}`",
-                        inline=False
-                    )
-
-                    embed.add_field(
-                        name="📊 Comandos",
-                        value=(
-                            "<a:6582red:1449949837763154081> **!meuspontos**\n"
-                            "<a:9612_aMCenchantedbook:1449948971916202125> **!info**"
-                        ),
-                        inline=False
-                    )
-
-                    mensagens_pv.append((user_id, embed))
-
-            cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fx,))
-            conn.commit()
-
-            nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
-            nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
-            emoji_casa = EMOJI_TIMES.get(nome_casa, "🔵")
-            emoji_fora = EMOJI_TIMES.get(nome_fora, "🔴")
-
-            embed_final = discord.Embed(
-                title=f"🏁 Fim de jogo — {casa} x {fora}",
-                description=f"Placar final: {emoji_casa} **{casa}** {gols_casa} ┃ {gols_fora} **{fora}** {emoji_fora}",
-                color=discord.Color.dark_red()
-            )
-            embed_final.set_footer(text="Obrigado por participar das apostas!")
-
-            canal = bot.get_channel(CANAL_JOGOS_ID)
-            if canal:
-                await canal.send(embed=embed_final)
-
-            for user_id, msg in mensagens_pv:
-                usuario = bot.get_user(int(user_id))
-                if usuario:
-                    try:
-                        await usuario.send(msg)
-                    except:
-                        pass
-
-            processados += 1
+        # Buscar jogos pendentes
+        cursor.execute("SELECT fixture_id, home, away FROM jogos WHERE finalizado = 0")
+        jogos_pendentes = cursor.fetchall()
 
         cursor.close()
         conn.close()
 
+        if not jogos_pendentes:
+            logging.info("✅ Nenhum jogo pendente encontrado para verificação automática.")
+            return  # Nenhum jogo pendente
+
+        processados = 0
+        erros = 0
+        nao_finalizados = 0
+
+        for jogo in jogos_pendentes:
+            fixture_id = jogo["fixture_id"]
+            home = jogo["home"]
+            away = jogo["away"]
+
+            logging.info(f"🎯 Processando jogo {fixture_id}: {home} x {away}")
+            resultado = await processar_jogo(fixture_id, ctx=None, automatico=True)
+
+            if resultado['processado']:
+                processados += 1
+                logging.info(f"✅ Jogo {fixture_id} processado com sucesso!")
+            elif resultado['erro'] == 'not_finished':
+                nao_finalizados += 1
+                logging.info(f"⏳ Jogo {fixture_id} ainda não finalizado")
+            else:
+                erros += 1
+                logging.error(f"❌ Erro no jogo {fixture_id}: {resultado['mensagem']}")
+
+        # Log final similar ao comando manual
         if processados == 0:
-            await ctx.send("⚠️ Nenhum jogo foi processado.")
+            logging.info("Nenhum jogo foi processado automaticamente.")
         elif processados == 1:
-            await ctx.send("✅ 1 jogo finalizado manualmente. Pontuações aplicadas.")
-            logging.info("1 jogo finalizado manualmente. Pontuações aplicadas.")
+            logging.info("1 jogo finalizado automaticamente. Pontuações aplicadas.")
         else:
-            await ctx.send(f"✅ {processados} jogos finalizados manualmente. Pontuações aplicadas.")
-            logging.info(f"{processados} jogos finalizados manualmente. Pontuações aplicadas.")
+            logging.info(f"{processados} jogos finalizados automaticamente. Pontuações aplicadas.")
+
+        logging.info(f"📊 Resumo: {processados} processados, {nao_finalizados} não finalizados, {erros} erros")
 
     except Exception as e:
-        await ctx.send(f"❌ Erro ao finalizar jogos: {e}")
-        logging.error(f"Erro ao finalizar jogos: {e}")
+        logging.error(f"❌ Erro no loop automático de verificação: {e}")
+        import traceback
+        logging.error(f"❌ Traceback completo: {traceback.format_exc()}")
+
+
+@verificar_jogos_automaticamente.before_loop
+async def before_verificar_jogos():
+    """Aguarda o bot estar pronto antes de iniciar o loop"""
+    await bot.wait_until_ready()
+    logging.info("Loop automático de verificação de jogos iniciado!")
+
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -6931,12 +7728,12 @@ async def feliz_aniversario(ctx, membro: discord.Member):
     if cargo not in membro.roles:
         await membro.add_roles(cargo, reason="Aniversário")
 
-    # 🎂 Embed principal
+    # 🎂 Embed principal (mais limpo)
     embed = discord.Embed(
-        title="🎉🎂 FELIZ ANIVERSÁRIO! 🎂🎉",
+        title="🎉 Feliz Aniversário!",
         description=(
-            f"Hoje é dia de comemorar! 🥳\n\n"
-            f"Parabéns {membro.mention}! 💖✨\n"
+            "Hoje é um dia especial ✨\n\n"
+            f"Parabéns, {membro.mention}! 💖\n"
             "Que seu dia seja repleto de alegria, saúde e muitas conquistas!"
         ),
         color=discord.Color.magenta()
@@ -6946,45 +7743,59 @@ async def feliz_aniversario(ctx, membro: discord.Member):
         url="https://media.tenor.com/jw8D7cF8Q3sAAAAC/happy-birthday-happy-birthday-wishes.gif"
     )
 
-    embed.set_footer(
-        text="🎶 Agora com vocês... Parabéns da Xuxa!"
-    )
+    embed.set_footer(text="🎶 Parabéns da Xuxa")
 
     await ctx.send(embed=embed)
 
-    #
     await asyncio.sleep(3)
-    await ctx.send("🎤 **Vamos cantar juntos!** 🎶")
-    
-    await asyncio.sleep(2)
-    await ctx.send("🎵 Hoje vai ser uma festa 🎵")
+    await ctx.send("🎤 **Vamos cantar juntos!**")
 
     await asyncio.sleep(2)
-    await ctx.send("🎵 Bolo e guaraná 🎵")
+    await ctx.send("🎶 Hoje vai ser uma festa")
 
     await asyncio.sleep(2)
-    await ctx.send("🎵 Muito doce pra você🎵")
+    await ctx.send("🎶 Bolo e guaraná")
 
     await asyncio.sleep(2)
-    await ctx.send("🎵 É o seu aniversário🎵 🥳🎂")
+    await ctx.send("🎶 Muito doce pra você")
+
+    await asyncio.sleep(2)
+    await ctx.send("🎶 É o seu aniversário 🎂")
 
     await asyncio.sleep(3)
-    await ctx.send("🎤 Vamos festejar e os amigos receber 🎶")
-    
-    await asyncio.sleep(2)
-    await ctx.send("🎵 Mil felicidades E amor no coração Que a sua vida seja Sempre doce e emoção 🎵")
+    await ctx.send("🎤 Vamos festejar e os amigos receber")
 
     await asyncio.sleep(2)
-    await ctx.send("🎵 Bate, bate palma Que é hora de cantar Agora todos juntos Vamos lá! 🎵")
+    await ctx.send(
+        "🎶 Mil felicidades e amor no coração\n"
+        "🎶 Que a sua vida seja sempre doce e emoção"
+    )
 
     await asyncio.sleep(2)
-    await ctx.send("🎵 Parabéns, parabéns! Hoje é o seu dia Que dia mais feliz 🎵")
+    await ctx.send(
+        "🎶 Bate, bate palma\n"
+        "🎶 Que é hora de cantar"
+    )
 
     await asyncio.sleep(2)
-    await ctx.send("🎵 Parabéns, parabéns! Cante novamente Que a gente pede bis! 🎵 🥳🎂")
+    await ctx.send(
+        "🎶 Parabéns, parabéns!\n"
+        "🎶 Hoje é o seu dia, que dia mais feliz"
+    )
+
+    await asyncio.sleep(2)
+    await ctx.send(
+        "🎶 Parabéns, parabéns!\n"
+        "🎶 Cante novamente que a gente pede bis 🎉"
+    )
 
     await asyncio.sleep(4)
-    await ctx.send("É big, é big É big, é big, é big É hora, é hora É hora, é hora, é hora Rá-tim-bum!")
+    await ctx.send(
+        "🎉 É big, é big, é big!\n"
+        "🎉 É hora, é hora!\n"
+        "🎉 Rá-tim-bum!"
+    )
+    
 
 
 @bot.command()
@@ -7015,38 +7826,67 @@ async def troll(ctx, member: discord.Member):
         con.close()
         return await ctx.send("🤖 Você não pode usar o comando !troll em bots.")
     
-    # Consumir o item
-    cur.execute(
-        "UPDATE loja_pontos SET ativo = 0 WHERE user_id = %s AND item = 'mute_jinxed' AND ativo = 1 LIMIT 1",
-        (user_id,)
-    )
-    con.commit()
-    con.close()
+    # ID do cargo "mute"
+    CARGO_MUTE_ID = 1445066766144376934
     
-    # Atualizar cooldown
-    ultimo_troll[user_id] = agora
-    
-    # Tentar aplicar o mute
+    # Tentar aplicar o cargo
     try:
-        # Verificar se o bot tem permissão para mutar
-        if ctx.guild.me.guild_permissions.mute_members:
-            await member.edit(timeout=timedelta(minutes=3), reason=f"Mute Jinxed usado por {ctx.author.name}")
-            await ctx.send(f"🔇 **{member.mention} foi silenciado por 3 minutos!** (Usado por {ctx.author.mention})")
+        cargo_mute = ctx.guild.get_role(CARGO_MUTE_ID)
+        if not cargo_mute:
+            con.close()
+            await ctx.send("❌ Cargo 'mute' não encontrado. Verifique o ID do cargo.")
+            return
+        
+        # Verificar se o bot tem permissão para gerenciar cargos
+        if ctx.guild.me.guild_permissions.manage_roles:
+            # Verificar hierarquia apenas do bot (removido check do autor)
+            if ctx.guild.me.top_role.position > member.top_role.position:
+                # Consumir o item SÓ AGORA que sabemos que vai funcionar
+                cur.execute(
+                    "UPDATE loja_pontos SET ativo = 0 WHERE user_id = %s AND item = 'mute_jinxed' AND ativo = 1 LIMIT 1",
+                    (user_id,)
+                )
+                con.commit()
+                con.close()
+                
+                # Atualizar cooldown
+                ultimo_troll[user_id] = agora
+                
+                await member.add_roles(cargo_mute, reason=f"Mute Jinxed usado por {ctx.author.name}")
+                await ctx.send(f"🔇 **{member.mention} recebeu o cargo mute por 5 minutos!** (Usado por {ctx.author.mention})")
+                
+                # Remover cargo automaticamente após 5 minutos
+                await asyncio.sleep(300)  # 5 minutos = 300 segundos
+                try:
+                    await member.remove_roles(cargo_mute, reason="Mute Jinxed expirou")
+                    logging.info(f"Cargo mute removido de {member} após 5 minutos")
+                except:
+                    logging.error(f"Não foi possível remover cargo mute de {member}")
+                    
+            else:
+                con.close()
+                await ctx.send(f"🚫 **Não foi possível dar cargo mute para {member.mention}** (meu cargo é inferior ou igual ao dele)\n"
+                              f"🤖 Peça para um admin subir meu cargo!")
         else:
+            con.close()
             # Bot não tem permissão, enviar mensagem troll
-            await ctx.send(f"🎭 **{ctx.author.mention} tentou mutar {member.mention} mas o bot não tem permissão!**\n"
-                          f"😏 Ainda assim, o item foi consumido! Tente em um servidor onde o bot tenha permissões!")
+            await ctx.send(f"🎭 **{ctx.author.mention} tentou dar cargo mute para {member.mention} mas o bot não tem permissão!**\n"
+                          f"😏 Compre um bot melhor! 😈")
     except discord.Forbidden:
-        await ctx.send(f"🚫 **Não foi possível mutar {member.mention}** (cargo superior ou falta de permissão)\n"
-                      f"😅 O item foi consumido mesmo assim! Tente em alguém com cargo inferior!")
+        con.close()
+        await ctx.send(f"🚫 **Não foi possível dar cargo mute para {member.mention}** (cargo superior ou falta de permissão)\n"
+                      f"😅 Tente em alguém com cargo inferior!")
     except Exception as e:
-        await ctx.send(f"❌ Ocorreu um erro ao tentar mutar {member.mention}: {str(e)[:50]}")
+        con.close()
+        await ctx.send(f"❌ Ocorreu um erro ao tentar dar cargo mute para {member.mention}: {str(e)[:50]}")
     
     # Enviar mensagem pública anunciando o uso
     try:
         anuncio_channel = ctx.guild.get_channel(CANAL_PERMITIDO_ID)
         if anuncio_channel:
             await anuncio_channel.send(f"🔇 **{ctx.author.mention} usou Mute Jinxed em {member.mention}!**")
+            logging.info(f"Usuário {member} recebeu cargo mute com o comando troll")
+
     except:
         pass
 
