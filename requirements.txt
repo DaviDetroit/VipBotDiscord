@@ -1,5 +1,7 @@
 discord.py
 python-dotenv
 mysql-connector-python
-yt-dlp
 pytz
+requests
+
+
