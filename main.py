@@ -16,7 +16,9 @@ import pytz
 import requests
 import logging
 import aiohttp
-import wavelink
+import aiomysql
+import traceback
+
 
 
 load_dotenv()
@@ -26,8 +28,6 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S' 
 )
-
-
 
 
 def conectar(database_name: str):
@@ -76,7 +76,6 @@ def buscar_jogos_pendentes():
     cursor.close()
     conexao.close()
     return jogos
-
 
 
 
@@ -129,6 +128,8 @@ CANAL_AVISO_ID=1387107714525827152
 fuso_br = pytz.timezone("America/Sao_Paulo")
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+
 
 MAPEAMENTO_TIMES = {
     "flamengo": "flamengo",
@@ -712,6 +713,8 @@ async def desbloquear_conquistas_em_grupo(guild, user_ids, conquista_id):
             await canal.send(mentions, embed=embed)
 
 
+
+
 mensagens_bom_dia = [
     "🌞 Bom dia, pessoal! Vamos começar o dia com energia positiva!",
     "☕ Bom dia! Já tomaram aquele cafezinho?",
@@ -785,6 +788,29 @@ mensagens_curiosidade = [
     "👁️ Curiosidade visual: seu olho tem um ponto cego e você não percebe.",
     "🤯 Curioso como seu cérebro acredita no que ele mesmo inventa."
 ]
+ultimo_bom_dia = None
+ultima_curiosidade = None
+
+
+@tasks.loop(minutes=1)
+async def enviar_mensagens_programadas():
+    global ultimo_bom_dia, ultima_curiosidade
+    agora = datetime.now()
+    hora = agora.hour
+    minuto = agora.minute
+    hoje = agora.date()
+    canal = bot.get_channel(CHAT_GERAL)
+    if hora == 9 and minuto == 0:
+        msg = random.choice(mensagens_bom_dia)
+        await canal.send(msg)
+        ultimo_bom_dia = hoje
+    
+    if hora == 15 and minuto == 0:
+        msg = random.choice(mensagens_curiosidade)
+        await canal.send(msg)
+        ultima_curiosidade = hoje
+
+
 @bot.event
 async def on_ready():
     logging.info(f"🌹 Bot conectado como {bot.user}")
@@ -833,6 +859,9 @@ async def on_ready():
 
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
+
+    if not enviar_mensagens_programadas():
+        enviar_mensagens_programadas.start()
         
     # Task premiar_post_mais_votado removida - não existe no código
         
@@ -854,20 +883,6 @@ async def on_ready():
     else:
         logging.info("⚠️ Nenhum jogo ao vivo no momento.")
 
-    # ===== BOM DIA =====
-    agora = datetime.now(timezone.utc) - timedelta(hours=3)
-    hora = agora.hour
-    dia_semana = agora.weekday()
-    semana_atual = agora.isocalendar()[1]
-    
-    if hora == 10:
-        canal = bot.get_channel(1380564680552091789)
-        if canal:
-            mensagem = random.choice(mensagens_bom_dia)
-            await canal.send(mensagem)
-    if hora == 16:
-            mensagem = random.choice(mensagens_curiosidade)
-            await canal.send(mensagem)
 
     # ===== TOP ATIVOS DOMINGO =====
     # Removido - agora handled por loop_top_ativos
@@ -953,6 +968,23 @@ async def on_reaction_add(reaction, user):
 
     message = reaction.message
     emoji = str(reaction.emoji)
+
+    # ======================================================
+    # 0) SISTEMA DE VOTAÇÃO DE BATALHA DE ANIME
+    # ======================================================
+    # Verifica se é a mensagem da batalha ativa
+    if batalha_info.get("ativa") and batalha_info.get("msg_id") == message.id:
+        # Encontra qual personagem corresponde ao emoji
+        personagem_votado = None
+        if batalha_info.get("p1") and emoji == batalha_info["p1"]["emoji"]:
+            personagem_votado = batalha_info["p1"]["nome"]
+        elif batalha_info.get("p2") and emoji == batalha_info["p2"]["emoji"]:
+            personagem_votado = batalha_info["p2"]["nome"]
+        
+        if personagem_votado:
+            logging.info(f"🗳️ {user.display_name} votou em {personagem_votado}")
+        
+        return  # Sair da função já que é uma reação de batalha
 
     # ======================================================
     # 1) SISTEMA DE POSTS (👍 / 👎)
@@ -1552,11 +1584,11 @@ async def on_raw_reaction_add(payload):
         try:
             await member.add_roles(cargo_pelucia)
             logging.info(
-                f"🎁 Pelúcia '{nome_pelucia}' concedida para {member.id}"
+                f"🎁 Pelúcia '{cargo_pelucia.name}' concedida para {member.id}"
             )
         except discord.Forbidden:
             logging.error(
-                f"Sem permissão para adicionar o cargo '{nome_pelucia}'"
+                f"Sem permissão para adicionar o cargo '{cargo_pelucia.name}'"
             )
         return  # ⛔ IMPORTANTE: não deixa cair no sistema de clipes
 
@@ -1811,89 +1843,68 @@ async def remover_vip(ctx, membro: discord.Member):
         await ctx.send("❌ Erro ao remover VIP do banco de dados.")
         logging.error(f"Erro ao remover VIP: {e}")
 
-@tasks.loop(minutes=10)  # Verifica a cada 10 minutos
+@tasks.loop(minutes=10)
 async def verificar_vips():
     agora = datetime.now(timezone.utc)
-
+    
     try:
-        # Conexão com timeout para evitar travar o bot
-        conexao = mysql.connector.connect(
+        # Recomenda-se criar o pool no on_ready e usar bot.db_pool
+        conn = await aiomysql.connect(
             host=os.getenv("DB_HOST"),
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_VIPS"),
-            connection_timeout=10
+            db=os.getenv("DB_VIPS"),
+            autocommit=True
         )
 
-        with conexao.cursor(dictionary=True) as cursor:
-            cursor.execute("SELECT id, data_fim, avisado7d FROM vips")
-            vips = cursor.fetchall()
+        async with conn.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("SELECT id, data_fim, avisado7d FROM vips")
+            vips = await cursor.fetchall()
 
-        # Processa cada VIP de forma assíncrona
-        for vip in vips:
-            user_id = int(vip['id'])
-            data_fim = vip['data_fim']
-            avisado7d = vip['avisado7d']
+            for vip in vips:
+                user_id = int(vip['id'])
+                data_fim = vip['data_fim'].replace(tzinfo=timezone.utc) if vip['data_fim'].tzinfo is None else vip['data_fim']
+                
+                # Tenta pegar do cache primeiro (mais rápido)
+                user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+                if not user:
+                    continue
 
-            # Garante que data_fim tenha timezone
-            if data_fim.tzinfo is None:
-                data_fim = data_fim.replace(tzinfo=timezone.utc)
+                dias_restantes = (data_fim - agora).days
 
-            dias_restantes = (data_fim - agora).days
+                # --- LÓGICA DE AVISO (7 DIAS) ---
+                if 0 < dias_restantes <= 7 and not vip['avisado7d']:
+                    try:
+                        channel = bot.get_channel(1387107714525827152)
+                        if channel:
+                            await channel.send(f"⚠️ O VIP de {user.mention} está acabando!")
+                        
+                        await user.send("📢 Seu VIP está acabando! Faltam 7 dias!")
+                        await cursor.execute("UPDATE vips SET avisado7d = 1 WHERE id = %s", (user_id,))
+                    except:
+                        pass
 
-            # Busca usuário no Discord
-            try:
-                user = await bot.fetch_user(user_id)
-            except discord.NotFound:
-                logging.warning(f"Usuário {user_id} não encontrado no Discord.")
-                continue
-            except discord.HTTPException as e:
-                logging.error(f"Erro ao buscar usuário {user_id}: {e}")
-                continue
+                # --- LÓGICA DE REMOÇÃO (EXPIRADO) ---
+                elif dias_restantes <= 0:
+                    for guild in bot.guilds:
+                        membro = guild.get_member(user_id)
+                        if membro:
+                            cargo_vip = discord.utils.get(guild.roles, name="Jinxed Vip")
+                            if cargo_vip and cargo_vip in membro.roles:
+                                try:
+                                    await membro.remove_roles(cargo_vip)
+                                    await user.send("⏰ Seu VIP expirou e foi removido.")
+                                except:
+                                    pass
 
-            # Aviso de 7 dias antes do término
-            if 0 < dias_restantes <= 7 and not avisado7d:
-                try:
-                    channel = bot.get_channel(1387107714525827152)
-                    if channel:
-                        await channel.send(f"⚠️ O VIP de <@{user_id}> está acabando!")
+                    await cursor.execute("DELETE FROM vips WHERE id = %s", (user_id,))
 
-                    await user.send("📢 Seu VIP está acabando! Faltam 7 dias!")
+        conn.close()
 
-                    # Atualiza aviso no banco
-                    await asyncio.to_thread(
-                        atualizar_vip, user_id, avisado7d=True
-                    )
-                except discord.Forbidden:
-                    logging.warning(f"Não pude enviar DM para o usuário {user_id}")
-
-            # Remoção de VIP expirado
-            if dias_restantes <= 0:
-                for guild in bot.guilds:
-                    membro = guild.get_member(user_id)
-                    if membro:
-                        cargo_vip = discord.utils.get(guild.roles, name="Jinxed Vip")
-                        if cargo_vip and cargo_vip in membro.roles:
-                            try:
-                                await membro.remove_roles(cargo_vip)
-                                await user.send(
-                                    "⏰ Seu VIP expirou e foi removido automaticamente.\n"
-                                    "Se quiser renovar, fale com a staff."
-                                )
-                            except discord.Forbidden:
-                                logging.warning(f"Não foi possível remover VIP do usuário {user_id}")
-
-                # Remove do banco
-                await asyncio.to_thread(remover_vip, user_id)
-
-    except mysql.connector.Error as err:
-        logging.error(f"Erro de conexão com o banco de dados: {err}")
     except Exception as e:
-        logging.error(f"Erro inesperado ao verificar VIPs: {e}")
-    finally:
-        if 'conexao' in locals() and conexao.is_connected():
-            conexao.close()
-            logging.info("Conexão com o banco de dados fechada com sucesso.")
+        
+        if 'conn' in locals() and conn:
+            conn.close()
 
 
 
@@ -2077,39 +2088,39 @@ async def on_message(message):
                 logging.warning("Sem permissão para deletar/enviar mensagens")
             return
 
-    # ===== CONQUISTA DJ SARAH PARA VIPs =====
-    if tem_vip:
-        try:
-            # Registrar estatística de música
-            conn_stats = conectar_vips()
-            c_stats = conn_stats.cursor()
-            c_stats.execute(
-                "INSERT INTO interacoes_stats (user_id, tocou_musica) VALUES (%s, 1) "
-                "ON DUPLICATE KEY UPDATE tocou_musica = 1", 
-                (message.author.id,)
-            )
-            conn_stats.commit()
-            c_stats.close()
-            conn_stats.close()
+        # ===== CONQUISTA DJ SARAH PARA VIPs =====
+        if tem_vip:
+            try:
+                # Registrar estatística de música
+                conn_stats = conectar_vips()
+                c_stats = conn_stats.cursor()
+                c_stats.execute(
+                    "INSERT INTO interacoes_stats (user_id, tocou_musica) VALUES (%s, 1) "
+                    "ON DUPLICATE KEY UPDATE tocou_musica = tocou_musica + 1", 
+                    (message.author.id,)
+                )
+                conn_stats.commit()
+                c_stats.close()
+                conn_stats.close()
 
-            # Processar conquistas para conceder DJ Sarah
-            await processar_conquistas(
-                member=message.author,
-                mensagens_semana=0,
-                acertos_consecutivos=0,
-                fez_doacao=False,
-                tem_vip=True,
-                tempo_em_call=0,
-                mencionou_miisha=False,
-                tocou_musica=True,
-                mencoes_bot=0
-            )
-            
-            logging.info(f"🎧 VIP {message.author.name} usou m!play - Conquista DJ Sarah processada!")
-            
-        except Exception as e:
-            logging.error(f"Erro ao conceder conquista DJ Sarah para {message.author.name}: {e}")
-
+                # Processar conquistas para conceder DJ Sarah
+                await processar_conquistas(
+                    member=message.author,
+                    mensagens_semana=0,
+                    acertos_consecutivos=0,
+                    fez_doacao=False,
+                    tem_vip=True,
+                    tempo_em_call=0,
+                    mencionou_miisha=False,
+                    tocou_musica=True,
+                    mencoes_bot=0
+                )
+                
+                logging.info(f"🎧 VIP {message.author.name} usou m!play - Conquista DJ Sarah processada!")
+                
+            except Exception as e:
+                logging.error(f"Erro ao conceder conquista DJ Sarah para {message.author.name}: {e}")
+          
     # ============================
     #  SISTEMA MONITORAMENTO
     # ============================
@@ -3268,7 +3279,7 @@ async def finalizar_batalha_auto():
                         perdedores_ids.append(user.id)
         
         # Atualiza pontos no banco de dados
-        await atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_vitoria)
+        await atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, perdedor, pontos_vitoria)
         
         # Resetar streak dos perdedores
         todos_participantes = ganhadores_ids + perdedores_ids
@@ -3327,7 +3338,7 @@ def atualizar_streak(user_id, ganhou: bool):
     finally:
         conn.close()
 
-async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_premio):
+async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, perdedor, pontos_premio):
 
     if not ganhadores_ids:
         return
@@ -3341,18 +3352,19 @@ async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, pontos_premio
             except Exception as e:
                 logging.error(f"Falha ao adicionar pontos para {uid}: {e}")
 
-        await enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, pontos_premio)
+        await enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_premio)
 
     except Exception as e:
         logging.error(f"Erro ao atualizar pontuação: {e}")
 
 
 
-async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, pontos_premio):
+async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_premio):
     """Envia mensagem embed de vitória para todos os ganhadores via DM"""
     
     # Verificar se foi uma vitória de azarão (força < 85)
-    foi_azarao = perdedor["forca"] < vencedor["forca"]
+    # verdadeiro quando o vencedor tinha força menor que o perdedor (azarão)
+    foi_azarao = vencedor["forca"] < perdedor["forca"]
     
     # Se foi azarão, verificar conquista para cada ganhador
     if foi_azarao:
@@ -3448,8 +3460,10 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, pontos_premio):
             except Exception:
                 logging.warning(f"Não foi possível enviar DM para o usuário {uid}")
 
-async def enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor):
-    """Envia mensagem embed de derrota para todos os perdedores via DM e aplica perda de pontos"""
+async def enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor, pontos_premio):
+    """Envia mensagem embed de derrota para todos os perdedores via DM e aplica perda de pontos
+    aceita `pontos_premio` por compatibilidade com a chamada que fornece o prêmio dos vencedores.
+    """
     
     # Verificar se foi uma derrota de azarão (comparar força relativa)
     foi_azarao = perdedor["forca"] < vencedor["forca"]
@@ -3559,13 +3573,13 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
 
         # Escolhe título e cor
         if foi_azarao:
-            titulo = "⚡ VITÓRIA DE AZARÃO!"
+            titulo = "🐗 VITÓRIA DE AZARÃO!"
             cor = discord.Color.purple()
         elif massacre:
-            titulo = "💥 MASSACRE!"
+            titulo = "☠️🩸🔪 MASSACRE!"
             cor = discord.Color.red()
         else:
-            titulo = "🏆 SUPEROU AS EXPECTATIVAS!"
+            titulo = "🤯🔥 SUPEROU AS EXPECTATIVAS!"
             cor = discord.Color.gold()
 
         # Pega GIF do vencedor
@@ -3581,7 +3595,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
                 f"📉 **Probabilidade inicial:** {chance_percent}%\n\n"
             ),
             color=cor,
-            timestamp=datetime.now()
+            timestamp=datetime.now(FUSO_HORARIO)
         )
 
         # Adiciona GIF
@@ -4096,7 +4110,7 @@ EMOJI_TIMES = {
     "atlético paranaense": "<:atlpr:1443398482516775055>",
     "athletico paranaense": "<:atlpr:1443398482516775055>",
     "atletico-pr": "<:atlpr:1443398482516775055>",
-    "coritiba": "<:Coritibaa:1443398813820784660>",
+    "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
     "remo": "<:Remo:1443399201655492708>",
     "chapecoense" :"<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
 
@@ -4264,7 +4278,6 @@ async def apistart(ctx, horario: str = None):
 
     bot.loop.create_task(iniciar_no_horario())
 
-        
 
           
 @commands.has_permissions(administrator=True)
@@ -4928,7 +4941,7 @@ MAPEAMENTO_TIMES = {
     "coritiba": "coritiba",
     "corithiba": "coritiba",
     "coritiba pr": "coritiba",
-    "coritiba- pr": "coritiba",
+    "coritiba-pr": "coritiba",
     "cfc": "coritiba",
     "coritiba foot ball club": "coritiba",
 
@@ -5103,6 +5116,10 @@ def get_estadio_time_casa(nome_time_api: str):
         "remo": {
             "estadio": "Baenão",
             "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Baenão.jpg"
+        },
+        "santos": {
+            "estadio": "Vila Belmiro",
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Vila%20bel%20miro.jpeg"
         },
         "mirassol": {
             "estadio": "José Maria de Campos Maia",
@@ -5346,6 +5363,7 @@ FALAS_BOT = {
 
 LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13,]
 
+
 # ---------- Integração com verificar_gols 
 @tasks.loop(minutes=5)
 async def verificar_gols():
@@ -5571,8 +5589,11 @@ async def verificar_gols():
         # --------------------------------------------------------------------
         # 5.3) PROCESSAR FIM DE JOGO + APOSTAS
         # --------------------------------------------------------------------
+        conn = None
+        cursor = None
         try:
             if status in ("ft", "aet", "pen"):
+                logging.info(f"🎯 Jogo {fixture_id} ({casa} x {fora}) finalizado com status '{status}'. Processando...")
 
                 # 🔎 Checar se já foi processado
                 conn = conectar_futebol()
@@ -5581,9 +5602,10 @@ async def verificar_gols():
                 row = cursor.fetchone()
 
                 if row and row["processado"] == 1:
-                    logging.warning(f"⚠️ Jogo {fixture_id} já foi processado anteriormente. Pulando.")
+                    logging.warning(f"⚠️ Jogo {fixture_id} já foi processado anteriormente. Pulando processamento...")
                     cursor.close()
                     conn.close()
+                    
                     placares[fixture_id] = {
                         "home": gols_casa,
                         "away": gols_fora,
@@ -5598,10 +5620,13 @@ async def verificar_gols():
                     resultado_final = "away"
                 else:
                     resultado_final = "draw"
+                
+                logging.info(f"📊 Resultado final do jogo {fixture_id}: {resultado_final} ({gols_casa} x {gols_fora})")
 
                 # Buscar apostas
                 cursor.execute("SELECT user_id, palpite, modo_clown FROM apostas WHERE fixture_id = %s", (fixture_id,))
                 apostas = cursor.fetchall()
+                logging.info(f"📋 Total de apostas encontradas para {fixture_id}: {len(apostas) if apostas else 0}")
 
                 # Contagem por palpite para bônus de minoria
                 contagem = {"home": 0, "away": 0, "draw": 0}
@@ -5657,12 +5682,6 @@ async def verificar_gols():
                             (user_id, f"❌ Você **errou** o resultado de **{casa} x {fora}**.\n➡️ **{pontos_preview} pontos**.")
                         )
 
-                # 🔥 Marca como processado
-                cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fixture_id,))
-                conn.commit()
-                cursor.close()
-                conn.close()
-
                 logging.info(f"✔️ Pontuação processada e jogo {fixture_id} marcado como processado.")
 
                 # Embed final
@@ -5676,15 +5695,48 @@ async def verificar_gols():
 
                 # Enviar DMs
                 for user_id, msg in mensagens_pv:
-                    usuario = bot.get_user(int(user_id))
+                    usuario = bot.get_user(int(user_id)) or await bot.fetch_user(int(user_id))
                     if usuario:
                         try:
                             await usuario.send(msg)
                         except:
                             pass
 
+                # 🔥 MARCAR COMO FINALIZADO APÓS PROCESSAR COM SUCESSO
+                try:
+                    # Usar upsert para garantir que o jogo seja marcado como processado/finalizado
+                    # mesmo que não exista uma linha prévia em `jogos` (evita reprocessamento múltiplo).
+                    cursor.execute(
+                        """
+                        INSERT INTO jogos (fixture_id, processado, finalizado, betting_open)
+                        VALUES (%s, 1, 1, 0)
+                        ON DUPLICATE KEY UPDATE processado=1, finalizado=1, betting_open=0
+                        """,
+                        (fixture_id,)
+                    )
+                    conn.commit()
+                    logging.info(f"✅ Jogo {fixture_id} marcado como processado=1, finalizado=1 no banco de dados (upsert).")
+                except Exception as e:
+                    logging.error(f"❌ Erro ao marcar jogo {fixture_id} como finalizado no banco: {e}")
+                    conn.rollback()
+
         except Exception as e:
-            logging.error(f"❌ Erro ao processar apostas do fim de jogo: {e}")
+            logging.error(f"❌ Erro ao processar apostas do fim de jogo (fixture_id={fixture_id}): {e}", exc_info=True)
+        finally:
+            # 🔥 Fecha conexão com segurança - SEM lógica de negócio
+            if cursor:
+                try:
+                    cursor.close()
+                    logging.debug(f"🔌 Cursor fechado para fixture_id={fixture_id}")
+                except Exception as e:
+                    logging.error(f"❌ Erro ao fechar cursor: {e}")
+            
+            if conn:
+                try:
+                    conn.close()
+                    logging.debug(f"🔌 Conexão fechada para fixture_id={fixture_id}")
+                except Exception as e:
+                    logging.error(f"❌ Erro ao fechar conexão: {e}")
 
         # --------------------------------------------------------------------
         # 5.4) Atualizar placares
@@ -5724,6 +5776,8 @@ def atualizar_pontos(user_id: int, valor: int, nome_discord: str = None):
     )
     conn.commit()
     conn.close()
+
+
 
 
 @tasks.loop(minutes=30)
@@ -5774,19 +5828,19 @@ async def loja(ctx):
 
     embed.add_field(
         name="🎭 Modo Clown — 60 pontos",
-        value="• Multiplica pontos por 6 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use **clown_bet**  ",
+        value="• Multiplica pontos por 6 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use `clown_bet`",
         inline=False
     )
 
     embed.add_field(
         name="<a:809469heartchocolate:1466494908243120256> Caixa Surpresa — 50 pontos",
-        value="• Pode receber pontos aleatórios de -40 a 300\n• Pode vir até negativo 👀\n• Use **caixinha** ",
+        value="• Pode receber pontos aleatórios de -50 a 300\n• Pode vir até negativo 👀\n• Use `caixinha`",
         inline=False
     )
 
     embed.add_field(
         name="<:discotoolsxyzicon_6:1444750406763679764> Jinxed VIP — 1000 pontos",
-        value="• Garante 15 dias do cargo VIP\n• Use **jinxed_vip**",
+        value="• Garante 15 dias do cargo VIP\n• Use `jinxed_vip`",
         inline=False
     )
 
@@ -5889,7 +5943,7 @@ async def comprar(ctx, item_nome: str):
             await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes nas últimas 24 horas. Aguarde o cooldown de 24h após a última utilização.")
             return
 
-        pontos_sorteados = random.randint(-40, 300)
+        pontos_sorteados = random.randint(-50, 300)
         adicionar_pontos_db(user_id, pontos_sorteados)
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
@@ -6251,6 +6305,7 @@ async def setemoji(ctx):
     
     con.close()
 
+
 def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7, tem_inversao=False):
     conn = conectar_futebol()
     cursor = conn.cursor()
@@ -6293,11 +6348,14 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7, 
     # Aplicar pontos finais
     adicionar_pontos_db(user_id, pontos_final)
     
-    if acertou:
+    # Determinar resultado final com base nos pontos após inversão
+    ganhou_final = pontos_final > 0
+    
+    if ganhou_final:
         # Incrementar acertos consecutivos (usando tabela unificada usuarios)
         atualizar_streak(user_id, True)
         
-        resultado_texto = f"ganhou {pontos_final} pontos"
+        resultado_texto = f"ganhou {abs(pontos_final)} pontos"
         if tem_inversao:
             resultado_texto += " 🔄 (invertido)"
         
@@ -6401,7 +6459,12 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
     Returns:
         dict: {'processado': bool, 'mensagem': str, 'erro': str}
     """
+    conn = None
+    cursor = None
+    processado_com_sucesso = False
+    
     try:
+        logging.info(f"🎮 Iniciando processamento do jogo {fixture_id} (automático={automatico})...")
         conn = conectar_futebol()
         cursor = conn.cursor(dictionary=True)
 
@@ -6409,15 +6472,19 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         cursor.execute("SELECT processado FROM jogos WHERE fixture_id = %s", (fixture_id,))
         row = cursor.fetchone()
         if row and row.get("processado") == 1:
+            logging.warning(f"⚠️ Jogo {fixture_id} já foi processado antes. Ignorando...")
             conn.close()
             return {'processado': False, 'mensagem': f"⚠️ Jogo {fixture_id} já foi processado.", 'erro': None}
 
         # Buscar dados da API
+        logging.info(f"🔗 Buscando dados do jogo {fixture_id} na API...")
         async with aiohttp.ClientSession() as session:
             async with session.get(URL, headers=HEADERS, params={"id": fixture_id}) as response:
                 data = await response.json()
+        logging.info(f"✅ Dados recebidos da API para jogo {fixture_id}")
 
         if not data.get("response"):
+            logging.error(f"❌ Jogo {fixture_id} não encontrado na API")
             conn.close()
             return {'processado': False, 'mensagem': f"❌ Jogo {fixture_id} não encontrado na API.", 'erro': 'api_not_found'}
 
@@ -6427,9 +6494,11 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         gols_casa = partida["goals"]["home"] or 0
         gols_fora = partida["goals"]["away"] or 0
         status = partida["fixture"]["status"]["short"].lower()
+        logging.info(f"⚽ Partida: {casa} {gols_casa}x{gols_fora} {fora} | Status: {status}")
 
         # Verificar se jogo finalizou
         if status not in ("ft", "aet", "pen"):
+            logging.warning(f"⏳ Jogo {fixture_id} ainda NÃO finalizou (status: {status})")
             conn.close()
             if not automatico and ctx:
                 await ctx.send(f"⚠️ Jogo {fixture_id} ainda não finalizou (status: {status}).")
@@ -6444,14 +6513,17 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
             time_vencedor_nome = fora
         else:
             resultado_final = "draw"
-            time_vencedor_nome = None
+            time_vencedor_nome = "Empate 🤝"
+        logging.info(f"🏆 Resultado final: {resultado_final} - Vencedor: {time_vencedor_nome}")
 
         # -----------------------------------------------------------
         # LÓGICA: COMEMORAÇÃO DE VITÓRIA
         # -----------------------------------------------------------
+        logging.info(f"🎉 Processando comemoração para {time_vencedor_nome}...")
         if time_vencedor_nome:  
             # Pega a chave normalizada do vencedor (ex: "galo")
             chave_vencedor = MAPEAMENTO_TIMES.get(time_vencedor_nome.lower(), time_vencedor_nome.lower())
+            logging.debug(f"Chave normalizada: {chave_vencedor}")
             
             conn_com = conectar_futebol()
             cur_com = conn_com.cursor()
@@ -6465,7 +6537,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                 gifs = GIFS_VITORIA_TIME.get(chave_vencedor, GIFS_VITORIA_TIME.get("default"))
 
                 if not isinstance(gifs, list):
-                    logger.warning(
+                    logging.warning(
                         "GIF do time '%s' não está em lista. Convertendo automaticamente.",
                         chave_vencedor
                     )
@@ -6510,8 +6582,10 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
             conn_com.close()
 
         # Buscar apostas
+        logging.info(f"📊 Buscando apostas do jogo {fixture_id}...")
         cursor.execute("SELECT user_id, palpite, modo_clown FROM apostas WHERE fixture_id = %s", (fixture_id,))
         apostas = cursor.fetchall()
+        logging.info(f"📋 Total de apostas: {len(apostas) if apostas else 0}")
 
         # Calcular bônus de minoria
         contagem = {"home": 0, "away": 0, "draw": 0}
@@ -6522,6 +6596,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         votos_vencedor = contagem.get(resultado_final, 0)
         votos_max = max(contagem.values()) if contagem else 0
         bonus_minoria = votos_vencedor > 0 and votos_vencedor < votos_max
+        logging.info(f"🎯 Contagem de votos: {contagem} | Bônus de minoria: {bonus_minoria}")
 
         mensagens_pv = []
 
@@ -6537,12 +6612,15 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
 
         league_id = partida.get("league", {}).get("id") if partida else None
         win_pts, lose_pts = pontos_por_liga.get(league_id, (15, -7))
+        logging.info(f"💰 Pontos: Liga {league_id} | Vitória: {win_pts} | Derrota: {lose_pts}")
 
         # Processar cada aposta
+        apostas_processadas = 0
         for aposta in apostas:
             user_id = aposta["user_id"]
             palpite = aposta["palpite"]
             modo_clown = int(aposta.get("modo_clown", 0))
+            logging.debug(f"📌 Processando aposta do usuário {user_id}: palpite={palpite}, clown={modo_clown}")
             
             # -------------------------------------------------
             # VERIFICAR INVERSÃO ATIVA
@@ -6559,19 +6637,22 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
 
             # Se tem inversão, marcar como usada
             if tem_inversao:
+                inv_id = inversao.get("id") if isinstance(inversao, dict) else (inversao[0] if inversao else None)
                 cursor.execute(
                     "UPDATE inversoes SET used = 1, fixture_id = %s WHERE id = %s",
-                    (fixture_id, inversao[0])
+                    (fixture_id, inv_id)
                 )
-                logging.info(f"🔄 Inversão aplicada para usuário {user_id} no jogo {fixture_id}")
+                logging.info(f"🔄 Inversão ATIVA para usuário {user_id} no jogo {fixture_id}")
 
             pontos_base_vitoria = (win_pts * 2) if (acertou_normal and bonus_minoria) else win_pts
 
             # Aplicar pontuação via função central
             try:
                 processar_aposta(user_id, fixture_id, resultado_final, pontos_base_vitoria, perda_base=lose_pts, tem_inversao=tem_inversao)
+                apostas_processadas += 1
+                logging.debug(f"✅ Pontuação aplicada para usuário {user_id}")
             except Exception as e:
-                logging.error(f"Erro ao processar aposta de {user_id}: {e}")
+                logging.error(f"❌ Erro ao processar aposta de {user_id}: {e}", exc_info=True)
 
             # Mensagem DM (usar acertou_normal para mostrar resultado real)
             if acertou_normal:
@@ -6644,6 +6725,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                         color=discord.Color.green()
                     )
                     mensagens_pv.append((user_id, embed_simples))
+                    logging.debug(f"✅ Fallback: Embed simples criado para usuário {user_id}")
 
             else:
                 multiplicador = 4 if modo_clown == 1 else 1
@@ -6653,7 +6735,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                     embed = discord.Embed(
                         title="<:43513absolutelydrained:1454984081438674954> Aposta Errada",
                         description=(
-                            f"Você perdeu **{pontos_preview} pontos"
+                            f"Você perdeu **{pontos_preview}** pontos"
                             + (" <:77240skullclown:1467579389095968789> **Clown Bet 4x**" if modo_clown == 1 else "")
                             + (" 🔄 (invertido)" if tem_inversao and acertou_normal else "")
                         ),
@@ -6707,12 +6789,10 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                         color=discord.Color.red()
                     )
                     mensagens_pv.append((user_id, embed_simples))
-
-        # Marcar jogo como processado
-        cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fixture_id,))
-        conn.commit()
+                    logging.debug(f"✅ Fallback: Embed simples criado para usuário {user_id}")
 
         # Enviar embed final no canal de jogos
+        logging.info(f"📨 Preparando embed final e DMs para {len(mensagens_pv)} usuários...")
         nome_casa = MAPEAMENTO_TIMES.get(casa.lower(), casa.lower()).replace(" ", "_")
         nome_fora = MAPEAMENTO_TIMES.get(fora.lower(), fora.lower()).replace(" ", "_")
         emoji_casa = EMOJI_TIMES.get(nome_casa, "🔵")
@@ -6729,9 +6809,9 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         if canal:
             try:
                 await canal.send(embed=embed_final)
-                logging.info(f"✅ Embed final enviado para o canal {CANAL_JOGOS_ID}")
+                logging.info(f"📣 Embed final enviado para canal {CANAL_JOGOS_ID}")
             except Exception as e:
-                logging.error(f"❌ Erro ao enviar embed final: {e}")
+                logging.error(f"❌ Erro ao enviar embed final: {e}", exc_info=True)
                 if ctx:
                     await ctx.send(f"❌ Erro ao enviar embed final: {e}")
         else:
@@ -6740,38 +6820,86 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                 await ctx.send(f"❌ Canal de jogos (ID: {CANAL_JOGOS_ID}) não encontrado!")
 
         # Enviar DMs para usuários
+        dms_enviadas = 0
         for user_id, msg in mensagens_pv:
             usuario = bot.get_user(int(user_id))
+            if not usuario:
+                try:
+                    usuario = await bot.fetch_user(int(user_id))
+                except Exception:
+                    usuario = None
+
             if usuario:
                 try:
                     # Verificar se msg é um Embed antes de enviar
                     if isinstance(msg, discord.Embed):
                         await usuario.send(embed=msg)
-                        logging.info(f"✅ DM com embed enviado para usuário {user_id}")
+                        dms_enviadas += 1
+                        logging.debug(f"💌 DM com embed enviado para usuário {user_id}")
                     else:
                         await usuario.send(msg)
-                        logging.info(f"✅ DM com texto enviado para usuário {user_id}")
+                        dms_enviadas += 1
+                        logging.debug(f"💌 DM com texto enviado para usuário {user_id}")
                 except Exception as e:
                     logging.error(f"❌ Erro ao enviar DM para usuário {user_id}: {e}")
                     if ctx:
                         await ctx.send(f"❌ Erro ao enviar DM para usuário {user_id}: {e}")
             else:
                 logging.warning(f"⚠️ Usuário {user_id} não encontrado para enviar DM")
-                if ctx:
-                    await ctx.send(f"⚠️ Usuário {user_id} não encontrado para enviar DM")
+        logging.info(f"💌 {dms_enviadas}/{len(mensagens_pv)} DMs enviadas com sucesso")
 
-        cursor.close()
-        conn.close()
-        
-        logging.info(f"✅ Jogo {fixture_id} processado com sucesso!")
+        # Marcar como processado com sucesso apenas ao final
+        processado_com_sucesso = True
+        logging.info(f"🎉 ===== JOGO {fixture_id} PROCESSADO COM SUCESSO =====")
+        logging.info(f"   Apostas: {apostas_processadas} | DMs: {dms_enviadas} | Resultado: {resultado_final}")
+        logging.info(f"=============================================")
         return {'processado': True, 'mensagem': f"Jogo {fixture_id} processado com sucesso!", 'erro': None}
 
     except Exception as e:
         error_msg = f"Erro ao processar jogo {fixture_id}: {e}"
-        logging.error(error_msg)
+        logging.error(error_msg, exc_info=True)
         if ctx and not automatico:
             await ctx.send(f"❌ {error_msg}")
         return {'processado': False, 'mensagem': error_msg, 'erro': str(e)}
+    
+    finally:
+        # 🔥 Marca como processado - GARANTIDO mesmo com erros
+        if conn and cursor and processado_com_sucesso:
+            try:
+                cursor.execute("UPDATE jogos SET processado = 1, finalizado = 1 WHERE fixture_id = %s", (fixture_id,))
+                conn.commit()
+                logging.info(f"✅ Jogo {fixture_id} marcado como PROCESSADO=1, FINALIZADO=1 no banco.")
+            except Exception as e:
+                logging.error(f"❌ Erro ao marcar jogo {fixture_id} como finalizado: {e}", exc_info=True)
+            finally:
+                if cursor:
+                    try:
+                        cursor.close()
+                        logging.debug(f"🔌 Cursor fechado (processado_com_sucesso=True)")
+                    except Exception as e:
+                        logging.error(f"❌ Erro ao fechar cursor: {e}")
+                if conn:
+                    try:
+                        conn.close()
+                        logging.debug(f"🔌 Conexão fechada (processado_com_sucesso=True)")
+                    except Exception as e:
+                        logging.error(f"❌ Erro ao fechar conexão: {e}")
+        elif conn and cursor:
+            # Se não foi bem sucedido, ainda fecha a conexão
+            logging.warning(f"⚠️ Encerrando fixture {fixture_id} sem marcar como processado (erro ocorreu)")
+            try:
+                if cursor:
+                    cursor.close()
+                    logging.debug(f"🔌 Cursor fechado (com erro)")
+            except Exception as e:
+                logging.error(f"❌ Erro ao fechar cursor: {e}")
+            try:
+                if conn:
+                    conn.close()
+                    logging.debug(f"🔌 Conexão fechada (com erro)")
+            except Exception as e:
+                logging.error(f"❌ Erro ao fechar conexão: {e}")
+
 
 
 @bot.command()
@@ -6820,6 +6948,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
     except Exception as e:
         await ctx.send(f" Erro ao finalizar jogos: {e}")
         logging.error(f"Erro ao finalizar jogos: {e}")
+        
 
 
 @tasks.loop(minutes=15)
@@ -8145,18 +8274,19 @@ async def jimbo_scheduler():
     logging.info("🃏 [JIMBO] Scheduler iniciado e aguardando horário permitido")
 
     while not bot.is_closed():
-        
+
         agora = datetime.now()
         hora_atual = agora.time()
+          # <-- NOVO
         data_atual = agora.date()
-        
+
         from datetime import time as dt_time
         inicio = dt_time(15, 0)
         fim = dt_time(23, 59)
-        meia_noite = dt_time(1, 0)
+        meia_noite = dt_time(1, 0)        
 
         # Reset diário à meia-noite
-        if hora_atual < meia_noite:  # Entre 00:00 e 00:59
+        if hora_atual < meia_noite:
             global jimbo_ja_apareceu_hoje
             if jimbo_ja_apareceu_hoje:
                 jimbo_ja_apareceu_hoje = False
@@ -8166,32 +8296,20 @@ async def jimbo_scheduler():
         if inicio <= hora_atual <= fim and not jimbo_ativo and not jimbo_ja_apareceu_hoje:
             logging.info(f"🃏 [JIMBO] Horário permitido ({hora_atual.strftime('%H:%M')}) - Agendando aparição")
 
-            # espera entre 1 e 420 minutos
             espera_minutos = random.randint(1, 420)
             espera = espera_minutos * 60
             logging.info(f"🃏 [JIMBO] Aguardando {espera_minutos} minutos para aparição...")
-            
+
             await asyncio.sleep(espera)
 
-            # checa de novo depois do sleep
             if not jimbo_ativo and not jimbo_ja_apareceu_hoje:
-                jimbo_ja_apareceu_hoje = True  # Marca que apareceu hoje
+                jimbo_ja_apareceu_hoje = True
                 logging.info("🃏 [JIMBO] Iniciando spawn do Jimbo!")
                 await spawn_jimbo()
             else:
                 logging.info("🃏 [JIMBO] Spawn cancelado - Jimbo já apareceu ou está ativo")
 
         else:
-            # fora do horário → checa a cada 5 min
-            if hora_atual < inicio:
-                logging.debug(f"🃏 [JIMBO] Fora do horário ({hora_atual.strftime('%H:%M')} < {inicio.strftime('%H:%M')}) - Aguardando...")
-            elif hora_atual > fim:
-                logging.debug(f"🃏 [JIMBO] Fora do horário ({hora_atual.strftime('%H:%M')} > {fim.strftime('%H:%M')}) - Aguardando...")
-            elif jimbo_ja_apareceu_hoje:
-                logging.debug("🃏 [JIMBO] Jimbo já apareceu hoje - Aguardando reset diário")
-            elif jimbo_ativo:
-                logging.debug("🃏 [JIMBO] Jimbo está ativo no momento - Aguardando finalização")
-            
             await asyncio.sleep(300)
 
 async def spawn_jimbo():
@@ -8274,111 +8392,160 @@ class CartasView(discord.ui.View):
     def __init__(self, player):
         super().__init__(timeout=60)
         self.player = player
-        self.cartas = [puxar_carta() for _ in range(5)]  # 5 cartas
-        self.escolhidas = []  # Índices das 3 cartas escolhidas
+        self.cartas = [puxar_carta() for _ in range(5)]
+        self.escolhidas = []
         self.pontos_totais = 0
         
-        # Log das cartas geradas (apenas nome e pontos, não emoji)
-        cartas_info = [f"{carta['nome']}({pontos})" for carta, pontos in self.cartas]
-        logging.info(f"🃏 [JIMBO] Cartas geradas para {player.name}: {', '.join(cartas_info)}")
-
-        # Embed inicial com 5 cartas viradas
+        # Criar embed inicial
+        cartas_display = []
+        for i, (carta, pontos) in enumerate(self.cartas, 1):
+            cartas_display.append(f"**Carta {i}:** {carta['emoji']}")
+        
         self.embed_inicial = discord.Embed(
             title="🎴 Escolha 3 CARTAS",
-            description="⚫ ⚫ ⚫ ⚫ ⚫\n\nClique em três cartas para revelar...",
-            color=discord.Color.dark_purple()
+            description="Clique nos botões abaixo para revelar suas cartas!\n\n" + "\n".join(cartas_display),
+            color=discord.Color.purple()
         )
-
-        # Adiciona os botões automaticamente
+        self.embed_inicial.set_footer(text="⏱️ Você tem 60 segundos para escolher 3 cartas")
+        
+        # Adicionar botões das cartas
         for i in range(5):
-            self.add_item(self.carta_button(i))
+            self.add_item(self._criar_button_carta(i))
+        
+        # Log inicial preventivo
+        try:
+            cartas_info = [f"{carta['nome']}({pontos})" for carta, pontos in self.cartas]
+            logging.info(f"🃏 [JIMBO] Cartas geradas para {player.name} ({player.id}): {', '.join(cartas_info)}")
+        except Exception as e:
+            logging.error(f"❌ Erro ao gerar logs iniciais: {e}")
 
-    async def interaction_check(self, interaction):
-        if interaction.user != self.player:
+    def _criar_button_carta(self, index: int) -> discord.ui.Button:
+        """Cria um botão para uma carta específica."""
+        button = discord.ui.Button(
+            label=f"Carta {index + 1}", 
+            style=discord.ButtonStyle.secondary, 
+            emoji="❓"
+        )
+        
+        async def callback(interaction: discord.Interaction):
+            await self.escolher(interaction, index)
+        
+        button.callback = callback
+        return button
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        if interaction.user.id != self.player.id:
             await interaction.response.send_message(
-                "Apenas quem invocou o Jimbo pode escolher!",
+                "🚫 Apenas quem invocou o Jimbo pode interagir com estas cartas!",
                 ephemeral=True
             )
             return False
         return True
 
-    async def escolher(self, interaction, index):
-        if index in self.escolhidas:
-            return await interaction.response.send_message(
-                "Você já escolheu esta carta!",
-                ephemeral=True
-            )
-        
-        if len(self.escolhidas) >= 3:
-            return await interaction.response.send_message(
-                "Você já escolheu 3 cartas!",
-                ephemeral=True
-            )
-        
-        self.escolhidas.append(index)
-        carta, pontos = self.cartas[index]
-        self.pontos_totais += pontos
-        
-        logging.info(f"🃏 [JIMBO] {interaction.user.name} escolhou carta {index+1}: {carta['nome']} ({pontos:+d} pontos)")
-        
-        # Desabilita o botão clicado
-        self.children[index].disabled = True
-        
-        # Revelação instantânea (sem delays para evitar timeout)
-        if len(self.escolhidas) == 3:
-            # Todas as 3 cartas escolhidas - revela tudo de uma vez
-            carta1, pontos1 = self.cartas[self.escolhidas[0]]
-            carta2, pontos2 = self.cartas[self.escolhidas[1]]
-            await interaction.edit_original_response(
-                content=f" {carta['emoji']} {carta['nome']} - {pontos:+d} pontos\n {carta2['emoji']} {carta2['nome']} - {pontos2:+d} pontos ({len(self.escolhidas)}/3)",
-                view=self
-            )
-            
-            await asyncio.sleep(3)  # Pausa antes da terceira revelação
-            
-            # Revela terceira carta e total
-            carta3, pontos3 = self.cartas[self.escolhidas[2]]
-            
-            # Adiciona pontos ao banco
-            adicionar_pontos_db(
-                interaction.user.id,
-                self.pontos_totais,
-                interaction.user.name
-            )
-            
-            logging.info(f"🃏 [JIMBO] Jogo finalizado para {interaction.user.name}: Total {self.pontos_totais:+d} pontos")
-            
-            # Embed final
-            if self.pontos_totais > 0:
-                cor = discord.Color.gold()
-                descricao = f"Você ganhou **{self.pontos_totais} pontos!**"
-            else:
-                cor = discord.Color.red()
-                descricao = f"Você perdeu **{abs(self.pontos_totais)} pontos!** 😱"
+    async def on_timeout(self):
+        """Desativa os botões se o tempo acabar para evitar cliques fantasmas."""
+        for item in self.children:
+            item.disabled = True
+        self.stop()
+        logging.info(f"🃏 [JIMBO] Timeout de {self.player.name} - Jogo expirado")
 
+    async def escolher(self, interaction: discord.Interaction, index: int):
+        try:
+            # Fazer defer imediatamente para evitar timeout (15min)
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+            
+            if index in self.escolhidas:
+                await interaction.followup.send("Esta carta já foi revelada!", ephemeral=True)
+                return
+
+            # 1. Registrar a escolha
+            self.escolhidas.append(index)
+            carta, pontos = self.cartas[index]
+            self.pontos_totais += pontos
+            
+            # 2. Atualizar o botão clicado
+            button = self.children[index]
+            button.disabled = True
+            button.label = f"{carta['nome']}"
+            button.emoji = carta['emoji']
+            button.style = discord.ButtonStyle.success if pontos >= 0 else discord.ButtonStyle.danger
+
+            # 3. Lógica de atualização da mensagem
+            num_escolhidas = len(self.escolhidas)
+            
+            if num_escolhidas < 3:
+                # Ainda escolhendo: atualiza o embed para mostrar o progresso
+                embed_progresso = discord.Embed(
+                    title="🎴 Escolha 3 CARTAS",
+                    description=f"Você escolheu **{num_escolhidas}/3** cartas.\n\nContinue clicando!",
+                    color=discord.Color.blue()
+                )
+                await interaction.edit_original_response(embed=embed_progresso, view=self)
+                logging.info(f"🃏 [JIMBO] {self.player.name} escolheu {carta['nome']} ({pontos:+d}).")
+
+            else:
+                # Finalizou as 3 escolhas
+                await self.finalizar_jogo(interaction)
+
+        except Exception as e:
+            logging.error(f"💥 Erro crítico no callback escolher: {e}\n{traceback.format_exc()}")
+            try:
+                await interaction.followup.send("Ocorreu um erro ao processar sua escolha.", ephemeral=True)
+            except:
+                pass
+
+    async def finalizar_jogo(self, interaction: discord.Interaction):
+        """Processa o resultado final e salva no banco de dados."""
+        try:
+            # Desabilita todos os botões imediatamente
+            for item in self.children:
+                item.disabled = True
+
+            # Resposta imediata para evitar timeout da interação
+            await interaction.edit_original_response(content="✨ Revelando destino...", view=self)
+
+            # Operação de Banco de Dados (Thread-safe)
+            try:
+                await asyncio.to_thread(
+                    adicionar_pontos_db,
+                    self.player.id,
+                    self.pontos_totais,
+                    self.player.name
+                )
+                db_success = True
+            except Exception as db_err:
+                logging.error(f"🗄️ Erro ao salvar pontos de {self.player.name}: {db_err}")
+                db_success = False
+
+            # Preparar resumo das cartas escolhidas
+            resumo_cartas = []
+            for idx in self.escolhidas:
+                c, p = self.cartas[idx]
+                resumo_cartas.append(f"{c['emoji']} **{c['nome']}**: {p:+d}")
+
+            # Montar Embed Final
+            cor = discord.Color.gold() if self.pontos_totais >= 0 else discord.Color.red()
+            status_db = "" if db_success else "\n⚠️ *Erro ao salvar pontos no banco.*"
+            
             embed_final = discord.Embed(
                 title="🎴 RESULTADO FINAL",
-                description=f"{carta['emoji']} {carta['nome']} - {pontos:+d}\n"
-                          f"{carta2['emoji']} {carta2['nome']} - {pontos2:+d}\n"
-                          f"{carta3['emoji']} {carta3['nome']} - {pontos3:+d}\n\n"
-                          f"**Total: {self.pontos_totais:+d} pontos**\n\n"
-                          f"{descricao}",
+                description="\n".join(resumo_cartas) + f"\n\n**Total: {self.pontos_totais:+d} pontos**{status_db}",
                 color=cor
             )
             
-            await interaction.edit_original_response(
-                embed=embed_final,
-                view=None
-            )
+            if self.pontos_totais > 0:
+                embed_final.set_footer(text=f"A sorte sorriu para você, {self.player.name}!")
+            else:
+                embed_final.set_footer(text=f"Melhor sorte na próxima vez...{self.player.name}!")
+
+            # Edita a mensagem original com o resultado
+            await interaction.edit_original_response(content=None, embed=embed_final, view=None)
+            logging.info(f"🃏 [JIMBO] Jogo finalizado: {self.player.name} totalizou {self.pontos_totais:+d}.")
             self.stop()
 
-    def carta_button(self, index):
-        button = discord.ui.Button(label=f"Carta {index + 1}", style=discord.ButtonStyle.primary, emoji="⚫")
-        
-        async def callback(interaction):
-            await self.escolher(interaction, index)
-        
-        button.callback = callback
-        return button
+        except Exception as e:
+            logging.error(f"💥 Erro ao finalizar jogo: {e}\n{traceback.format_exc()}")
+
 
 bot.run(TOKEN)
