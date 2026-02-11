@@ -250,7 +250,11 @@ EMOJI_TIMES = {
     "liverpool": "<:Liverpool:1447339314798133361>",
     "bayern_munich": "<:FC_Bayern_Mnchen_logo_2024:1447339006126854154>",
     "barcelona": "<:Barcelona:1447338926548193483>",
-    "real_madrid": "<:Real_Madrid:1447338825180381389>"
+    "real_madrid": "<:Real_Madrid:1447338825180381389>",
+    "west_ham":"<:EmojiWestHam:1470834951036338218>",
+    "manchester_united": "<:EmojiUnited:1470834899605917696>"
+
+
 }
 
 
@@ -713,7 +717,9 @@ async def desbloquear_conquistas_em_grupo(guild, user_ids, conquista_id):
             await canal.send(mentions, embed=embed)
 
 
-
+MENCAO_FUTEBOL = "<#1442495893365330138>"
+MENCAO_CANAL_DOACAO = "<#1454672224631128205>"
+MENCAO_CANAL_VIP = "<#1381380248511447040>"
 
 mensagens_bom_dia = [
     "🌞 Bom dia, pessoal! Vamos começar o dia com energia positiva!",
@@ -723,8 +729,6 @@ mensagens_bom_dia = [
     "🌻 Bom dia! Bora conquistar nossos objetivos hoje!",
     "🌅 Bom dia! Que hoje seja melhor que ontem!",
     "🎶 Bom dia! Que a alegria seja sua trilha sonora hoje!",
-    "<:JinxFU:1390638686877777920> Bom dia é o caralho, vai todo mundo se fuder!",
-    "Já pensou que as vezes o seu dia tá ruim, e pode piorar mais ainda? Quer dizer.. Bom Dia!",
     "🍀 Bom dia! Que a sorte esteja ao seu lado!",
     "😄 Bom dia! Um sorriso já é metade do caminho para um ótimo dia.",
     "📈 Bom dia! Hoje é dia de progresso!",
@@ -732,65 +736,129 @@ mensagens_bom_dia = [
     "🥐 Bom dia! Já tomou café da manhã? Energia é tudo!",
     "⚡ Bom dia! Que sua motivação seja sua força!",
     "🎯 Bom dia! Foco e disciplina levam longe.",
-    "🌞 Bom diaaa, meus consagrados! Que o dia de vocês seja tão iluminado quanto um PIX caindo na conta 💸. E falando em PIX... quem quiser começar o dia abençoado, é só mandar aquele agrado pro Orfeuson@hotmail.com 😏☕",
-    "🐓 Cocoricóôôôôô! Bom diaaa! (leia com voz de galo, por favor) 🐓",
     "🌊 Bom dia! Deixe as preocupações fluírem e siga leve.",
     "❤️ Bom dia! Desejo a todos muito amor hoje.",
     "💤 Bom dia! Quem acordou cedo hoje merece um troféu... 🏆",
-    "🌞 Bom dia, família! Que hoje seja leve, produtivo e cheio de vitórias. E se quiser começar o dia ajudando um guerreiro, o PIX tá aí: **Orfeuson@hotmail.com** 😎",
-    "☕ Bom diaaa! Que sua energia seja forte como café sem açúcar. Caso falte o café… você já sabe onde mandar: **PIX: Orfeuson@hotmail.com** 😂",
-    "✨ Bom dia! Hoje é dia de vencer, sorrir e prosperar. Se a preguiça bater, lembra que um PIX anima qualquer um: **Orfeuson@hotmail.com** 💸",
-    "😅 Bom dia, pessoal! O sol nasceu e os boletos também… quem quiser dar uma força: **PIX do salvador: Orfeuson@hotmail.com**",
-    "🚀 Bom dia! Acorde, levante e corra atrás dos seus sonhos. Mas se o sonho for pagar as contas, manda um PIX: **Orfeuson@hotmail.com** 🤣",
-    "🌻 Bom diaaa! Que hoje seja tão bom quanto receber um PIX inesperado… aliás, falando nisso: **Orfeuson@hotmail.com** 🙌",
-    "🔥 Bom dia, guerreiros! Bora encarar mais um dia com coragem e fé. Quem quiser turbinar a sorte: **PIX: Orfeuson@hotmail.com** 💪",
-    "😂 Bom dia! Lembre-se: quem acorda cedo é recompensado… e quem manda PIX pro amigo é abençoado! **Orfeuson@hotmail.com**",
-    "📈 Bom dia! Que sua vida suba igual gráfico da bolsa em alta. Pra ajudar no investimento: **PIX: Orfeuson@hotmail.com** 💹",
-    "🎉 Bom diaaa! Que hoje você receba notícias boas, abraços sinceros… e, quem sabe, até um PIX. Pra não perder o costume: **Orfeuson@hotmail.com**",
-    "🧠 Você sabia? O cérebro humano gera eletricidade suficiente pra acender uma lâmpada fraca!",
-    "🌍 A Terra não é uma esfera perfeita — ela é levemente achatada nos polos por causa da rotação.",
-    "🐙 O polvo tem **três corações** e o sangue dele é azul por causa do cobre na hemoglobina.",
-    "🚀 A Estação Espacial Internacional viaja a mais de **27.000 km/h** e dá uma volta na Terra a cada 90 minutos.",
-    "🐝 As abelhas conseguem reconhecer rostos humanos, algo raro no reino animal.",
-    "🌌 Existem mais estrelas no universo do que grãos de areia em todas as praias da Terra.",
-    "🔥 O Sol é tão grande que caberiam **1,3 milhão de Terras** dentro dele.",
-    "🐧 O pinguim-imperador pode ficar até **20 minutos** debaixo d’água sem respirar.",
-    "🎵 A música pode alterar o ritmo dos batimentos cardíacos e até ajudar no controle da ansiedade.",
-    "💡 Thomas Edison não inventou a lâmpada — ele apenas criou a versão mais prática e comercial.",
-    "🤖 **Curiosidade:** O bot **ChicoBento** não é só um ajudante de cargos e VIPs — ele também pode te dar dicas rápidas sobre o servidor! Basta ir no canal 🆘┃ajuda.",
-    "🏷️ **Curiosidade:** Usar o **ChicoBento** para escolher cores de cargos ou funções VIP é uma forma prática de personalizar seu perfil no servidor sem depender de admins.",
-    "⚡ **Curiosidade:** Bots como o **ChicoBento** conseguem processar comandos quase instantaneamente, permitindo que você gerencie funções do servidor com rapidez e segurança.",
-    "🎨 **Curiosidade:** Além de ajudar com VIPs e boosters, o **ChicoBento** facilita a personalização estética, como cores e nomes de cargos, dando um toque único aos membros.",
-    "🆘 **Curiosidade:** Para qualquer dúvida sobre funções do servidor, você pode chamar o **ChicoBento** no canal 🆘┃ajuda, economizando tempo e evitando confusão com outros membros.",
-    "🤩 **Curiosidade:** Servidores que usam bots de gerenciamento como o **ChicoBento** geralmente têm comunidades mais organizadas, porque automatizam tarefas repetitivas e mantêm tudo funcionando de forma fluida."
+    "🐓 Cocoricóôôôô! Bom diaaa!",
+    
+    # Humor / personalidade
+    "<:JinxFU:1390638686877777920> Bom dia é o caralho, vai todo mundo se fuder!",
+    "Já pensou que às vezes o seu dia tá ruim… e pode piorar? Quer dizer… bom dia 😅",
+
+    # PIX memes (mantive alguns, mas sem poluir)
+    "🌞 Bom diaaa! Que o dia seja tão iluminado quanto um PIX caindo na conta 💸",
+    "🚀 Bom dia! Acorde, levante e corra atrás dos seus sonhos.",
+    "🔥 Bom dia, guerreiros! Bora encarar mais um dia com coragem!",
+    "😂 Bom dia! Quem acorda cedo já começa na vantagem.",
+    
+    # NOVOS (adicionei)
+    "🌄 Novo dia, nova chance de fazer acontecer. Bom dia!",
+    "🧘 Bom dia! Respire fundo — hoje vai dar certo.",
+    "🌟 Bom dia! Pequenos progressos ainda são progressos.",
+    "📊 Bom dia! Consistência vence talento quando o talento não é consistente.",
+    "😎 Bom dia! Mais um dia pra ficar um pouco melhor que ontem.",
+    "🏆 Bom dia! Mentalidade de campeão começa cedo."
 ]
 
 
 mensagens_curiosidade = [
-    "🤔 Você sabia que o cérebro humano gera energia suficiente pra acender uma lâmpada pequena?",
-    "👀 Curiosidade rápida: polvos têm três corações e sangue azul!",
-    "🧠 Já parou pra pensar que a gente sonha mesmo sem lembrar depois?",
-    "😮 Sabia que o coração bate mais rápido quando a gente tá curioso?",
-    "📚 Curiosidade do dia: o mel nunca estraga. Tipo… nunca mesmo.",
-    "🌍 Você sabia que a Terra não é perfeitamente redonda?",
-    "🕒 Curioso pensar que você já viveu bilhões de segundos até agora, né?",
-    "🎮 Sabia que alguns jogos mudam dificuldade sem você perceber?",
-    "🐙 Polvos conseguem abrir potes. E a gente sofre com tampa de garrafa 😅",
-    "💭 Curiosidade estranha: seu cérebro não sente dor.",
-    "🧩 Você sabia que lembrar algo errado várias vezes cria uma falsa memória?",
-    "🌌 O universo é tão grande que algumas estrelas que vemos já nem existem mais.",
-    "🧠 Curioso: o cérebro humano consome cerca de 20% da energia do corpo.",
-    "🐝 As abelhas conseguem reconhecer rostos humanos.",
-    "🎧 Curiosidade sonora: o silêncio absoluto não existe.",
-    "📖 Você sabia que ler muda fisicamente o cérebro?",
-    "🧠 Curioso pensar que seu cérebro completa frases automaticamente.",
-    "⏳ Você sabia que o tempo passa diferente dependendo da velocidade?",
-    "👁️ Curiosidade visual: seu olho tem um ponto cego e você não percebe.",
-    "🤯 Curioso como seu cérebro acredita no que ele mesmo inventa."
+
+    # ================= CIÊNCIA =================
+
+    "🧠 O cérebro humano gera eletricidade suficiente para acender uma pequena lâmpada.",
+    "🧠 Seu cérebro consome cerca de 20% de toda a energia do corpo.",
+    "💭 Curiosidade: seu cérebro não sente dor.",
+    "🧩 Falsas memórias podem ser criadas apenas ao lembrar algo de forma incorreta.",
+    "👁️ Todo mundo tem um ponto cego no olho — e quase ninguém percebe.",
+    "📖 Ler pode alterar fisicamente a estrutura do seu cérebro.",
+    "🎵 A música pode influenciar seus batimentos cardíacos.",
+    "⏳ O tempo passa mais devagar para quem está em alta velocidade (relatividade!).",
+    "🛰️ O GPS só funciona corretamente por causa da teoria da relatividade.",
+    "🧬 Você compartilha cerca de 60% do seu DNA com uma banana.",
+    "🍌 Bananas são levemente radioativas.",
+    "🌡️ O metal pode grudar na pele em temperaturas extremamente frias.",
+    "🧊 Água quente pode congelar mais rápido que água fria — efeito Mpemba.",
+    "🔥 Caberiam aproximadamente 1,3 milhão de Terras dentro do Sol.",
+    "🌌 Existem mais estrelas no universo do que grãos de areia na Terra.",
+    "🔭 Olhar para o espaço é literalmente olhar para o passado.",
+    "🌊 Apenas cerca de 5% dos oceanos foram explorados.",
+    "🌍 A Terra não é uma esfera perfeita — ela é achatada nos polos.",
+    "⚡ Cerca de 100 raios atingem a Terra a cada segundo.",
+
+    # ================= ANIMAIS =================
+
+    "🐙 Polvos têm três corações e sangue azul.",
+    "🐝 Abelhas conseguem reconhecer rostos humanos.",
+    "🐧 O pinguim-imperador pode ficar até 20 minutos submerso.",
+    "🦈 Tubarões existem há mais tempo que as árvores.",
+    "🦒 Girafas têm o mesmo número de vértebras no pescoço que humanos: sete.",
+    "🐢 Algumas tartarugas conseguem respirar pelo traseiro.",
+    "🦋 Borboletas sentem o gosto com as patas.",
+    "🐘 Elefantes conseguem 'ouvir' através das patas.",
+    "🐬 Golfinhos dão nomes uns aos outros usando assobios únicos.",
+    "🦉 Corujas não conseguem mover os olhos — por isso giram a cabeça.",
+    "🐜 Formigas não dormem.",
+    "🐋 O coração de uma baleia azul pode pesar mais de 180 kg.",
+    "🐎 Cavalos conseguem dormir em pé.",
+    "🐕 O olfato dos cães é até 100 mil vezes mais sensível que o humano.",
+    "🐈 Gatos passam cerca de 70% da vida dormindo.",
+    "🦑 Lulas gigantes têm olhos do tamanho de bolas de futebol.",
+
+    # ================= ESPAÇO =================
+
+    "🚀 A Estação Espacial Internacional viaja a mais de 27.000 km/h.",
+    "🌕 Pegadas deixadas na Lua podem durar milhões de anos.",
+    "🪐 Um dia em Vênus é maior que um ano no planeta.",
+    "☄️ Existem trilhões de galáxias no universo observável.",
+    "🌠 Uma estrela de nêutrons é tão densa que uma colher pesaria bilhões de toneladas.",
+    "🌞 A luz do Sol leva cerca de 8 minutos para chegar até a Terra.",
+    "🌑 Na Lua não há vento — por isso nada apaga as marcas.",
+    "🛰️ O primeiro satélite foi lançado em 1957 e se chamava Sputnik.",
+    "🌡️ A temperatura no espaço pode chegar a -270°C.",
+
+    # ================= HISTÓRIA / HUMANIDADE =================
+
+    "💡 Thomas Edison não inventou a lâmpada — apenas criou a versão comercial viável.",
+    "📚 O mel nunca estraga. Potes encontrados no Egito ainda estavam próprios para consumo.",
+    "🏛️ A Universidade de Oxford é mais antiga que o Império Asteca.",
+    "⚔️ Cleópatra viveu mais perto da invenção do iPhone do que da construção das pirâmides.",
+    "📜 O papel higiênico moderno só surgiu no século XIX.",
+    "🚗 O primeiro carro era mais lento que uma bicicleta.",
+    "🎬 O filme mais antigo ainda existente foi gravado em 1888.",
+    "📡 A internet começou como um projeto militar.",
+    "⌛ Humanos existem há apenas 0,004% da história da Terra.",
+
+    # ================= COISAS SURPREENDENTES =================
+
+    "🎮 Alguns jogos ajustam a dificuldade automaticamente sem você perceber.",
+    "🧠 Tomar água pode melhorar sua concentração quase instantaneamente.",
+    "😴 Ficar acordado por 17 horas reduz sua atenção como se tivesse bebido álcool.",
+    "😂 Rir reduz os níveis de estresse do corpo.",
+    "🚶 Caminhar 10 minutos pode aumentar sua criatividade.",
+    "🌿 O cheiro de grama cortada é um sinal de 'socorro' das plantas.",
+    "☕ Cafeína começa a agir em cerca de 10 minutos.",
+    "📱 A vibração fantasma do celular é um fenômeno psicológico real.",
+    "🎧 Sons ambientes podem melhorar o foco.",
+    "🕒 Seu corpo tem um relógio biológico natural.",
+
+    # ================= SERVER / BOT =================
+
+    "🤖 O bot **Miisha** pode te ajudar com comandos e informações do servidor — é só chamar!",
+    "⚡ Mencione @Miisha para descobrir funções e dicas rapidamente.",
+    "🆘 Dúvidas sobre o servidor? O Miisha pode te poupar tempo.",
+    f"⚽ Você pode apostar no seu time favorito no canal {MENCAO_FUTEBOL}.",
+    "⚽ Use !lista_times para ver os times e escolha o seu com !time <nome>.",
+    f"💸 Você pode ganhar pontos ajudando o desenvolvimento do bot! Veja mais em {MENCAO_CANAL_DOACAO}.",
+    f"🤑 Quer vantagens exclusivas? Seja VIP! Veja mais em {MENCAO_CANAL_VIP}.",
+    "🏯 Temos apostas de futebol e também de animes — normalmente as sextas e sábados!",
 ]
+
+
+
+#===========================Bom Dia & Curiosidade===========================
+#===========================                     ===========================
 ultimo_bom_dia = None
 ultima_curiosidade = None
-
 
 @tasks.loop(minutes=1)
 async def enviar_mensagens_programadas():
@@ -824,9 +892,8 @@ async def on_ready():
     # Adicionar listeners para interações
     bot.add_view(DoacaoView())  
 
-    
-    
-
+    # View de vips
+    bot.add_view(VipView())
     
     # Restaurar mensagem de doação se existir
     doacao_data = get_mensagem_doacao()
@@ -860,7 +927,7 @@ async def on_ready():
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
 
-    if not enviar_mensagens_programadas():
+    if not enviar_mensagens_programadas.is_running():
         enviar_mensagens_programadas.start()
         
     # Task premiar_post_mais_votado removida - não existe no código
@@ -873,6 +940,9 @@ async def on_ready():
         
     if not resetar_ativos_semanal.is_running():
         resetar_ativos_semanal.start()
+        
+    if not reset_mencoes_bloqueio.is_running():
+        reset_mencoes_bloqueio.start()
         
 
     # ===== Verificador de gols =====
@@ -1176,46 +1246,68 @@ async def sincronizar_reacoes():
     canal = bot.get_channel(1386805780140920954)
     if not canal:
         return
+    # coleta atualizações em memória e aplica ao banco em thread separado
+    posts_to_update = []
 
     try:
-        conexao = conectar_vips()
-        cursor = conexao.cursor()
-
         async for mensagem in canal.history(limit=100):  # pode ajustar o limite
             # Pega reações atuais
             upvotes = 0
             downvotes = 0
             for reaction in mensagem.reactions:
                 if str(reaction.emoji) == "👍":
-                    upvotes = reaction.count - 1 if mensagem.author.bot else reaction.count
+                    upvotes = reaction.count - 1 if mensagem.author and mensagem.author.bot else reaction.count
                 elif str(reaction.emoji) == "👎":
-                    downvotes = reaction.count - 1 if mensagem.author.bot else reaction.count
+                    downvotes = reaction.count - 1 if mensagem.author and mensagem.author.bot else reaction.count
 
-            # Atualiza o banco
+            posts_to_update.append((mensagem.id, getattr(mensagem.author, 'id', None), canal.id, upvotes, downvotes))
+
+    except Exception as e:
+        logging.error(f"Erro ao ler histórico do canal em sincronizar_reacoes: {e}")
+
+    # se houver registros, executa operação de banco sem bloquear o loop
+    if posts_to_update:
+        try:
+            await asyncio.to_thread(_sincronizar_reacoes_sync, posts_to_update)
+        except Exception as e:
+            logging.error(f"Erro ao atualizar banco em sincronizar_reacoes: {e}")
+
+
+def _sincronizar_reacoes_sync(posts):
+    """Função síncrona executada em thread para atualizar o banco."""
+    conexao = None
+    cursor = None
+    try:
+        conexao = conectar_vips()
+        cursor = conexao.cursor()
+        for mensagem_id, user_id, canal_id, upvotes, downvotes in posts:
             cursor.execute(
                 "INSERT IGNORE INTO posts (id, user_id, channel_id, upvotes, downvotes, removed, timestamp) VALUES (%s, %s, %s, %s, %s, FALSE, NOW())",
-                (mensagem.id, mensagem.author.id, canal.id, upvotes, downvotes)
+                (mensagem_id, user_id, canal_id, upvotes, downvotes)
             )
             cursor.execute(
                 "UPDATE posts SET upvotes=%s, downvotes=%s WHERE id=%s",
-                (upvotes, downvotes, mensagem.id)
+                (upvotes, downvotes, mensagem_id)
             )
-
         conexao.commit()
-
-    except Exception as e:
-        logging.error(f"Erro em sincronizar_reacoes: {e}")
+    except Exception:
         if conexao:
             try:
                 conexao.rollback()
             except:
                 pass
-    
+        raise
     finally:
         if cursor:
-            cursor.close()
-        if conexao and conexao.is_connected():
-            conexao.close()
+            try:
+                cursor.close()
+            except:
+                pass
+        if conexao and getattr(conexao, 'is_connected', lambda: True)():
+            try:
+                conexao.close()
+            except:
+                pass
 
 
 @tasks.loop(hours=24)
@@ -1366,13 +1458,65 @@ async def enviar_mensagem(ctx, *, mensagem):
         await ctx.send("Não encontrei o canal correto")
 
 
+
+class VipView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(
+        label="Solicitar Vip",
+        style=discord.ButtonStyle.success,
+        emoji="<:discotoolsxyzicon_6:1444750406763679764>",
+        custom_id="botao_solicitar_vip"
+    )
+    async def solicitar_vip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        logging.info(f"👑 Novo clique no botão VIP | Usuário: {interaction.user.name}#{interaction.user.discriminator} ({interaction.user.id})")
+        
+        if not interaction.guild:
+            logging.error(f"⚠️ Guild não encontrada | Usuário: {interaction.user.id}")
+            await interaction.response.send_message(
+                "Erro: Guild não encontrada.",
+                ephemeral=True
+            )
+            return
+        
+        canal = interaction.guild.get_channel(1380564680552091783)
+        cargo = interaction.guild.get_role(1381001740052201482)
+        
+        if canal is None or cargo is None:
+            logging.warning(f"⚠️ Erro ao localizar canal ou cargo | Usuário: {interaction.user.name}#{interaction.user.discriminator} | Guild: {interaction.guild.name} | Canal: {canal is None} | Cargo: {cargo is None}")
+            await interaction.response.send_message(
+                "Erro ao localizar canal ou cargo.",
+                ephemeral=True
+            )
+            return
+        
+        try:
+            await canal.send(
+                f"{cargo.mention} | 👑 O usuário {interaction.user.mention} quer solicitar o VIP!"
+            )
+            await interaction.response.send_message(
+                "✅ Seu pedido de VIP foi enviado para a equipe!", 
+                ephemeral=True
+            )
+            logging.info(f"✨ Solicitação VIP processada com sucesso | Usuário: {interaction.user.name}#{interaction.user.discriminator} ({interaction.user.id}) | Guild: {interaction.guild.name}")
+        except discord.Forbidden:
+            logging.error(f"❌ Permissão negada ao enviar mensagem no canal VIP | Guild: {interaction.guild.name} | Canal: {canal.id}")
+            await interaction.response.send_message("Erro: Sem permissão para enviar mensagem.", ephemeral=True)
+        except discord.HTTPException as e:
+            logging.error(f"❌ Erro HTTP ao processar VIP | Usuário: {interaction.user.id} | Erro: {str(e)}")
+            await interaction.response.send_message("Erro: Falha na comunicação com Discord.", ephemeral=True)
+        except Exception as e:
+            logging.error(f"❌ Erro inesperado ao processar VIP | Usuário: {interaction.user.name}#{interaction.user.discriminator} ({interaction.user.id}) | Erro: {str(e)}", exc_info=True)
+
+
+
+
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def vip_mensagem(ctx):
-    global vip_message_id
-    import json
+    logging.info(f"📤 Comando vip_mensagem executado | Admin: {ctx.author.name}#{ctx.author.discriminator} ({ctx.author.id}) | Guild: {ctx.guild.name}")
 
-    # Embed principal
     embed = discord.Embed(
         title="<:Jinx:1390379001515872369> Bem-vindo ao Sistema VIP e Boost!",
         description=(
@@ -1385,35 +1529,23 @@ async def vip_mensagem(ctx):
             "<:jinxedsignal:1387222975161434246> Acesso à call premium\n"
             "<:jinxedsignal:1387222975161434246> Amizades verdadeiras\n"
             "<:jinxedsignal:1387222975161434246> Jesus vai te amar\n"
-            "<:jinxedsignal:1387222975161434246> Vai estar me ajudando <:JinxKissu:1408843869784772749>\n"
-            "<a:thekings:1449048326937772147> Clique em <:discotoolsxyzicon_6:1444750406763679764> abaixo para solicitar o VIP.\n"
-            "<:notification:1390647107316355165> Após o clique, um administrador será notificado para continuar o processo.\n"
+            "<:jinxedsignal:1387222975161434246> Vai estar me ajudando <:JinxKissu:1408843869784772749>\n\n"
+            "Clique no botão abaixo para solicitar o VIP 👇\n"
             "_Acesso válido por 30 dias._ 🗓️"
         ),
         color=discord.Color(0xfb3060)
     )
 
-    # Banner maior no topo
-    embed.set_image(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749215669424218/JINXEDd1.png?ex=692dd70f&is=692c858f&hm=8fdcc6669a7e1435ff7e1f4ab8617848326eab3e094f3d0b01fc970d59f7fa9c&")
-
-    # Thumbnail à direita
-    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749579605119148/discotools-xyz-icon.png?ex=692dd765&is=692c85e5&hm=a631e3a40d1f2fb68a0ed37614387aaf3946950d31e4aa91fcf35005f568717a&")
-
-    # Mensagem menor embaixo
+    embed.set_image(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749215669424218/JINXEDd1.png")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749579605119148/discotools-xyz-icon.png")
     embed.set_footer(text="VIP exclusivo para os jogadores mais dedicados!")
 
-    # Envia a mensagem e adiciona reação
-    mensagem = await ctx.send(embed=embed)
-    emoji_coroa = discord.utils.get(ctx.guild.emojis, id=1444750406763679764)
-    if emoji_coroa:
-        await mensagem.add_reaction(emoji_coroa)
-    else:
-        await mensagem.add_reaction("<:discotoolsxyzicon_6:1444750406763679764>")
-
-    # Salva o ID da mensagem para persistência após restart
-    vip_message_id = mensagem.id
-    with open("vip.json", "w") as f:
-        json.dump({"vip_message_id": vip_message_id}, f)
+    try:
+        await ctx.send(embed=embed, view=VipView())
+        logging.info(f"✅ Mensagem VIP enviada com sucesso | Canal: {ctx.channel.name} ({ctx.channel.id})")
+    except Exception as e:
+        logging.error(f"❌ Erro ao enviar mensagem VIP | Canal: {ctx.channel.name} ({ctx.channel.id}) | Erro: {str(e)}", exc_info=True)
+        await ctx.send("❌ Erro ao enviar a mensagem VIP.")
 
 
 def embed_clipe_resultado(tipo:str, autor: discord.Member, pontos: int):
@@ -4080,94 +4212,6 @@ async def enviar_mensagem():
 
 
 
-EMOJI_TIMES = {
-
-    # =======================
-    # 🏟️ CLUBES DE FUTEBOL
-    # =======================
-    "sport": "<:Sport:1425992405227671593>",
-    "juventude": "<:Juventude:1425992333207539732>",
-    "fortaleza": "<:Fortaleza:1425992225128583218>",
-    "vitoria": "<:Vitri:1425992077702860905>",
-    "santos": "<:Santos:1425991974179045468>",
-    "internacional": "<:Internacional:1425991752468267158>",
-    "galo": "<:Galo:1425991683690074212>",
-    "gremio": "<:Gremio:1425991602438148187>",
-    "corinthians": "<:Corinthians:1425991139517010031>",
-    "vasco": "<:Vascodagama:1425991055941046373>",
-    "ceara": "<:Cear:1425990930254790718>",
-    "bragantino": "<:Bragantino:1425990800885678160>",
-    "sao_paulo": "<:SoPaulo:1425990707373674587>",
-    "fluminense": "<:Fluminense:1425990639128150106>",
-    "bahia": "<:Bahia:1425990545314021427>",
-    "botafogo": "<:Botafogo:1425990460589080617>",
-    "mirassol": "<:Mirassol:1425990400178393098>",
-    "cruzeiro": "<:Cruzeiro:1425990118816354405>",
-    "flamengo": "<:Flamengo:1425990044623044659>",
-    "palmeiras": "<:Palmeiras:1425989650513662044>",
-    "lanus": "<:Lanus:1441436509281718383>",
-    "atletico paranaense": "<:atlpr:1443398482516775055>",
-    "atlético paranaense": "<:atlpr:1443398482516775055>",
-    "athletico paranaense": "<:atlpr:1443398482516775055>",
-    "atletico-pr": "<:atlpr:1443398482516775055>",
-    "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
-    "remo": "<:Remo:1443399201655492708>",
-    "chapecoense" :"<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
-
-
-    # =======================
-    # 🌍 SELEÇÕES (PAÍSES)
-    # =======================
-    "brasil": "<:imagem_20251111_091505344:1437777668320788501>",
-    "argentina": "<:imagem_20251111_091525637:1437777753205243936>",
-    "frança": "<:imagem_20251111_091547369:1437777844058194001>",
-    "alemanha": "<:imagem_20251111_091612275:1437777948907405332>",
-    "italia": "<:imagem_20251111_091635544:1437778046680699010>",
-    "inglaterra": "<:imagem_20251111_091700042:1437778149155803328>",
-    "espanha": "<:imagem_20251111_091727942:1437778266118422568>",
-    "portugal": "<:imagem_20251111_091755098:1437778380324864103>",
-    "holanda": "<:imagem_20251111_091822476:1437778495018106880>",
-    "uruguai": "<:imagem_20251111_091923082removeb:1437778793711534110>",
-    "belgica": "<:imagem_20251111_091958114:1437778895888846888>",
-    "croacia": "<:imagem_20251111_092025445:1437779010628222998>",
-    "mexico": "<:imagem_20251111_092057355:1437779144917127259>",
-    "japao": "<:imagem_20251111_092122937:1437779251729272903>",
-    "eua": "<:imagem_20251111_092151751:1437779372940464138>",
-    "senegal": "<:imagem_20251111_092227325:1437779522157281290>",
-    "tunisia": "<:imagem_20251111_092254095:1437779634191208518>",
-    "austria": "<:austria:1447019535415771228>",
-    "noruega": "<:noruega:1447019598020087979>",
-    "chile": "<:chile:1447019706467749998>",
-    "marrocos": "<:marrocos:1447019811132407859>",
-    "coreia do sul": "<:Coreiadosul:1447019914102833152>",
-    "china": "<:china:1447019999305793697>"
-    ,
-    # =======================
-    # 🌍 CLUBES INTERNACIONAIS (UEFA)
-    # =======================
-    "villarreal": "<:Villareal:1447341127257686076>",
-    "bayer_leverkusen": "<:Bayerliverkusen:1447341052481503342>",
-    "atalanta": "<:Atalanta:1447340975595720815>",
-    "olympique": "<:Olympic:1447340908017221713>",
-    "benfica": "<:Benfica:1447340742598201396>",
-    "ajax": "<:Ajax:1447340532140343397>",
-    "borussia": "<:Borussia:1447340278464909406>",
-    "borussia_dortmund": "<:Borussia:1447340278464909406>",
-    "napoli": "<:Napoli:1447340070934806742>",
-    "atletico_de_madrid": "<:Atleticodemadrid:1447339835084898365>",
-    "milan": "<:Millan:1447339769939099868>",
-    "juventus": "<:Juventus:1447339677391786044>",
-    "psg": "<:Psg:1447339575482646679>",
-    "city": "<:City:1447339515545911428>",
-    "arsenal": "<:Arsenal:1447339446021132398>",
-    "chelsea": "<:Chelsea:1447339384125915187>",
-    "liverpool": "<:Liverpool:1447339314798133361>",
-    "bayern_munich": "<:FC_Bayern_Mnchen_logo_2024:1447339006126854154>",
-    "barcelona": "<:Barcelona:1447338926548193483>",
-    "real_madrid": "<:Real_Madrid:1447338825180381389>"
-}
-
-
 
 
 
@@ -4977,6 +5021,17 @@ MAPEAMENTO_TIMES = {
     "paris saint germain": "psg",
     "manchester city": "city",
     "city": "city",
+    # Manchester United
+    "manchester united": "manchester_united",
+    "man united": "manchester_united",
+    "man utd": "manchester_united",
+    "man-utd": "manchester_united",
+    "man united fc": "manchester_united",
+    # West Ham
+    "west ham": "west_ham",
+    "west ham united": "west_ham",
+    "westham": "west_ham",
+    "west-ham": "west_ham",
     "arsenal": "arsenal",
     "chelsea": "chelsea",
     "liverpool": "liverpool",
@@ -5361,7 +5416,7 @@ FALAS_BOT = {
     ]
 }
 
-LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13,]
+LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13, 39]
 
 
 # ---------- Integração com verificar_gols 
@@ -5984,7 +6039,7 @@ async def comprar(ctx, item_nome: str):
             "Agora use **`!setemoji`** para criar seu cargo com ícone personalizado."
         )
 
-    elif item == "comemorar":
+    elif item == "comemoracao":
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -6148,13 +6203,13 @@ async def comemorar(ctx, *, time_nome: str):
     con = conectar_futebol()
     cur = con.cursor()
     cur.execute(
-        "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'comemorar' AND ativo = 1",
+        "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'comemoracao' AND ativo = 1",
         (user_id,)
     )
     comprado = cur.fetchone()[0]
     if comprado == 0:
         con.close()
-        return await ctx.send("❌ Você precisa comprar o item **Comemoração** primeiro usando `!comprar comemorar`.")
+        return await ctx.send("❌ Você precisa comprar o item **Comemoração** primeiro usando `!comprar comemoracao`.")
 
     # Salva no banco
     cur.execute(
@@ -6474,6 +6529,8 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         if row and row.get("processado") == 1:
             logging.warning(f"⚠️ Jogo {fixture_id} já foi processado antes. Ignorando...")
             conn.close()
+            conn = None
+            cursor = None
             return {'processado': False, 'mensagem': f"⚠️ Jogo {fixture_id} já foi processado.", 'erro': None}
 
         # Buscar dados da API
@@ -6486,6 +6543,8 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         if not data.get("response"):
             logging.error(f"❌ Jogo {fixture_id} não encontrado na API")
             conn.close()
+            conn = None
+            cursor = None
             return {'processado': False, 'mensagem': f"❌ Jogo {fixture_id} não encontrado na API.", 'erro': 'api_not_found'}
 
         partida = data["response"][0]
@@ -6500,6 +6559,8 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         if status not in ("ft", "aet", "pen"):
             logging.warning(f"⏳ Jogo {fixture_id} ainda NÃO finalizou (status: {status})")
             conn.close()
+            conn = None
+            cursor = None
             if not automatico and ctx:
                 await ctx.send(f"⚠️ Jogo {fixture_id} ainda não finalizou (status: {status}).")
             return {'processado': False, 'mensagem': f"Jogo {fixture_id} não finalizado (status: {status})", 'erro': 'not_finished'}
@@ -6507,19 +6568,22 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
         # Determinar resultado
         if gols_casa > gols_fora:
             resultado_final = "home"
+            resultado_texto = f"**{casa}** venceu!"
             time_vencedor_nome = casa
         elif gols_fora > gols_casa:
             resultado_final = "away"
+            resultado_texto = f"**{fora}** venceu!"
             time_vencedor_nome = fora
         else:
             resultado_final = "draw"
-            time_vencedor_nome = "Empate 🤝"
-        logging.info(f"🏆 Resultado final: {resultado_final} - Vencedor: {time_vencedor_nome}")
+            resultado_texto = "A partida terminou em **empate 🤝**!"
+            time_vencedor_nome = None
+        logging.info(f"🏆 Resultado final: {resultado_final} - Vencedor: {time_vencedor_nome or 'Empate'}")
 
         # -----------------------------------------------------------
         # LÓGICA: COMEMORAÇÃO DE VITÓRIA
         # -----------------------------------------------------------
-        logging.info(f"🎉 Processando comemoração para {time_vencedor_nome}...")
+        logging.info(f"🎉 Processando comemoração para {time_vencedor_nome or 'Empate'}...")
         if time_vencedor_nome:  
             # Pega a chave normalizada do vencedor (ex: "galo")
             chave_vencedor = MAPEAMENTO_TIMES.get(time_vencedor_nome.lower(), time_vencedor_nome.lower())
@@ -6682,7 +6746,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                     
                     embed.add_field(
                         name="🏆 Resultado",
-                        value=f"**{time_vencedor_nome}** venceu!",
+                        value=resultado_texto,
                         inline=False
                     )
                     
@@ -6750,7 +6814,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                     
                     embed.add_field(
                         name="🏆 Resultado",
-                        value=f"**{time_vencedor_nome}** venceu!",
+                        value=resultado_texto,
                         inline=False
                     )
                     
@@ -8268,74 +8332,88 @@ CARTAS = [
 jimbo_ativo = False
 jimbo_ja_apareceu_hoje = False
 CANAL_JIMBO = 1380564680552091789
+jimbo_lock = asyncio.Lock()  # Proteção contra race conditions
 
 async def jimbo_scheduler():
     await bot.wait_until_ready()
     logging.info("🃏 [JIMBO] Scheduler iniciado e aguardando horário permitido")
 
     while not bot.is_closed():
+        try:
+            agora = datetime.now()
+            hora_atual = agora.time()
+            data_atual = agora.date()
 
-        agora = datetime.now()
-        hora_atual = agora.time()
-          # <-- NOVO
-        data_atual = agora.date()
+            from datetime import time as dt_time
+            inicio = dt_time(15, 0)
+            fim = dt_time(23, 59)
+            meia_noite = dt_time(0, 0)  # Reset acontece exatamente à meia-noite (00:00)
+            horario_reset = dt_time(0, 30)  # Janela de reset até 00:30
 
-        from datetime import time as dt_time
-        inicio = dt_time(15, 0)
-        fim = dt_time(23, 59)
-        meia_noite = dt_time(1, 0)        
+            # Reset diário à meia-noite com sincronização
+            if meia_noite <= hora_atual < horario_reset:
+                async with jimbo_lock:
+                    global jimbo_ja_apareceu_hoje
+                    if jimbo_ja_apareceu_hoje:
+                        jimbo_ja_apareceu_hoje = False
+                        logging.info("🃏 [JIMBO] Reset diário realizado - Jimbo pode aparecer hoje")
 
-        # Reset diário à meia-noite
-        if hora_atual < meia_noite:
-            global jimbo_ja_apareceu_hoje
-            if jimbo_ja_apareceu_hoje:
-                jimbo_ja_apareceu_hoje = False
-                logging.info("🃏 [JIMBO] Reset diário realizado - Jimbo pode aparecer hoje")
+            # Executa apenas no horário permitido e se ainda não apareceu
+            if inicio <= hora_atual <= fim:
+                async with jimbo_lock:
+                    if not jimbo_ativo and not jimbo_ja_apareceu_hoje:
+                        logging.info(f"🃏 [JIMBO] Horário permitido ({hora_atual.strftime('%H:%M')}) - Agendando aparição")
 
-        # só roda no horário permitido e se não apareceu hoje
-        if inicio <= hora_atual <= fim and not jimbo_ativo and not jimbo_ja_apareceu_hoje:
-            logging.info(f"🃏 [JIMBO] Horário permitido ({hora_atual.strftime('%H:%M')}) - Agendando aparição")
+                        espera_minutos = random.randint(1, 420)
+                        espera = espera_minutos * 60
+                        logging.info(f"🃏 [JIMBO] Aguardando {espera_minutos} minutos para aparição...")
 
-            espera_minutos = random.randint(1, 420)
-            espera = espera_minutos * 60
-            logging.info(f"🃏 [JIMBO] Aguardando {espera_minutos} minutos para aparição...")
+                        await asyncio.sleep(espera)
 
-            await asyncio.sleep(espera)
-
-            if not jimbo_ativo and not jimbo_ja_apareceu_hoje:
-                jimbo_ja_apareceu_hoje = True
-                logging.info("🃏 [JIMBO] Iniciando spawn do Jimbo!")
-                await spawn_jimbo()
+                        # Verificação final dentro da lock
+                        if not jimbo_ativo and not jimbo_ja_apareceu_hoje:
+                            jimbo_ja_apareceu_hoje = True
+                            await spawn_jimbo()
+                        else:
+                            logging.info("🃏 [JIMBO] Spawn cancelado - Jimbo já apareceu ou está ativo")
             else:
-                logging.info("🃏 [JIMBO] Spawn cancelado - Jimbo já apareceu ou está ativo")
-
-        else:
-            await asyncio.sleep(300)
+                await asyncio.sleep(300)
+        except Exception as e:
+            logging.error(f"💥 Erro no scheduler Jimbo: {e}")
+            await asyncio.sleep(60)
 
 async def spawn_jimbo():
     global jimbo_ativo
-    jimbo_ativo = True
-    canal = bot.get_channel(CANAL_JIMBO)
+    try:
+        canal = bot.get_channel(CANAL_JIMBO)
+        
+        if not canal:
+            logging.error(f"🃏 [JIMBO] Canal {CANAL_JIMBO} não encontrado!")
+            async with jimbo_lock:
+                jimbo_ativo = False
+            return
+        
+        async with jimbo_lock:
+            jimbo_ativo = True
     
-    if not canal:
-        logging.error(f"🃏 [JIMBO] Canal {CANAL_JIMBO} não encontrado!")
-        jimbo_ativo = False
-        return
-    
-    logging.info(f"🃏 [JIMBO] Spawn iniciado no canal #{canal.name}")
-    
-    embed = discord.Embed(
-        title="🃏 JIMBO ESTÁ ATIVO!",
-        description="Clique no botão antes que ele desapareça...",
-        color=discord.Color.dark_purple()
-    )
+        logging.info(f"🃏 [JIMBO] Spawn iniciado no canal #{canal.name}")
+        
+        embed = discord.Embed(
+            title="🃏 JIMBO ESTÁ ATIVO!",
+            description="Clique no botão antes que ele desapareça...",
+            color=discord.Color.dark_purple()
+        )
 
-    embed.set_image(url="https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/supawork-4a536737e6d448f0b5555b0c67dec5a0.gif")
+        embed.set_image(url="https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/ApresentacaoGif/supawork-4a536737e6d448f0b5555b0c67dec5a0.gif")
 
-    view = JimboView(timeout=300)
-    msg = await canal.send(embed=embed, view=view)
-    view.message = msg
-    logging.info(f"🃏 [JIMBO] Mensagem enviada com sucesso - Aguardando interação (5 min timeout)")
+        view = JimboView(timeout=300)
+        msg = await canal.send(embed=embed, view=view)
+        view.message = msg
+        logging.info(f"🃏 [JIMBO] Mensagem enviada com sucesso - Aguardando interação (5 min timeout)")
+    except Exception as e:
+        logging.error(f"💥 Erro ao fazer spawn de Jimbo: {e}")
+        async with jimbo_lock:
+            jimbo_ativo = False
 
 class JimboView(discord.ui.View):
     def __init__(self, timeout=300):
@@ -8349,11 +8427,12 @@ class JimboView(discord.ui.View):
         if self.player is not None:
             logging.info(f"🃏 [JIMBO] {interaction.user.name} tentou invocar mas já foi invocado por {self.player.name}")
             return await interaction.response.send_message(
-                "Jimbo já foi invocado por outra pessoa!",
+                "🚫 Jimbo já foi invocado por outra pessoa!",
                 ephemeral=True
             )
         self.player = interaction.user
-        jimbo_ativo = False
+        async with jimbo_lock:
+            jimbo_ativo = False
         logging.info(f"🃏 [JIMBO] {interaction.user.name} invocou o Jimbo! Iniciando jogo de cartas...")
         cartas_view = CartasView(interaction.user)
         await interaction.response.send_message(
@@ -8364,42 +8443,66 @@ class JimboView(discord.ui.View):
 
     async def on_timeout(self):
         global jimbo_ativo
-        jimbo_ativo = False
+        async with jimbo_lock:
+            jimbo_ativo = False
         logging.info("🃏 [JIMBO] Timeout atingido - Jimbo desapareceu sem ser invocado")
 
         if self.message:
-            await self.message.edit(
-                content="",
-                embed=discord.Embed(
-                    description="🃏 Jimbo apareceu… olhou em volta… e foi embora.",
-                    color=discord.Color.greyple()
-                ),
-                view=None
-            )
+            try:
+                await self.message.edit(
+                    content="",
+                    embed=discord.Embed(
+                        description="🃏 Jimbo apareceu… olhou em volta… e foi embora.",
+                        color=discord.Color.greyple()
+                    ),
+                    view=None
+                )
+            except Exception as e:
+                logging.error(f"⚠️ Erro ao editar timeout de Jimbo: {e}")
 
 def puxar_carta():
+    """Puxa uma carta aleatória do baralho com validação."""
+    if not CARTAS:
+        raise ValueError("❌ [JIMBO] Lista de cartas vazia - impossível jogar!")
+    
     pool = []
-
     for carta in CARTAS:
-        pool.extend([carta] * carta["chance"])
-
+        chance = carta.get("chance", 0)
+        if chance <= 0:
+            logging.warning(f"⚠️ [JIMBO] Carta {carta['nome']} tem chance 0 ou negativa")
+            continue
+        pool.extend([carta] * chance)
+    
+    if not pool:
+        raise ValueError("❌ [JIMBO] Nenhuma carta válida para sorteio - todas têm chance 0!")
+    
     escolhida = random.choice(pool)
-
+    
+    # Validar campo de pontos
+    if "pontos" not in escolhida or len(escolhida["pontos"]) != 2:
+        raise ValueError(f"❌ [JIMBO] Carta {escolhida.get('nome', 'DESCONHECIDA')} tem pontos mal configurados")
+    
     pontos = random.randint(*escolhida["pontos"])
     return escolhida, pontos
 
 class CartasView(discord.ui.View):
     def __init__(self, player):
         super().__init__(timeout=60)
+        if not player:
+            raise ValueError("❌ [JIMBO] Jogador inválido para CartasView")
         self.player = player
-        self.cartas = [puxar_carta() for _ in range(5)]
+        try:
+            self.cartas = [puxar_carta() for _ in range(5)]
+        except Exception as e:
+            logging.error(f"💥 Erro ao gerar cartas: {e}")
+            raise
         self.escolhidas = []
         self.pontos_totais = 0
         
         # Criar embed inicial
         cartas_display = []
         for i, (carta, pontos) in enumerate(self.cartas, 1):
-            cartas_display.append(f"**Carta {i}:** {carta['emoji']}")
+            cartas_display.append(f"**Carta {i}:** ❓ (Pontos: {pontos})")
         
         self.embed_inicial = discord.Embed(
             title="🎴 Escolha 3 CARTAS",
@@ -8444,19 +8547,31 @@ class CartasView(discord.ui.View):
 
     async def on_timeout(self):
         """Desativa os botões se o tempo acabar para evitar cliques fantasmas."""
-        for item in self.children:
-            item.disabled = True
-        self.stop()
-        logging.info(f"🃏 [JIMBO] Timeout de {self.player.name} - Jogo expirado")
+        try:
+            for item in self.children:
+                item.disabled = True
+            
+            # Registrar timeout com informações úteis
+            logging.warning(f"⏱️ [JIMBO] Timeout de {self.player.name} - Jogo expirado (escolheu {len(self.escolhidas)}/3)")
+        except Exception as e:
+            logging.error(f"💥 Erro em CartasView.on_timeout: {e}")
+        finally:
+            self.stop()
 
     async def escolher(self, interaction: discord.Interaction, index: int):
         try:
-            # Fazer defer imediatamente para evitar timeout (15min)
+            # Validação de índice
+            if not (0 <= index < len(self.children)):
+                logging.warning(f"⚠️ [JIMBO] Índice inválido: {index}")
+                return
+            
+            # Defer sem parâmetro update (que não existe) - apenas para reconhecer a interação
+            # para que possamos editar a mensagem via message.edit() ou usar followup
             if not interaction.response.is_done():
                 await interaction.response.defer()
             
             if index in self.escolhidas:
-                await interaction.followup.send("Esta carta já foi revelada!", ephemeral=True)
+                await interaction.followup.send("🚫 Esta carta já foi revelada!", ephemeral=True)
                 return
 
             # 1. Registrar a escolha
@@ -8478,11 +8593,19 @@ class CartasView(discord.ui.View):
                 # Ainda escolhendo: atualiza o embed para mostrar o progresso
                 embed_progresso = discord.Embed(
                     title="🎴 Escolha 3 CARTAS",
-                    description=f"Você escolheu **{num_escolhidas}/3** cartas.\n\nContinue clicando!",
+                    description=f"Você escolheu **{num_escolhidas}/3** cartas.\n\n{carta['emoji']} **{carta['nome']}**: {pontos:+d}\n\nContinue clicando!",
                     color=discord.Color.blue()
                 )
-                await interaction.edit_original_response(embed=embed_progresso, view=self)
-                logging.info(f"🃏 [JIMBO] {self.player.name} escolheu {carta['nome']} ({pontos:+d}).")
+                # Editar a mensagem que contém os botões (garante que o view é atualizado)
+                try:
+                    await interaction.message.edit(embed=embed_progresso, view=self)
+                    logging.info(f"🃏 [JIMBO] {self.player.name} escolheu {carta['nome']} ({pontos:+d}).")
+                except Exception as e:
+                    logging.error(f"⚠️ Erro ao editar mensagem de progresso: {e}")
+                    try:
+                        await interaction.followup.send(f"Erro ao atualizar jogo: {str(e)[:80]}", ephemeral=True)
+                    except:
+                        pass
 
             else:
                 # Finalizou as 3 escolhas
@@ -8502,8 +8625,11 @@ class CartasView(discord.ui.View):
             for item in self.children:
                 item.disabled = True
 
-            # Resposta imediata para evitar timeout da interação
-            await interaction.edit_original_response(content="✨ Revelando destino...", view=self)
+            # Resposta imediata para evitar timeout da interação - editar a mensagem do componente
+            try:
+                await interaction.message.edit(content="✨ Revelando destino...", view=self)
+            except Exception as e:
+                logging.error(f"⚠️ Erro ao mostrar mensagem de finalização: {e}")
 
             # Operação de Banco de Dados (Thread-safe)
             try:
@@ -8537,15 +8663,26 @@ class CartasView(discord.ui.View):
             if self.pontos_totais > 0:
                 embed_final.set_footer(text=f"A sorte sorriu para você, {self.player.name}!")
             else:
-                embed_final.set_footer(text=f"Melhor sorte na próxima vez...{self.player.name}!")
+                embed_final.set_footer(text=f"Melhor sorte na próxima vez, {self.player.name}!")
 
             # Edita a mensagem original com o resultado
-            await interaction.edit_original_response(content=None, embed=embed_final, view=None)
+            try:
+                await interaction.message.edit(content=None, embed=embed_final, view=None)
+            except Exception as e:
+                logging.error(f"⚠️ Erro ao editar mensagem final: {e}")
+            
             logging.info(f"🃏 [JIMBO] Jogo finalizado: {self.player.name} totalizou {self.pontos_totais:+d}.")
             self.stop()
 
         except Exception as e:
-            logging.error(f"💥 Erro ao finalizar jogo: {e}\n{traceback.format_exc()}")
+            logging.error(f"💥 Erro crítico ao finalizar jogo: {e}\n{traceback.format_exc()}")
+            try:
+                await interaction.followup.send(
+                    f"❌ Erro ao processar sua escolha: {str(e)[:100]}",
+                    ephemeral=True
+                )
+            except:
+                pass
 
 
 bot.run(TOKEN)
