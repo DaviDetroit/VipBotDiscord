@@ -480,7 +480,13 @@ CONQUISTAS = {
         "descricao": "Esteja em uma call com mais 2 pessoas jogando o mesmo jogo.",
         "condicao": lambda d: False,  # Concedida manualmente via detecção de jogo
         "cargo": "Party na Call"
-    }
+    },
+    "artista": {
+    "nome": "🎨 Artista do Mês",
+    "descricao": "Seja o artista mais curtido do mês e receba o cargo Artista.",
+    "condicao": lambda d: d.get("tem_cargo_artista", False),
+    "cargo": "Artista"
+    },
 }
 
 
@@ -514,6 +520,13 @@ async def processar_conquistas(
     mencoes_bot=0,
     azarao_vitoria=False
 ):
+    # 🔥 Verifica se o membro tem o cargo Artista
+    tem_cargo_artista = False
+    if member.guild:
+        cargo_artista = discord.utils.get(member.guild.roles, name="Artista")
+        if cargo_artista and cargo_artista in member.roles:
+            tem_cargo_artista = True
+
     dados = {
         "mensagens_semana": mensagens_semana,
         "acertos_consecutivos": acertos_consecutivos,
@@ -524,7 +537,8 @@ async def processar_conquistas(
         "tocou_musica": tocou_musica,
         "mencoes_bot": mencoes_bot,
         "azarao_vitoria": azarao_vitoria,
-        "bloqueado": False
+        "bloqueado": False,
+        "tem_cargo_artista": tem_cargo_artista  # 👈 NOVO
     }
 
     desbloqueadas = []
@@ -566,11 +580,7 @@ async def processar_conquistas(
 
         if desbloqueada:
             desbloqueadas.append(texto)
-            
-            if ja_no_banco:
-                logging.debug(f"Conquista '{conquista['nome']}' já existe no banco para {member.display_name} ({member.id})")
 
-            # Registrar no banco se for nova
             if condicao_ok and not ja_no_banco:
                 try:
                     cursor.execute(
@@ -579,45 +589,27 @@ async def processar_conquistas(
                     )
                     conexao.commit()
                     novas_conquistas.append(conquista)
-                    logging.info(f"Conquista desbloqueada: {conquista['nome']} para {member.display_name} ({member.id})")
+                    logging.info(f"Conquista desbloqueada: {conquista['nome']} para {member.display_name}")
                 except Exception as e:
                     logging.error(f"Erro ao registrar conquista {key} para {member}: {e}")
 
-            # === ENTREGA DE CARGO (sempre que desbloqueada) ===
+            # === ENTREGA DE CARGO ===
             if member.guild:
                 cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
-                if cargo:
-                    if cargo not in member.roles:
-                        try:
-                            await member.add_roles(cargo)
-                            logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name} ({member.id}) - conquista: {conquista['nome']}")
-                        except Exception as e:
-                            logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
-                    else:
-                        logging.debug(f"Membro {member.display_name} ({member.id}) já possui o cargo '{cargo.name}' - conquista: {conquista['nome']}")
-                else:
-                    # Log detalhado para depuração
-                    logging.warning(f"Cargo '{conquista['cargo']}' não encontrado no guild para conquista: {conquista['nome']}")
-                    
-                    # Lista todos os cargos disponíveis para depuração (apenas na primeira vez)
-                    if not hasattr(processar_conquistas, '_cargos_listados'):
-                        processar_conquistas._cargos_listados = True
-                        todos_cargos = [role.name for role in member.guild.roles]
-                        logging.info(f"Cargos disponíveis no servidor: {todos_cargos}")
-                        
-                        # Verificar correspondências aproximadas
-                        cargo_procurado = conquista["cargo"].lower()
-                        correspondencias = [role for role in todos_cargos if cargo_procurado in role.lower()]
-                        if correspondencias:
-                            logging.info(f"Cargos com nomes similares a '{conquista['cargo']}': {correspondencias}")
+                if cargo and cargo not in member.roles:
+                    try:
+                        await member.add_roles(cargo)
+                        logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name}")
+                    except Exception as e:
+                        logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
+
         else:
             bloqueadas.append(texto)
-            logging.debug(f"Conquista '{conquista['nome']}' não desbloqueada para {member.display_name} ({member.id}) - condição não atendida")
 
     cursor.close()
     conexao.close()
 
-    # === NOTIFICAÇÃO DE NOVAS CONQUISTAS ===
+    # === NOTIFICAÇÃO ===
     if novas_conquistas:
         try:
             embed = discord.Embed(
@@ -637,16 +629,8 @@ async def processar_conquistas(
             try:
                 await member.send(embed=embed)
             except discord.Forbidden:
-                if member.guild:
-                    channel = member.guild.get_channel(CANAL_AVISO_ID)
-                    if channel:
-                        await channel.send(
-                            f"{member.mention}, você desbloqueou uma nova conquista! Verifique sua DM."
-                        )
-                        try:
-                            await member.send(embed=embed)
-                        except:
-                            pass
+                pass
+
         except Exception as e:
             logging.error(f"Erro ao enviar notificação de conquista para {member}: {e}")
 
@@ -1538,7 +1522,7 @@ async def vip_mensagem(ctx):
 
     embed.set_image(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749215669424218/JINXEDd1.png")
     embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1380564680552091789/1444749579605119148/discotools-xyz-icon.png")
-    embed.set_footer(text="VIP exclusivo para os jogadores mais dedicados!")
+    embed.set_footer(text="Acesso premium liberado para apoiadores do servidor.")
 
     try:
         await ctx.send(embed=embed, view=VipView())
@@ -2107,6 +2091,8 @@ ID_CARGO_MUTE = 1445066766144376934
 CANAL_CLIPES = 1462401595604996156  # ID do canal de clipes
 EMOJI_RISADA = "😂"
 EMOJI_BOSTA = "💩"
+CANAL_ARTES = 1380564680774385729
+
 @bot.event
 async def on_message(message):
 
@@ -2174,7 +2160,25 @@ async def on_message(message):
             con.close()
         except Exception as e:
             logging.error(f"Erro ao salvar clip: {e}")
+    
+    # =========================
+    #  Sistema de Artes
+    # =========================
 
+    if message.channel.id == CANAL_ARTES:
+        if message.attachments:
+            for attachments in message.attachments:
+                if attachments.content_type and "image" in attachments.content_type:
+
+                    con = conectar_vips()
+                    cur = con.cursor()
+                    cur.execute(
+                        "INSERT INTO artes_posts (message_id, usar_id, nome_discord, data_post)" \
+                        "VALUES (%s, %s, %s, NOW())",(message.id, message.author.id, str(message.author)))
+                    con.commit()
+                    con.close()
+                    view = ArtesView(message.id)
+                    await message.reply("Vote na arte 👇", view=view)
     
     global ultimo_reagir
 
@@ -5416,7 +5420,7 @@ FALAS_BOT = {
     ]
 }
 
-LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13, 39]
+LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13]
 
 
 # ---------- Integração com verificar_gols 
@@ -5889,7 +5893,7 @@ async def loja(ctx):
 
     embed.add_field(
         name="<a:809469heartchocolate:1466494908243120256> Caixa Surpresa — 50 pontos",
-        value="• Pode receber pontos aleatórios de -50 a 300\n• Pode vir até negativo 👀\n• Use `caixinha`",
+        value="• Pode receber pontos aleatórios de -100 a 300\n• Pode vir até negativo 👀\n• Use `caixinha`",
         inline=False
     )
 
@@ -5985,6 +5989,7 @@ async def comprar(ctx, item_nome: str):
             await ctx.send("⚠️ Cargo 'Jinxed Vip' não encontrado no servidor.")
 
     elif item == "caixinha":
+        logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Caixinha de Surpresa por {preco} pontos.")
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -5998,7 +6003,7 @@ async def comprar(ctx, item_nome: str):
             await ctx.send("⏳ Você já usou a **Caixinha** 3 vezes nas últimas 24 horas. Aguarde o cooldown de 24h após a última utilização.")
             return
 
-        pontos_sorteados = random.randint(-50, 300)
+        pontos_sorteados = random.randint(-100, 300)
         adicionar_pontos_db(user_id, pontos_sorteados)
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
@@ -6014,6 +6019,7 @@ async def comprar(ctx, item_nome: str):
             await ctx.send(f"😐 Você abriu a **Caixinha de Surpresa** e não ganhou nem perdeu pontos!** 📦")
 
     elif item == "clown_bet":
+        logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Clown Bet por {preco} pontos.")
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -6025,6 +6031,7 @@ async def comprar(ctx, item_nome: str):
         await ctx.send("🎭 Você ativou a **Clown Bet**! Próxima aposta: 6x se acertar, 4x se errar.")
 
     elif item == "emoji_personalizado":
+        logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Emoji Personalizado por {preco} pontos.")
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -6040,6 +6047,7 @@ async def comprar(ctx, item_nome: str):
         )
 
     elif item == "comemoracao":
+        logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Comemoração por {preco} pontos.")
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -6051,6 +6059,7 @@ async def comprar(ctx, item_nome: str):
         await ctx.send(f"<:827557party:1467578831106871610> **Compra realizada!** Agora use `!comemorar <nome_do_time>` para agendar a festa no próximo jogo!")
 
     elif item == "mute_jinxed":
+        logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Mute Jinxed por {preco} pontos.")
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -6061,6 +6070,7 @@ async def comprar(ctx, item_nome: str):
         con.close()
         await ctx.send("<:34000mute:1467578828313464861> Você comprou o Mute Jinxed! Use !troll @usuario para mutar alguém por 3 minutos.")
     elif item == "apelido":
+        logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Apelido por {preco} pontos.")
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -6072,6 +6082,7 @@ async def comprar(ctx, item_nome: str):
         await ctx.send("<a:561879carrotstare:1467578826614771746> Você comprou o Apelido! use !apelido @user <nome_do_apelido>")
     
     elif item == "inverter":
+        logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Inverter Pontos por {preco} pontos.")
         con = conectar_futebol()
         cur = con.cursor()
         cur.execute(
@@ -6221,6 +6232,7 @@ async def comemorar(ctx, *, time_nome: str):
 
     emoji = EMOJI_TIMES.get(chave_time, "⚽")
     await ctx.send(f"🎉 **Agendado!** Se o **{chave_time.upper()}** {emoji} ganhar o próximo jogo, vou soltar o GIF de vitória em sua homenagem!")
+    
 
 
 @bot.command()
@@ -8683,6 +8695,147 @@ class CartasView(discord.ui.View):
                 )
             except:
                 pass
+
+
+class ArtesView(discord.ui.View):
+    def __init__(self, message_id):
+        super().__init__(timeout=None)
+        self.message_id = message_id
+    @discord.ui.button(label="Curtir", emoji="❤️", style=discord.ButtonStyle.success)
+    async def like(self, interaction: discord.Interaction, button: discord.ui.Button):
+        con = conectar_vips()
+        cur = con.cursor()
+        try:
+            # Verifica se o usuário já votou nessa mensagem
+            cur.execute(
+                "SELECT 1 FROM artes_votos WHERE message_id = %s AND voter_id = %s",
+                (self.message_id, interaction.user.id)
+            )
+            if cur.fetchone():
+                await interaction.response.send_message(
+                    "Você já votou nessa arte!",
+                    ephemeral=True
+                )
+                logging.info(f"[ARTES] Voto duplicado ignorado: voter={interaction.user.id} message={self.message_id}")
+                return
+
+            # Registra o voto
+            cur.execute(
+                """
+                INSERT INTO artes_votos (message_id, voter_id, voter_nome, tipo)
+                VALUES (%s, %s, %s, 'like')
+                """,
+                (self.message_id, interaction.user.id, str(interaction.user))
+            )
+
+            # Incrementa o contador de corações da arte
+            cur.execute(
+                """
+                UPDATE artes_posts
+                SET coracoes = coracoes + 1
+                WHERE message_id = %s
+                """,
+                (self.message_id,)
+            )
+
+            con.commit()
+            logging.info(f"[ARTES] Voto registrado: voter={interaction.user} ({interaction.user.id}) message={self.message_id}")
+
+            # Recupera o autor da postagem para dar os pontos a quem foi votado
+            cur.execute(
+                "SELECT user_id, COALESCE(user_name, '') FROM artes_posts WHERE message_id = %s",
+                (self.message_id,)
+            )
+            row = cur.fetchone()
+
+            if row:
+                author_id = row[0]
+                author_name = row[1] if len(row) > 1 else ''
+
+                # Adiciona 10 pontos ao autor (quem foi votado)
+                try:
+                    adicionar_pontos_db(author_id, 10, author_name or str(author_id))
+                    logging.info(f"[ARTES] +10 pontos para autor {author_id} (message={self.message_id})")
+                except Exception as p_err:
+                    logging.error(f"[ARTES] Erro ao adicionar pontos ao autor {author_id}: {p_err}")
+
+                # Envia DM ao autor informando que recebeu pontos
+                try:
+                    author_user = await bot.fetch_user(author_id)
+                    embed = discord.Embed(
+                        title="<a:143125redgemheart:1454722071618916530> Você recebeu pontos!",
+                        description="você ganhou 10 pontos ao usuário votar em você!",
+                        color=discord.Color.green()
+                    )
+                    embed.set_footer(text=f"Votado por {interaction.user}")
+                    await author_user.send(embed=embed)
+                    logging.info(f"[ARTES] DM enviada ao autor {author_id} informando +10 pontos")
+                except Exception as dm_err:
+                    logging.error(f"[ARTES] Falha ao enviar DM para {author_id}: {dm_err}")
+            else:
+                logging.warning(f"[ARTES] Autor não encontrado para message_id={self.message_id}")
+
+            # Confirmação ao votante
+            await interaction.response.send_message(
+                "Voto registrado. Obrigado por apoiar o artista!",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            logging.error(f"[ARTES] Erro ao processar voto: {e}\n{traceback.format_exc()}")
+            try:
+                await interaction.response.send_message("Erro ao registrar voto.", ephemeral=True)
+            except:
+                pass
+        finally:
+            con.close()
+
+@tasks.loop(hours=24)
+async def verificar_melhor_do_mes():
+    hoje = datetime.datetime.now()
+
+    if hoje.day != 1:  # Só roda dia 1
+        return
+
+    con = conectar_vips()
+    cur = con.cursor()
+
+    cur.execute("""
+        SELECT user_id, message_id, coracoes
+        FROM artes_posts
+        WHERE MONTH(data_post) = MONTH(NOW() - INTERVAL 1 MONTH)
+        AND YEAR(data_post) = YEAR(NOW() - INTERVAL 1 MONTH)
+        ORDER BY coracoes DESC
+        LIMIT 1
+    """)
+
+    resultado = cur.fetchone()
+
+    if resultado:
+        user_id, message_id, coracoes = resultado
+        guild = bot.get_guild(1380564679084081175)
+        member = guild.get_member(user_id)
+
+        cargo = discord.utils.get(guild.roles, name="Artista")
+
+        if member and cargo:
+            await member.add_roles(cargo)
+            adicionar_pontos_db(user_id, 200, str(member))
+
+            await member.send(
+                f"🎨 Parabéns! Sua arte foi a mais curtida do mês com {coracoes} ❤️!\n"
+                f"Você recebeu o cargo **Artista** e +200 pontos!"
+            )
+            # Processar conquistas para garantir que a conquista 'artista' seja registrada
+            try:
+                await processar_conquistas(member, 0, 0, False, False)
+                logging.info(f"Conquistas processadas para {member.display_name} após receber Artista do Mês")
+            except Exception as e:
+                logging.error(f"Erro ao processar conquistas para {member.display_name}: {e}")
+
+    con.close()
+
+
 
 
 bot.run(TOKEN)
