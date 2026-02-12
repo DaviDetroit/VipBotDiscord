@@ -18,6 +18,7 @@ import logging
 import aiohttp
 import aiomysql
 import traceback
+from io import BytesIO
 
 
 
@@ -28,6 +29,13 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S' 
 )
+
+# ============================
+# CONFIGURAÇÕES DE ARQUIVO
+# ============================
+MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25MB (limite Discord)
+WARN_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB (aviso para arquivos grandes)
+DOWNLOAD_TIMEOUT = 60  # 60 segundos timeout para download
 
 
 def conectar(database_name: str):
@@ -129,6 +137,489 @@ fuso_br = pytz.timezone("America/Sao_Paulo")
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Configurar tree para slash commands
+GUILD_ID = 1380564679084081175  # ID do servidor principal
+
+# Sincronizar comandos quando o bot estiver pronto
+@bot.event
+async def setup_hook():
+    guild = discord.Object(id=GUILD_ID)
+    await bot.tree.sync(guild=guild)
+    logging.info(f"✅ Slash commands sincronizados na guild {GUILD_ID}!")
+    
+# Evento de erro para slash commands
+@bot.tree.error
+async def on_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+    if isinstance(error, discord.app_commands.CommandOnCooldown):
+        await interaction.response.send_message(
+            f"⏰ Espere {error.retry_after:.1f}s para usar este comando novamente!",
+            ephemeral=True
+        )
+    elif isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message(
+            "❌ Você não tem permissão para usar este comando!",
+            ephemeral=True
+        )
+    else:
+        logging.error(f"Erro em slash command: {error}")
+        await interaction.response.send_message(
+            "❌ Ocorreu um erro ao executar este comando.",
+            ephemeral=True
+        )
+
+# ============ SLASH COMMANDS PRINCIPAIS ============
+
+@bot.tree.command(name="pontos", description="Veja quantos pontos você tem")
+async def slash_pontos(interaction: discord.Interaction):
+    pontos = pegar_pontos(interaction.user.id)
+
+    await interaction.response.send_message(
+        f"<a:565724creditcard:1467671052053254235> {interaction.user.mention}, você tem **{pontos} pontos**!",
+        ephemeral=True
+    )
+@bot.tree.command(name="teste")
+async def teste(interaction: discord.Interaction):
+    await interaction.response.send_message("funcionando")
+
+@bot.tree.command(name="loja", description="Veja os itens disponíveis na loja")
+async def slash_loja(interaction: discord.Interaction):
+
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
+    await interaction.response.send_message(
+        embed=gerar_embed_loja()
+    )
+
+@bot.tree.command(name="comprar", description="Compre um item")
+@discord.app_commands.choices(item=[
+    discord.app_commands.Choice(name="🎭 Modo Clown", value="clown_bet"),
+    discord.app_commands.Choice(name="🎁 Caixinha", value="caixinha"),
+    discord.app_commands.Choice(name="💎 VIP", value="jinxed_vip"),
+    discord.app_commands.Choice(name="🔇 Inverter", value="inverter"),
+    discord.app_commands.Choice(name="📞 Mute", value="mute_jinxed"),
+    discord.app_commands.Choice(name="🏷️ Apelido", value="apelido"),
+    discord.app_commands.Choice(name="🎉 Comemoração", value="comemoracao"),
+    discord.app_commands.Choice(name="🎨 Emoji", value="emoji_personalizado")
+])
+async def slash_comprar(interaction: discord.Interaction, item: str):
+
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            "Canal errado.",
+            ephemeral=True
+        )
+
+    ok, msg = await executar_compra(
+        interaction.user,
+        item,
+        interaction.guild
+    )
+
+    await interaction.response.send_message(
+        msg,
+        ephemeral=True
+    )
+    
+CANAL_PERMITIDO_ID = 1380564680774385724
+
+
+
+
+
+
+@bot.tree.command(name="time", description="Entre para um time de torcedores")
+@discord.app_commands.describe(nome="Nome do time que você quer torcer")
+async def slash_time(interaction: discord.Interaction, nome: str):
+    """Permite que usuário entre em um time de torcedores"""
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            "<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.",
+            ephemeral=True
+        )
+    
+    # Mapeamento de times para cargos
+    times_cargos = {
+        "flamengo": "Flamengo",
+        "vasco": "Vasco", 
+        "corinthians": "Corinthians",
+        "palmeiras": "Palmeiras",
+        "santos": "Santos",
+        "são paulo": "São Paulo",
+        "sao paulo": "São Paulo",
+        "fluminense": "Fluminense",
+        "botafogo": "Botafogo",
+        "gremio": "Grêmio",
+        "internacional": "Internacional",
+        "cruzeiro": "Cruzeiro",
+        "atlético mg": "Atlético Mineiro",
+        "atletico mg": "Atlético Mineiro"
+    }
+    
+    nome_normalizado = nome.strip().lower()
+    cargo_nome = times_cargos.get(nome_normalizado)
+    
+    if not cargo_nome:
+        await interaction.response.send_message(
+            "❌ Time não encontrado! Use `/lista_times` para ver os times disponíveis.",
+            ephemeral=True
+        )
+        return
+    
+    guild = interaction.guild
+    member = interaction.user
+    
+    # Remover outros cargos de time
+    for time_cargo in times_cargos.values():
+        cargo = discord.utils.get(guild.roles, name=time_cargo)
+        if cargo and cargo in member.roles:
+            await member.remove_roles(cargo)
+    
+    # Adicionar cargo do time escolhido
+    cargo = discord.utils.get(guild.roles, name=cargo_nome)
+    if cargo:
+        await member.add_roles(cargo)
+        await interaction.response.send_message(
+            f"✅ {member.mention}, você agora torce para **{cargo_nome}**! ⚽",
+            ephemeral=True
+        )
+        logging.info(f"{member.name} entrou no time {cargo_nome} via slash command.")
+    else:
+        await interaction.response.send_message(
+            f"❌ Cargo do time {cargo_nome} não encontrado no servidor.",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="times", description="Veja todos os times disponíveis")
+async def slash_lista_times(interaction: discord.Interaction):
+
+    def emoji_do_time(nome: str) -> str:
+        base = nome.strip().lower()
+        e = EMOJI_TIMES.get(base) or EMOJI_TIMES.get(base.replace(" ", "_"))
+        if e:
+            return e
+        for k, v in EMOJI_TIMES.items():
+            if k.replace("_", " ").lower() == base:
+                return v
+        return "❓"
+
+    times = sorted(ROLE_IDS_TIMES.keys())
+    linhas = [f"{emoji_do_time(t)} | {t.title()}" for t in times]
+
+    embed = discord.Embed(
+        title="📋 Times Disponíveis",
+        description="\n".join(linhas),
+        color=discord.Color.blue()
+    )
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="info", description="Veja informações e comandos do bot")
+async def slash_info(interaction: discord.Interaction):
+    """Mostra informações do bot"""
+    embed = discord.Embed(
+        title="📜 Comandos do Bot",
+        description="Aqui estão todos os comandos disponíveis:",
+        color=discord.Color.blue()
+    )
+    
+    embed.add_field(
+        name="⚽ Times e Apostas",
+        value=(
+            "`/time` - Entre para um time de torcedores\n"
+            "`/lista_times` - Veja todos os times disponíveis\n"
+            "`/pontos` - Veja seus pontos\n"
+            "`/loja` - Veja a loja de itens\n"
+            "`/comprar` - Compre itens da loja"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🔥 Estatísticas Pessoais",
+        value=(
+            "`/fogo` - Veja seus acertos consecutivos\n"
+            "`/conquistas` - Veja suas conquistas desbloqueadas\n"
+            "`/torcedores` - Veja todos os torcedores do servidor"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📊 Rankings e Estatísticas",
+        value=(
+            "`/top_fogos` - Veja os usuários com mais acertos\n"
+            "`/top_apostas` - Veja os melhores apostadores\n"
+            "`/bad_apostas` - Veja os piores apostadores"
+        ),
+        inline=False
+    )
+    
+
+    
+    embed.set_footer(text="Use ! para comandos tradicionais ou / para slash commands!")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="fogo", description="Mostra seus acertos consecutivos atuais")
+async def slash_fogo(interaction: discord.Interaction):
+
+    conn = conectar_futebol()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT acertos_consecutivos, maior_streak 
+            FROM apostas 
+            WHERE user_id = %s
+            ORDER BY data_aposta DESC
+            LIMIT 1
+        """, (interaction.user.id,))
+
+        resultado = cursor.fetchone()
+
+        if resultado is None:
+            acertos_atuais = 0
+            maior_streak = 0
+        else:
+            acertos_atuais = resultado.get("acertos_consecutivos", 0) or 0
+            maior_streak = resultado.get("maior_streak", 0) or 0
+
+        em_fogo = acertos_atuais >= 3
+
+        embed = discord.Embed(
+            title="🔥 SEU FOGO ATUAL",
+            description=(
+                f"📊 **Acertos Consecutivos:** **{acertos_atuais}**\n"
+                f"🏆 **Maior Sequência:** **{maior_streak}**\n\n"
+                f"{'🔥 **VOCÊ ESTÁ EM FOGO!**' if em_fogo else '❄️ Continue tentando!'}"
+            ),
+            color=discord.Color.red() if em_fogo else discord.Color.blue()
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    except Exception as e:
+        logging.exception(f"Erro ao consultar fogo do usuário {interaction.user.id}")
+
+        await interaction.response.send_message(
+            "❌ Ocorreu um erro ao consultar seu fogo.",
+            ephemeral=True
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+@bot.tree.command(name="top fogos", description="Veja os usuários com mais acertos consecutivos")
+async def slash_top_fogos(interaction: discord.Interaction):
+    """Mostra o ranking de acertos consecutivos"""
+    conn = conectar_futebol()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute(
+            "SELECT user_id, acertos_consecutivos, maior_streak FROM apostas "
+            "WHERE acertos_consecutivos > 0 ORDER BY acertos_consecutivos DESC LIMIT 10"
+        )
+        resultados = cursor.fetchall()
+        
+        if not resultados:
+            return await interaction.response.send_message(
+                "🔥 Ninguém está com fogo no momento!",
+                ephemeral=True
+            )
+            
+        embed = discord.Embed(
+            title="🔥 Ranking de Fogo",
+            description="Usuários com mais acertos consecutivos",
+            color=discord.Color.orange()
+        )
+        
+        for i, usuario in enumerate(resultados, 1):
+            user_obj = interaction.guild.get_member(usuario["user_id"])
+            nome = user_obj.display_name if user_obj else f"User_{usuario['user_id']}"
+            pontos = usuario["acertos_consecutivos"]
+            
+            medalha = ""
+            if i == 1:
+                medalha = "🥇"
+            elif i == 2:
+                medalha = "🥈" 
+            elif i == 3:
+                medalha = "🥉"
+                
+            embed.add_field(
+                name=f"{medalha} #{i} {nome}",
+                value=f"**{pontos} acertos** consecutivos 🔥",
+                inline=False
+            )
+            
+        await interaction.response.send_message(embed=embed)
+        logging.info(f"Top fogos consultado por {interaction.user.name}")
+        
+    except Exception as e:
+        await interaction.response.send_message(
+            "❌ Erro ao consultar ranking de fogo.",
+            ephemeral=True
+        )
+        logging.error(f"Erro no comando top_fogos: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+@bot.tree.command(name="top_apostas", description="Veja os melhores apostadores")
+async def slash_top_apostas(interaction: discord.Interaction):
+
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            "SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC LIMIT 5"
+        )
+
+        top = cursor.fetchall()
+
+        if not top:
+            return await interaction.response.send_message(
+                "⚠️ Nenhum usuário possui pontos.",
+                ephemeral=True
+            )
+
+        embed = discord.Embed(
+            title="<a:30348trophyfixed:1457473332843778220> Top 5 Apostadores",
+            description="Os usuários com mais pontos no sistema de apostas",
+            color=discord.Color.gold()
+        )
+
+        medalhas = ["🥇", "🥈", "🥉", "🏅", "🏅"]
+
+        ranking = ""
+        for i, (nome, pontos) in enumerate(top):
+            ranking += f"{medalhas[i]} **{nome}** — `{pontos} pontos`\n"
+
+        embed.add_field(
+            name="📊 Ranking Atual",
+            value=ranking,
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    except Exception as e:
+        logging.exception("Erro no slash top_apostas")
+
+        await interaction.response.send_message(
+            "❌ Erro ao consultar ranking.",
+            ephemeral=True
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+@bot.tree.command(name="bad apostas", description="Veja os piores apostadores")
+async def slash_bad_apostas(interaction: discord.Interaction):
+    """Mostra os piores apostadores"""
+    conn = conectar_futebol()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute(
+            "SELECT u.user_id, u.nome_discord, COUNT(a.fixture_id) as total_apostas, "
+            "SUM(CASE WHEN a.palpite = j.resultado AND j.finalizado = 1 THEN 1 ELSE 0 END) as acertos "
+            "FROM usuarios u "
+            "LEFT JOIN apostas a ON u.user_id = a.user_id "
+            "LEFT JOIN jogos j ON a.fixture_id = j.fixture_id "
+            "GROUP BY u.user_id, u.nome_discord "
+            "HAVING total_apostas >= 5 "
+            "ORDER BY acertos ASC, total_apostas DESC "
+            "LIMIT 5"
+        )
+        resultados = cursor.fetchall()
+        
+        if not resultados:
+            return await interaction.response.send_message(
+                "📉 Nenhum apostador encontrado com mínimo de 5 apostas!",
+                ephemeral=True
+            )
+            
+        embed = discord.Embed(
+            title="📉 Piores Apostadores",
+            description="Apostadores com menor taxa de acerto",
+            color=discord.Color.red()
+        )
+        
+        for i, usuario in enumerate(resultados, 1):
+            user_id = usuario["user_id"]
+            nome = usuario["nome_discord"] or f"User_{user_id}"
+            total = usuario["total_apostas"]
+            acertos = usuario["acertos"] or 0
+            taxa = (acertos / total * 100) if total > 0 else 0
+            
+            # Emojis para piores posições
+            emoji_ruim = "💀" if taxa < 20 else "😢" if taxa < 40 else "😅"
+            
+            embed.add_field(
+                name=f"#{i} {emoji_ruim} {nome}",
+                value=f"**{acertos}/{total} acertos** ({taxa:.1f}%)\n📊 {total} apostas totais",
+                inline=False
+            )
+            
+        embed.set_footer(text="💡 Melhore suas apostas研究中!")
+        await interaction.response.send_message(embed=embed)
+        logging.info(f"Bad apostas consultado por {interaction.user.name}")
+        
+    except Exception as e:
+        await interaction.response.send_message(
+            "❌ Erro ao consultar ranking de piores apostadores.",
+            ephemeral=True
+        )
+        logging.error(f"Erro no comando bad_apostas: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+@bot.tree.command(name="torcedores", description="Veja os torcedores do servidor")
+async def slash_torcedores(interaction: discord.Interaction):
+
+    embed = await gerar_embed_torcedores(interaction.guild)
+
+    if not embed:
+        return await interaction.response.send_message(
+            "Nenhum torcedor registrado no servidor.",
+            ephemeral=True
+        )
+
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="conquistas", description="Veja suas conquistas ou de outro usuário")
+async def slash_conquistas(
+    interaction: discord.Interaction,
+    membro: discord.Member = None
+):
+
+    alvo = membro or interaction.user
+
+    embed = await gerar_conquistas_embed(alvo, interaction.guild)
+
+    if not embed:
+        return await interaction.response.send_message(
+            "❌ Erro ao buscar conquistas.",
+            ephemeral=True
+        )
+
+    await interaction.response.send_message(
+        embed=embed,
+        ephemeral=True
+    )
+
+
+
 
 
 MAPEAMENTO_TIMES = {
@@ -198,7 +689,7 @@ EMOJI_TIMES = {
     "atletico-pr": "<:atlpr:1443398482516775055>",
     "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
     "remo": "<:Remo:1443399201655492708>",
-    "chapecoense" :"<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
+    "chapecoense": "<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
 
 
     # =======================
@@ -2161,24 +2652,160 @@ async def on_message(message):
         except Exception as e:
             logging.error(f"Erro ao salvar clip: {e}")
     
-    # =========================
+    # ===================
     #  Sistema de Artes
-    # =========================
+    # ===================
 
     if message.channel.id == CANAL_ARTES:
-        if message.attachments:
-            for attachments in message.attachments:
-                if attachments.content_type and "image" in attachments.content_type:
-
-                    con = conectar_vips()
-                    cur = con.cursor()
-                    cur.execute(
-                        "INSERT INTO artes_posts (message_id, usar_id, nome_discord, data_post)" \
-                        "VALUES (%s, %s, %s, NOW())",(message.id, message.author.id, str(message.author)))
-                    con.commit()
-                    con.close()
-                    view = ArtesView(message.id)
-                    await message.reply("Vote na arte 👇", view=view)
+        try:
+            logging.info(f"[ARTES] Nova mensagem detectada no canal de artes - User: {message.author} | ID: {message.id}")
+            
+            if message.attachments:
+                logging.info(f"[ARTES] Total de anexos: {len(message.attachments)}")
+                
+                for idx, attachments in enumerate(message.attachments):
+                    tamanho_mb = attachments.size / (1024 * 1024)
+                    logging.info(f"[ARTES] Verificando anexo {idx + 1}: {attachments.filename} | Tipo: {attachments.content_type} | Tamanho: {tamanho_mb:.2f}MB")
+                    
+                    if attachments.content_type and "image" in attachments.content_type:
+                        logging.info(f"[ARTES] ✅ {attachments.filename} é uma imagem válida. Processando primeira imagem apenas...")
+                        
+                        # ✅ VALIDAÇÃO DE TAMANHO DO ARQUIVO
+                        if attachments.size > MAX_FILE_SIZE_BYTES:
+                            logging.error(f"[ARTES] ❌ CRÍTICO - Arquivo muito grande! Tamanho: {tamanho_mb:.2f}MB (Máximo: 25MB)")
+                            try:
+                                await message.channel.send(f"❌ Arquivo muito grande! {tamanho_mb:.2f}MB (máximo: 25MB)")
+                            except:
+                                pass
+                            break
+                        
+                        if attachments.size > WARN_FILE_SIZE_BYTES:
+                            logging.warning(f"[ARTES] ⚠️ AVISO - Arquivo grande detectado: {tamanho_mb:.2f}MB (recomendado < 10MB). Processando com cautela...")
+                        
+                        # ✅ INSERIR NO BANCO DE DADOS
+                        try:
+                            con = conectar_vips()
+                            cur = con.cursor()
+                            logging.info(f"[ARTES] Conectado ao banco de dados com sucesso")
+                            
+                            cur.execute(
+                                "INSERT INTO artes_posts (message_id, user_id, nome_discord, data_post)" \
+                                "VALUES (%s, %s, %s, NOW())",(message.id, message.author.id, str(message.author)))
+                            con.commit()
+                            logging.info(f"[ARTES] ✅ Inserção no banco bem-sucedida - Message ID: {message.id} | User: {message.author}")
+                            con.close()
+                        except Exception as e:
+                            logging.error(f"[ARTES] ❌ CRÍTICO - Erro ao inserir no banco: {e} | {traceback.format_exc()}")
+                            try:
+                                await message.channel.send(f"❌ Erro ao registrar a arte no banco de dados: {e}")
+                            except:
+                                pass
+                            break
+                        
+                        # ✅ DOWNLOAD DA IMAGEM ANTES DE DELETAR A MENSAGEM
+                        imagem_file = None
+                        imagem_bytes = None
+                        try:
+                            logging.info(f"[ARTES] 📥 Iniciando download: {attachments.filename} | {tamanho_mb:.2f}MB | Timeout: {DOWNLOAD_TIMEOUT}s")
+                            
+                            # Fazer download com timeout
+                            imagem_bytes = await asyncio.wait_for(attachments.read(), timeout=DOWNLOAD_TIMEOUT)
+                            bytes_reais = len(imagem_bytes)
+                            logging.info(f"[ARTES] ✅ Download bem-sucedido - Bytes lidos: {bytes_reais / (1024 * 1024):.2f}MB")
+                            
+                            # Criar arquivo Discord
+                            bytes_io = BytesIO(imagem_bytes)
+                            imagem_file = discord.File(bytes_io, filename=attachments.filename)
+                            logging.debug(f"[ARTES] Arquivo enviado: {imagem_file.filename}")
+                            
+                        except asyncio.TimeoutError:
+                            logging.error(f"[ARTES] ❌ CRÍTICO - TIMEOUT no download após {DOWNLOAD_TIMEOUT}s: {attachments.filename}")
+                            try:
+                                await message.channel.send(f"❌ Download expirou (timeout). Arquivo muito grande ou conexão lenta.")
+                            except:
+                                pass
+                            break
+                        except Exception as e:
+                            logging.error(f"[ARTES] ❌ CRÍTICO - Erro ao fazer download: {e} | {traceback.format_exc()}")
+                            try:
+                                await message.channel.send(f"❌ Erro ao baixar imagem: {e}")
+                            except:
+                                pass
+                            break
+                        finally:
+                            # Limpar referência se falhar
+                            if imagem_bytes is None:
+                                logging.warning(f"[ARTES] ⚠️ imagem_bytes é None, algo falhou no download")
+                        
+                        # ✅ Cria Embed com a imagem (usa attachment em vez de URL)
+                        try:
+                            embed = discord.Embed(title=f"Arte de {message.author}", color=discord.Color.purple())
+                            embed.set_image(url=f"attachment://{attachments.filename}")
+                            logging.info(f"[ARTES] ✅ Embed criado com sucesso")
+                            
+                            # ✅ Envia mensagem do bot com os botões E a imagem como anexo
+                            view = ArtesView(message.id)
+                            logging.info(f"[ARTES] 🚀 Enviando mensagem para Discord...")
+                            sent_msg = await message.channel.send(embed=embed, view=view, file=imagem_file)
+                            logging.info(f"[ARTES] ✅ Mensagem do bot enviada com sucesso - Sent Message ID: {sent_msg.id}")
+                        except discord.Forbidden as e:
+                            logging.error(f"[ARTES] ❌ CRÍTICO - Sem permissão para enviar mensagem: {e}")
+                            try:
+                                await message.channel.send(f"❌ Erro: Sem permissão para enviar mensagem no embed")
+                            except:
+                                pass
+                            break
+                        except discord.HTTPException as e:
+                            logging.error(f"[ARTES] ❌ CRÍTICO - Erro HTTP ao enviar mensagem: {e} | {traceback.format_exc()}")
+                            try:
+                                await message.channel.send(f"❌ Erro de conexão ao enviar mensagem: {e}")
+                            except:
+                                pass
+                            break
+                        except Exception as e:
+                            logging.error(f"[ARTES] ❌ CRÍTICO - Erro desconhecido ao enviar embed/mensagem: {e} | {traceback.format_exc()}")
+                            try:
+                                await message.channel.send(f"❌ Erro desconhecido ao processar: {e}")
+                            except:
+                                pass
+                            break
+                        
+                        # ✅ Deleta a mensagem original (agora a imagem já está hospedada no Discord)
+                        await asyncio.sleep(1)  # Delay maior para garantir que Discord processou tudo
+                        try:
+                            logging.info(f"[ARTES] 🗑️ Iniciando deleção da mensagem original - Message ID: {message.id}")
+                            await message.delete()
+                            logging.info(f"[ARTES] ✅ Mensagem original deletada com sucesso")
+                        except discord.Forbidden as e:
+                            logging.warning(f"[ARTES] ⚠️ Sem permissão para deletar mensagem: {e}")
+                            try:
+                                await message.channel.send(f"⚠️ Não consegui deletar a msg original (sem permissão), mas registrei a arte.")
+                            except:
+                                pass
+                        except discord.NotFound as e:
+                            logging.warning(f"[ARTES] ⚠️ Mensagem não encontrada ou já foi deletada: {e}")
+                        except discord.HTTPException as e:
+                            logging.warning(f"[ARTES] ⚠️ Erro HTTP ao deletar mensagem: {e}")
+                        except Exception as e:
+                            logging.error(f"[ARTES] ❌ Erro ao deletar mensagem original: {e} | {traceback.format_exc()}")
+                        
+                        # SAIR DO LOOP APÓS PROCESSAR A PRIMEIRA IMAGEM
+                        logging.info(f"[ARTES] 🎉 Ciclo de arte completado com sucesso. Saindo do loop.")
+                        break
+                    else:
+                        logging.warning(f"[ARTES] ⚠️ Anexo {idx + 1} não é uma imagem: {attachments.filename} | Tipo: {attachments.content_type}")
+            else:
+                logging.warning(f"[ARTES] ⚠️ Mensagem sem anexos detectada no canal de artes - User: {message.author}")
+        except Exception as e:
+            logging.error(f"[ARTES] 🔴 ERRO CRÍTICO - Falha na seção ARTES: {e} | {traceback.format_exc()}")
+            try:
+                await message.channel.send(f"🔴 Erro crítico ao processar arte: {type(e).__name__}")
+            except:
+                logging.error(f"[ARTES] Falha ao enviar mensagem de erro ao usuário")
+            try:
+                await message.channel.send(f"🔴 Erro crítico ao processar arte: {type(e).__name__}")
+            except:
+                logging.error(f"[ARTES] Falha ao enviar mensagem de erro ao usuário")
     
     global ultimo_reagir
 
@@ -2867,7 +3494,11 @@ async def on_voice_state_update(member, before, after):
                     acertos_consecutivos,
                     fez_doacao,
                     tem_vip,
-                    tempo_total
+                    tempo_em_call=tempo_total,
+                    mencionou_miisha=False,
+                    tocou_musica=False,
+                    mencoes_bot=0,
+                    azarao_vitoria=False
                 )
                 
                 logging.info(f"Conquistas processadas para {member.name} (tempo em call: {tempo_total}s)")
@@ -4960,6 +5591,7 @@ MAPEAMENTO_TIMES = {
     "chapecoense sc": "chapecoense",
 
     # Mirassol
+    "mirassol": "mirassol",
     "mirassol sp": "mirassol",
 
     # Juventude
@@ -4980,10 +5612,10 @@ MAPEAMENTO_TIMES = {
     "fortaleza": "fortaleza",
 
     # Athletico Paranaense
-    "atlético paranaense": "atletico paranaense",
-    "atletico pr": "atletico paranaense",
-    "athletico pr": "atletico paranaense",
-    "athletico paranaense": "atletico paranaense",
+    "atlético paranaense": "athletico paranaense",
+    "atletico pr": "athletico paranaense",
+    "athletico pr": "athletico paranaense",
+    "athletico paranaense": "athletico paranaense",
 
     # Coritiba
     "coritiba": "coritiba",
@@ -5183,6 +5815,10 @@ def get_estadio_time_casa(nome_time_api: str):
         "mirassol": {
             "estadio": "José Maria de Campos Maia",
             "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/José%20Maria%20de%20Campos%20Maia.jpg"
+        },
+        "chapecoense": {
+            "estadio": "Arena Condá",
+            "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Arena%20Conda.jpg"
         }
     }
 
@@ -5809,7 +6445,6 @@ async def verificar_gols():
 
 PRECOS = {
     "jinxed_vip": 1000,
-    "caixa_misteriosa": 50,
     "caixinha": 50,
     "clown_bet": 60,
     "emoji_personalizado": 4500,
@@ -5875,39 +6510,37 @@ CANAL_PERMITIDO_ID = 1380564680774385724
 # Cooldown para comando !troll
 ultimo_troll = {}
 
-@bot.command()
-async def loja(ctx):
-    if ctx.channel.id != CANAL_PERMITIDO_ID:
-        return await ctx.send(f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.")  
+def gerar_embed_loja():
     embed = discord.Embed(
         title="🛒 Loja de Pontos",
         description="Use seus pontos para comprar benefícios!",
         color=discord.Color.blue()
     )
-
+    
     embed.add_field(
         name="🎭 Modo Clown — 60 pontos",
-        value="• Multiplica pontos por 6 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use `clown_bet`",
+        value="• Multiplica pontos por 6 se acertar\n• Mas perde 4x se errar\n• Uso único\n• Use `/comprar`",
         inline=False
     )
-
+    
     embed.add_field(
         name="<a:809469heartchocolate:1466494908243120256> Caixa Surpresa — 50 pontos",
-        value="• Pode receber pontos aleatórios de -100 a 300\n• Pode vir até negativo 👀\n• Use `caixinha`",
+        value="• Pode receber pontos aleatórios de -100 a 300\n• Pode vir até negativo 👀\n• Use `/comprar`",
         inline=False
     )
-
+    
     embed.add_field(
         name="<:discotoolsxyzicon_6:1444750406763679764> Jinxed VIP — 1000 pontos",
-        value="• Garante 15 dias do cargo VIP\n• Use `jinxed_vip`",
+        value="• Garante 15 dias do cargo VIP\n• Use `/comprar`",
         inline=False
     )
-
+    
     embed.add_field(
         name="<:312424paint:1467578829705842709> Emoji Personalizado — 4500 pontos",
         value="• Compre e registre seu emoji personalizado\n• Use: `!comprar emoji_personalizado`\n• Depois use `!setemoji <emoji>` para registrar",
         inline=False
     )
+    
     embed.add_field(
         name="<:827557party:1467578831106871610> Comemoração de Vitória — 1000 pontos",
         value="• Escolha um time.\n• Se ele vencer o próximo jogo, o bot posta um GIF festejando além de comemorar!\n• Use: `!comprar comemoracao` e depois `!comemorar <time>`",
@@ -5919,19 +6552,100 @@ async def loja(ctx):
         value="• Mute alguém por 3 minutos usando !troll\n• Funciona mesmo se o bot não tiver permissão\n• Uso único\n• Use: `!comprar mute_jinxed`",
         inline=False
     )
+    
     embed.add_field(
-        name="<a:561879carrotstare:1467578826614771746> Apelido — 1500 pontos",
+        name="<:561879carrotstare:1467578826614771746> Apelido — 1500 pontos",
         value="• Troque o apelido de alguém usando !apelido\n• Uso único\n• Use: `!comprar apelido`",
         inline=False
     )
+    
     embed.add_field(
         name="<:7466megareverse:1467578833279385774> Inverter Pontos — 700 pontos",
         value="• Inverte o resultado da próxima aposta de um usuário\n• Se ele ia ganhar, vai perder\n• Se ele ia perder, vai ganhar\n• Use: `!comprar inverter` e depois `!inverter @usuario`",
         inline=False
     )
-
+    
     embed.set_footer(text="Use: !comprar <item>")
-    await ctx.send(embed=embed)
+    return embed
+
+async def executar_compra(member, item, guild):
+    """Função completa para processar compras"""
+    PRECOS = {
+        "jinxed_vip": 1000,
+        "caixa_misteriosa": 50,
+        "caixinha": 50,
+        "clown_bet": 60,
+        "emoji_personalizado": 4500,
+        "comemoracao":1000,
+        "mute_jinxed": 1500,
+        "apelido": 1500,
+        "inverter": 700
+    }
+    
+    item_lower = item.lower()
+    if item_lower not in PRECOS:
+        return False, "<:3894307:1443956354698969149> Item não encontrado! Use `/loja` para ver os itens."
+    
+    preco = PRECOS[item_lower]
+    pontos = pegar_pontos(member.id)
+    
+    if pontos < preco:
+        return False, f"<:Jinxsip1:1390638945565671495> Você precisa de {preco} pontos para comprar este item. Você tem {pontos} pontos."
+    
+    # Processar compra
+    adicionar_pontos_db(member.id, -preco)
+    
+    # Lógica específica para cada item
+    if item_lower == "jinxed_vip":
+        # Lógica para VIP
+        cargo_vip = discord.utils.get(guild.roles, name="Jinxed Vip")
+        if cargo_vip:
+            await member.add_roles(cargo_vip)
+            return True, f"✅ Você agora é **VIP** por 15 dias! 🎉"
+    
+    elif item_lower == "clown_bet":
+        # Lógica para Clown Bet
+        return True, f"✅ Você comprou **Modo Clown**! Use na próxima aposta para multiplicar seus pontos!"
+    
+    elif item_lower in ["caixa_misteriosa", "caixinha"]:
+        # Lógica para Caixa Surpresa
+        import random
+        pontos_ganhos = random.randint(-200, 300)
+        adicionar_pontos_db(member.id, pontos_ganhos)
+        return True, f"🎁 Você ganhou **{pontos_ganhos} pontos** na caixa surpresa!"
+    
+    elif item_lower == "inverter":
+        # Lógica para Inverter
+        return True, f"✅ Você comprou **Inverter Pontos**! Use `/inverter @usuario` para inverter a próxima aposta de alguém."
+    
+    elif item_lower == "mute_jinxed":
+        # Lógica para Mute
+        return True, f"✅ Você comprou **Mute Jinxed**! Use `/troll @usuario` para mutar alguém por 3 minutos."
+    
+    elif item_lower == "apelido":
+        # Lógica para Apelido
+        return True, f"✅ Você comprou **Apelido**! Use `/apelido @usuario novo_apelido` para trocar o apelido de alguém."
+    
+    elif item_lower == "comemoracao":
+        # Lógica para Comemoração
+        return True, f"✅ Você comprou **Comemoração de Vitória**! Use `/comemorar time` para comemorar quando seu time vencer."
+    
+    elif item_lower == "emoji_personalizado":
+        # Lógica para Emoji Personalizado
+        return True, f"✅ Você comprou **Emoji Personalizado**! Use `/setemoji` para registrar seu emoji personalizado."
+    
+    else:
+        return True, f"✅ Você comprou **{item}** por {preco} pontos!"
+
+@bot.command()
+async def loja(ctx):
+
+    if ctx.channel.id != CANAL_PERMITIDO_ID:
+        return await ctx.send(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>."
+        )
+
+    await ctx.send(embed=gerar_embed_loja())
 
 
 
@@ -7261,45 +7975,135 @@ async def top_apostas(ctx):
 
 
 CANAL_COMANDOS = 1380564680774385724
-@bot.command()
-async def bad_apostas(ctx):
-    async with ctx.typing():
-        conn = conectar_futebol()
-        cursor = conn.cursor()
+
+@bot.tree.command(name="dar_vip", description="Conceder VIP a um membro")
+@app_commands.default_permissions(administrator=True)
+
+@app_commands.describe(
+    membro="Membro que receberá o VIP",
+    duracao="Exemplo: 30d, 2m, 1y"
+)
+
+async def dar_vip_slash(interaction: discord.Interaction, membro: discord.Member, duracao: str):
+
+    await interaction.response.defer(ephemeral=True)  
+    # 👆 evita erro se o banco demorar
+
+    cargo_vip = discord.utils.get(interaction.guild.roles, name="Jinxed Vip")
+
+    if not cargo_vip:
+        await interaction.followup.send("❌ Cargo 'Jinxed Vip' não encontrado.")
+        return
+
+    duracao = duracao.strip().lower()
+
+    if len(duracao) < 2 or not duracao[:-1].isdigit() or duracao[-1] not in {"d", "m", "y"}:
+        await interaction.followup.send("❌ Formato inválido! Use 30d, 2m ou 1y.")
+        return
+
+    valor = int(duracao[:-1])
+    unidade = duracao[-1]
+
+    if unidade == "d":
+        delta = timedelta(days=valor)
+    elif unidade == "m":
+        delta = timedelta(days=30 * valor)
+    else:
+        delta = timedelta(days=365 * valor)
+
+    if cargo_vip in membro.roles:
+        await interaction.followup.send(f"❌ {membro.display_name} já possui o cargo VIP.")
+        return
+
+    await membro.add_roles(cargo_vip, reason="Concessão de VIP")
+
+    try:
+        conexao = conectar_vips()
+        cursor = conexao.cursor()
+
+        data_inicio = datetime.now(timezone.utc)
+        data_fim = data_inicio + delta
+
+        cursor.execute(
+            """
+            INSERT INTO vips (id, nome_discord, data_inicio, data_fim)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                nome_discord = VALUES(nome_discord),
+                data_inicio = VALUES(data_inicio),
+                data_fim = VALUES(data_fim)
+            """,
+            (membro.id, f"{membro.name}#{membro.discriminator}", data_inicio, data_fim)
+        )
+
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+
+    except Exception as e:
+        logging.error(f"Erro ao salvar VIP: {e}")
+
+    try:
+        await membro.send(f"<:Jinx_Watching:1390380695712694282> Você recebeu VIP por {duracao}!")
+    except:
+        pass
+
+    await interaction.followup.send(
+        f"<:Jinx_Watching:1390380695712694282> {membro.display_name} agora é VIP por {duracao}."
+    )
+
+
+@bot.tree.command(name="bad_apostas", description="Veja os piores apostadores")
+async def slash_bad_apostas(interaction: discord.Interaction):
+
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+
+    try:
         cursor.execute(
             "SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos ASC LIMIT 5"
         )
         bad = cursor.fetchall()
-        cursor.close()
-        conn.close()
 
         if not bad:
-            return await ctx.send("⚠️ Nenhum usuário possui pontos.")
+            return await interaction.response.send_message(
+                "⚠️ Nenhum usuário possui pontos.",
+                ephemeral=True
+            )
 
-    embed = discord.Embed(
-        title="<a:1846_TaketheL:1457780626282385448> Top 5 Piores Apostadores",
-        description="Quando o palpite é emoção e não razão…",
-        color=discord.Color.red()
-    )
+        embed = discord.Embed(
+            title="<a:1846_TaketheL:1457780626282385448> Top 5 Piores Apostadores",
+            description="Quando o palpite é emoção e não razão…",
+            color=discord.Color.red()
+        )
 
-    ranking = ""
-    emojis = ["💀", "🥴", "🤡", "😵", "🚑"]
+        emojis = ["💀", "🥴", "🤡", "😵", "🚑"]
+        ranking = ""
 
-    for i, (nome, pontos) in enumerate(bad):
-        ranking += f"{emojis[i]} **{nome}** — `{pontos} pontos`\n"
+        for i, (nome, pontos) in enumerate(bad):
+            ranking += f"{emojis[i]} **{nome}** — `{pontos} pontos`\n"
 
-    embed.add_field(
-        name="📉 Ranking Atual\n",
-        value=ranking,
-        inline=False
-    )
+        embed.add_field(
+            name="📉 Ranking Atual",
+            value=ranking,
+            inline=False
+        )
 
-    embed.set_footer(
-        text=f"Solicitado por {ctx.author.display_name}"
-    )
+        embed.set_footer(text=f"Solicitado por {interaction.user.display_name}")
 
-    await ctx.send(embed=embed)
-    logging.info(f"Usuário {ctx.author} solicitou ver os 5 piores apostadores.")
+        await interaction.response.send_message(embed=embed)
+
+    except Exception as e:
+        logging.error(f"Erro no slash_bad_apostas: {e}")
+
+        await interaction.response.send_message(
+            "❌ Erro ao consultar ranking.",
+            ephemeral=True
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
 
 @bot.command()
 async def time(ctx, *, nome_time: str):
@@ -7421,54 +8225,68 @@ async def lista_times(ctx):
 
 
 #Mostrar os torcedores do servidor
+async def gerar_embed_torcedores(guild):
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT user_id, time_normalizado FROM times_usuarios")
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    if not rows:
+        return None
+
+    torcedores = {}
+
+    for user_id, time_normalizado in rows:
+        torcedores.setdefault(time_normalizado, []).append(user_id)
+
+    embed = discord.Embed(
+        title="🏟️ Torcedores por Time",
+        color=discord.Color.blue()
+    )
+
+    DISPLAY_NOMES = {
+        "galo": "Atlético-MG",
+        "sao paulo": "São Paulo",
+        "gremio": "Grêmio",
+        "ceara": "Ceará",
+        "vitoria": "Vitória",
+        "atletico paranaense": "Athletico-PR",
+        "lanus": "Lanús",
+    }
+
+    itens = []
+
+    for time, usuarios in torcedores.items():
+        base = time.strip().lower()
+        display = DISPLAY_NOMES.get(base, time.title())
+        emoji = EMOJI_TIMES.get(base) or EMOJI_TIMES.get(base.replace(" ", "_")) or "⚽"
+        mencoes = "\n".join(f"<@{uid}>" for uid in usuarios)
+
+        itens.append((display, emoji, mencoes))
+
+    itens.sort(key=lambda x: x[0])
+
+    for display, emoji, mencoes in itens:
+        embed.add_field(
+            name=f"{emoji} | {display}",
+            value=mencoes,
+            inline=False
+        )
+
+    return embed
+
 @bot.command()
 async def torcedores(ctx):
-    try:
-        conn = conectar_futebol()
-        cursor = conn.cursor()
+    embed = await gerar_embed_torcedores(ctx.guild)
 
-        cursor.execute("SELECT user_id, time_normalizado FROM times_usuarios")
-        rows = cursor.fetchall()
-        if not rows:
-            return await ctx.send("Nenhum torcedor registrado no servidor.")
-        
-        torcedores = {}
+    if not embed:
+        return await ctx.send("Nenhum torcedor registrado no servidor.")
 
-        for user_id, time_normalizado in rows:
-            if time_normalizado not in torcedores:
-                torcedores[time_normalizado] = []
-            torcedores[time_normalizado].append(user_id)
-        embed = discord.Embed(
-            title="🏟️ Torcedores por Time",
-            color=discord.Color.blue()
-        )
-        DISPLAY_NOMES = {
-            "galo": "Atlético-MG",
-            "sao paulo": "São Paulo",
-            "gremio": "Grêmio",
-            "ceara": "Ceará",
-            "vitoria": "Vitória",
-            "atletico paranaense": "Athletico-PR",
-            "lanus": "Lanús",
-        }
-        itens = []
-        for time, usuarios in torcedores.items():
-            base = time.strip().lower()
-            display = DISPLAY_NOMES.get(base, time.title())
-            emoji = EMOJI_TIMES.get(base) or EMOJI_TIMES.get(base.replace(" ", "_")) or "⚽"
-            mencoes = "\n".join(f"<@{uid}>" for uid in usuarios)
-            itens.append((display, emoji, mencoes))
-        itens.sort(key=lambda x: x[0])
-        for display, emoji, mencoes in itens:
-            embed.add_field(name=f"{emoji} | {display}", value=mencoes, inline=False)
-        await ctx.send(embed=embed)
-        logging.info(f"Usuário {ctx.author} solicitou a lista de torcedores.")
-
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        logging.info(f"Ocorreu um erro ao listar os torcedores: {e}")
-        await ctx.send(f"Ocorreu um erro ao listar os torcedores: {e}")
+    await ctx.send(embed=embed)
 
 @bot.event
 async def on_member_remove(member):
@@ -7885,7 +8703,11 @@ async def entregar(ctx, membro: discord.Member, valor: int):
             acertos_consecutivos=0,
             fez_doacao=(valor == 50),
             tem_vip=False,
-            tempo_em_call=0
+            tempo_em_call=0,
+            mencionou_miisha=False,
+            tocou_musica=False,
+            mencoes_bot=0,
+            azarao_vitoria=False
         )
 
         embed = discord.Embed(
@@ -7906,10 +8728,9 @@ async def entregar(ctx, membro: discord.Member, valor: int):
 # ============================================================
 
 
-@bot.command()
-async def conquistas(ctx, membro: discord.Member = None):
-    alvo = membro or ctx.author
+async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
     user_id = alvo.id
+    
     
 
     try:
@@ -8015,7 +8836,11 @@ async def conquistas(ctx, membro: discord.Member = None):
             acertos_consecutivos,
             fez_doacao,
             tem_vip,
-            tempo_em_call
+            tempo_em_call=tempo_em_call,
+            mencionou_miisha=False,
+            tocou_musica=False,
+            mencoes_bot=0,
+            azarao_vitoria=False
         )
 
         # =========================
@@ -8066,14 +8891,27 @@ async def conquistas(ctx, membro: discord.Member = None):
 
         embed.set_footer(text="Use !conquistas para acompanhar seu progresso")
 
-        await ctx.send(embed=embed)
+        return embed
+
 
     except Exception as e:
         logging.exception(
             "Erro ao buscar conquistas de %s",
             alvo
         )
-        await ctx.send("❌ Ocorreu um erro ao buscar suas conquistas.")
+        return None
+
+@bot.command()
+async def conquistas(ctx, membro: discord.Member = None):
+
+    alvo = membro or ctx.author
+
+    embed = await gerar_conquistas_embed(alvo, ctx.guild)
+
+    if not embed:
+        return await ctx.send("❌ Ocorreu um erro ao buscar suas conquistas.")
+
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def fuck_you(ctx, member: discord.Member = None):
@@ -8706,6 +9544,24 @@ class ArtesView(discord.ui.View):
         con = conectar_vips()
         cur = con.cursor()
         try:
+            # Buscar Autor da Arte
+            cur.execute(
+                "SELECT user_id, COALESCE(nome_discord, '') FROM artes_posts WHERE message_id = %s",
+                (self.message_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                await interaction.response.send_message("Erro: Arte não encontrada no banco de dados.", ephemeral=True)
+                return
+            author_id = row[0]
+            author_name = row[1]
+            # 2. VERIFICA SE O USUÁRIO É O AUTOR
+            if interaction.user.id == author_id:
+                await interaction.response.send_message(
+                    "Você não pode votar na sua própria arte!",
+                    ephemeral=True
+                )
+                return
             # Verifica se o usuário já votou nessa mensagem
             cur.execute(
                 "SELECT 1 FROM artes_votos WHERE message_id = %s AND voter_id = %s",
@@ -8743,7 +9599,7 @@ class ArtesView(discord.ui.View):
 
             # Recupera o autor da postagem para dar os pontos a quem foi votado
             cur.execute(
-                "SELECT user_id, COALESCE(user_name, '') FROM artes_posts WHERE message_id = %s",
+                "SELECT user_id, COALESCE(nome_discord, '') FROM artes_posts WHERE message_id = %s",
                 (self.message_id,)
             )
             row = cur.fetchone()
@@ -8797,6 +9653,10 @@ async def verificar_melhor_do_mes():
     if hoje.day != 1:  # Só roda dia 1
         return
 
+    logging.info("🎬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    logging.info("✨ INICIANDO: Verificação do Melhor do Mês!")
+    logging.info("🎬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
     con = conectar_vips()
     cur = con.cursor()
 
@@ -8811,29 +9671,109 @@ async def verificar_melhor_do_mes():
 
     resultado = cur.fetchone()
 
-    if resultado:
-        user_id, message_id, coracoes = resultado
-        guild = bot.get_guild(1380564679084081175)
+    if not resultado:
+        logging.info("👀 Analisando posts... Hmm...")
+        logging.info("💀 Nenhum post encontrado no mês anterior. RIP.")
+        con.close()
+        return
+    
+    user_id, message_id, coracoes = resultado
+    
+    if coracoes == 0:
+        logging.info("💔 PLOT TWIST: Todos os posts receberam ZERO curtidas!")
+        logging.info("😭 Que injustiça... O mês foi um fracasso total.")
+        con.close()
+        return
+    
+    logging.info(f"🔍 Post encontrado! User ID: {user_id} | Coracões: {coracoes} ❤️")
+    
+    guild = bot.get_guild(1380564679084081175)
+    if not guild:
+        logging.error("⚠️  ERRO: Guild não encontrada ao verificar melhor do mês.")
+        con.close()
+        return
+    
+    logging.info(f"✅ Guild carregada com sucesso!")
+    
+    member = guild.get_member(user_id)
+    if not member:
+        logging.error(f"⚠️  ERRO: Membro {user_id} não encontrado no servidor.")
+        con.close()
+        return
+    
+    logging.info(f"🎭 Membro encontrado: {member.display_name}")
+    
+    cargo = discord.utils.get(guild.roles, name="Artista")
+    if not cargo:
+        logging.error("⚠️  ERRO: Cargo 'Artista' não encontrado no servidor.")
+        con.close()
+        return
+    
+    logging.info(f"🏆 Cargo 'Artista' localizado! Preparando celebração...")
+
+    # HORA DA CELEBRAÇÃO!
+    logging.info("🎉 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    logging.info(f"🌟 VENCEDOR ESCOLHIDO: {member.display_name}! 🌟")
+    logging.info(f"📊 Coracões: {coracoes} ❤️")
+    logging.info("🎉 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    try:
+        await member.add_roles(cargo)
+        logging.info(f"👑 Cargo 'Artista' adicionado ao {member.display_name}!")
+        
+        adicionar_pontos_db(user_id, 200, str(member))
+        logging.info(f"💰 +200 pontos creditados! Saldo atualizado.")
+
+        mensagem_celebracao = (
+            f"🎨 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<:534480paint:1471217810897113281> PARABÉNS ABSOLUTO! 🏆\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"Sua arte foi SENSACIONAL! 🌟\n"
+            f"Total de ❤️: {coracoes} coracões abrilhantados!\n\n"
+            f"Prêmios conquistados:\n"
+            f"👑 Cargo **Artista**\n"
+            f"💰 +200 pontos\n\n"
+            f"Você é o destaque do mês! Merecia mesmo! ✨"
+        )
+        
+        await member.send(mensagem_celebracao)
+        logging.info(f"📩 Mensagem de celebração enviada para {member.display_name}!")
+        
+        # Aguardar um pouco para garantir que o cargo seja propagado
+        await asyncio.sleep(1)
+        
+        # Recarregar membro do servidor para sincronizar cache
         member = guild.get_member(user_id)
-
-        cargo = discord.utils.get(guild.roles, name="Artista")
-
-        if member and cargo:
-            await member.add_roles(cargo)
-            adicionar_pontos_db(user_id, 200, str(member))
-
-            await member.send(
-                f"🎨 Parabéns! Sua arte foi a mais curtida do mês com {coracoes} ❤️!\n"
-                f"Você recebeu o cargo **Artista** e +200 pontos!"
-            )
+        if not member:
+            logging.error(f"⚠️  Erro ao recarregar membro {user_id} para processar conquistas")
+        else:
             # Processar conquistas para garantir que a conquista 'artista' seja registrada
             try:
-                await processar_conquistas(member, 0, 0, False, False)
-                logging.info(f"Conquistas processadas para {member.display_name} após receber Artista do Mês")
+                await processar_conquistas(
+                    member,
+                    mensagens_semana=0,
+                    acertos_consecutivos=0,
+                    fez_doacao=False,
+                    tem_vip=False,
+                    tempo_em_call=0,
+                    mencionou_miisha=False,
+                    tocou_musica=False,
+                    mencoes_bot=0,
+                    azarao_vitoria=False
+                )
+                logging.info(f"🎖️  Conquistas processadas para {member.display_name} após receber Artista do Mês!")
             except Exception as e:
-                logging.error(f"Erro ao processar conquistas para {member.display_name}: {e}")
+                logging.error(f"⚠️  Erro ao processar conquistas para {member.display_name}: {e}")
+                logging.error(f"📋 Detalhes: {traceback.format_exc()}")
 
-    con.close()
+    except Exception as e:
+        logging.error(f"💥 ERRO CRÍTICO ao premiar {member.display_name}: {e}")
+        logging.error(f"📋 Detalhes: {traceback.format_exc()}")
+    
+    finally:
+        con.close()
+        logging.info("✅ Conexão encerrada. Ciclo completo!")
+        logging.info("🎬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
 
 
