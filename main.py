@@ -1,6 +1,7 @@
 from calendar import c
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 import os
 from dotenv import load_dotenv
 import asyncio
@@ -143,9 +144,11 @@ GUILD_ID = 1380564679084081175  # ID do servidor principal
 # Sincronizar comandos quando o bot estiver pronto
 @bot.event
 async def setup_hook():
-    guild = discord.Object(id=GUILD_ID)
+    guild = bot.get_guild(GUILD_ID)
     await bot.tree.sync(guild=guild)
     logging.info(f"✅ Slash commands sincronizados na guild {GUILD_ID}!")
+
+    
     
 # Evento de erro para slash commands
 @bot.tree.error
@@ -177,9 +180,6 @@ async def slash_pontos(interaction: discord.Interaction):
         f"<a:565724creditcard:1467671052053254235> {interaction.user.mention}, você tem **{pontos} pontos**!",
         ephemeral=True
     )
-@bot.tree.command(name="teste")
-async def teste(interaction: discord.Interaction):
-    await interaction.response.send_message("funcionando")
 
 @bot.tree.command(name="loja", description="Veja os itens disponíveis na loja")
 async def slash_loja(interaction: discord.Interaction):
@@ -223,11 +223,6 @@ async def slash_comprar(interaction: discord.Interaction, item: str):
         msg,
         ephemeral=True
     )
-    
-CANAL_PERMITIDO_ID = 1380564680774385724
-
-
-
 
 
 
@@ -241,49 +236,81 @@ async def slash_time(interaction: discord.Interaction, nome: str):
             ephemeral=True
         )
     
-    # Mapeamento de times para cargos
-    times_cargos = {
-        "flamengo": "Flamengo",
-        "vasco": "Vasco", 
-        "corinthians": "Corinthians",
-        "palmeiras": "Palmeiras",
-        "santos": "Santos",
-        "são paulo": "São Paulo",
-        "sao paulo": "São Paulo",
-        "fluminense": "Fluminense",
-        "botafogo": "Botafogo",
-        "gremio": "Grêmio",
-        "internacional": "Internacional",
-        "cruzeiro": "Cruzeiro",
-        "atlético mg": "Atlético Mineiro",
-        "atletico mg": "Atlético Mineiro"
-    }
-    
     nome_normalizado = nome.strip().lower()
-    cargo_nome = times_cargos.get(nome_normalizado)
     
-    if not cargo_nome:
+    # Verificar no MAPEAMENTO_TIMES completo
+    time_key = MAPEAMENTO_TIMES.get(nome_normalizado)
+    if not time_key:
         await interaction.response.send_message(
             "❌ Time não encontrado! Use `/lista_times` para ver os times disponíveis.",
             ephemeral=True
         )
         return
     
+    # Mapear time_key para nome do cargo (title case)
+    cargo_nome = time_key.replace("_", " ").title()
+    
+    # Mapeamento especial para nomes específicos de cargos
+    cargos_especiais = {
+        "sao paulo": "São Paulo",
+        "galo": "Atlético Mineiro",
+        "gremio": "Grêmio",
+        "athletico paranaense": "Athletico Paranaense",
+        "ceara": "Ceará",
+        "vitoria": "Vitória"
+    }
+    
+    if time_key in cargos_especiais:
+        cargo_nome = cargos_especiais[time_key]
+    
     guild = interaction.guild
     member = interaction.user
     
-    # Remover outros cargos de time
-    for time_cargo in times_cargos.values():
-        cargo = discord.utils.get(guild.roles, name=time_cargo)
+    # Conectar ao banco e verificar se já tem time
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+    
+    # Verificar se usuário já tem um time
+    cursor.execute(
+        "SELECT time_normalizado FROM times_usuarios WHERE user_id = %s",
+        (member.id,)
+    )
+    resultado = cursor.fetchone()
+    
+    if resultado:
+        cursor.close()
+        conn.close()
+        return await interaction.response.send_message(
+            f"⚽ {member.mention}, você já escolheu um time (**{resultado[0].title()}**).\n"
+            f"Use `/sair_time` para trocar.",
+            ephemeral=True
+        )
+    
+    # Inserir novo time no banco
+    cursor.execute("""
+        INSERT INTO times_usuarios (user_id, time_normalizado)
+        VALUES (%s, %s)
+        ON DUPLICATE KEY UPDATE time_normalizado = VALUES(time_normalizado)
+    """, (member.id, time_key))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    # Remover outros cargos de time (usando IDs do ROLE_IDS_TIMES)
+    for time_key_loop, role_id in ROLE_IDS_TIMES.items():
+        cargo = guild.get_role(role_id)
         if cargo and cargo in member.roles:
             await member.remove_roles(cargo)
     
-    # Adicionar cargo do time escolhido
-    cargo = discord.utils.get(guild.roles, name=cargo_nome)
+    # Adicionar cargo do time escolhido (usando ID do ROLE_IDS_TIMES)
+    role_id = ROLE_IDS_TIMES.get(time_key)
+    if role_id:
+        cargo = guild.get_role(role_id)
     if cargo:
         await member.add_roles(cargo)
         await interaction.response.send_message(
-            f"✅ {member.mention}, você agora torce para **{cargo_nome}**! ⚽",
+                f"<a:995589misathumb:1443956356846719119> {member.mention}, você agora torce para **{cargo.name}**! ⚽",
             ephemeral=True
         )
         logging.info(f"{member.name} entrou no time {cargo_nome} via slash command.")
@@ -292,8 +319,9 @@ async def slash_time(interaction: discord.Interaction, nome: str):
             f"❌ Cargo do time {cargo_nome} não encontrado no servidor.",
             ephemeral=True
         )
+    
 
-@bot.tree.command(name="times", description="Veja todos os times disponíveis")
+@bot.tree.command(name="lista_times", description="Veja todos os times disponíveis")
 async def slash_lista_times(interaction: discord.Interaction):
 
     def emoji_do_time(nome: str) -> str:
@@ -307,15 +335,75 @@ async def slash_lista_times(interaction: discord.Interaction):
         return "❓"
 
     times = sorted(ROLE_IDS_TIMES.keys())
-    linhas = [f"{emoji_do_time(t)} | {t.title()}" for t in times]
 
     embed = discord.Embed(
         title="📋 Times Disponíveis",
-        description="\n".join(linhas),
+        description="Escolha seu time usando o comando correspondente!",
         color=discord.Color.blue()
     )
 
+    
+    chunk_size = 10
+    for i in range(0, len(times), chunk_size):
+        grupo = times[i:i + chunk_size]
+        linhas = "\n".join([f"{emoji_do_time(t)} | **{t.title()}**" for t in grupo])
+
+        embed.add_field(
+            name="⚽ Times",
+            value=linhas,
+            inline=True
+        )
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
+    logging.info(f"Usuário {interaction.user} solicitou a lista de times.")
+
+@bot.tree.command(name="sair_time", description="Saia do seu time de torcedores")
+async def slash_sair_time(interaction: discord.Interaction):
+    if interaction.channel.id != CANAL_COMANDOS:
+        return await interaction.response.send_message(
+            "<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.",
+            ephemeral=True
+        )
+
+    conn = conectar_futebol()
+    cursor = conn.cursor()
+
+    # Verifica se o usuário possui um time registrado
+    cursor.execute(
+        "SELECT time_normalizado FROM times_usuarios WHERE user_id = %s",
+        (interaction.user.id,)
+    )
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        cursor.close()
+        conn.close()
+        return await interaction.response.send_message(
+            f"❌ {interaction.user.mention}, você não possui um time registrado.",
+            ephemeral=True
+        )
+
+    time_normalizado = resultado[0]
+    cargo_nome = time_normalizado.title()
+
+    # Remover cargo do Discord
+    cargo = discord.utils.get(interaction.guild.roles, name=cargo_nome)
+    if cargo and cargo in interaction.user.roles:
+        await interaction.user.remove_roles(cargo)
+
+    # Remover do banco
+    cursor.execute(
+        "DELETE FROM times_usuarios WHERE user_id = %s",
+        (interaction.user.id,)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    await interaction.response.send_message(
+        f"✅ {interaction.user.mention}, você saiu do time **{cargo_nome}**!",
+        ephemeral=True
+    )
 
 @bot.tree.command(name="info", description="Veja informações e comandos do bot")
 async def slash_info(interaction: discord.Interaction):
@@ -414,175 +502,45 @@ async def slash_fogo(interaction: discord.Interaction):
         cursor.close()
         conn.close()
 
-@bot.tree.command(name="top fogos", description="Veja os usuários com mais acertos consecutivos")
+@bot.tree.command(name="top_fogos", description="Veja os usuários com mais acertos consecutivos")
 async def slash_top_fogos(interaction: discord.Interaction):
-    """Mostra o ranking de acertos consecutivos"""
+    await interaction.response.defer()
     conn = conectar_futebol()
     cursor = conn.cursor(dictionary=True)
-    
+
     try:
         cursor.execute(
-            "SELECT user_id, acertos_consecutivos, maior_streak FROM apostas "
-            "WHERE acertos_consecutivos > 0 ORDER BY acertos_consecutivos DESC LIMIT 10"
+            "SELECT user_id, MAX(maior_streak) as maior_streak FROM apostas "
+            "WHERE maior_streak > 0 GROUP BY user_id ORDER BY maior_streak DESC"
         )
         resultados = cursor.fetchall()
-        
         if not resultados:
-            return await interaction.response.send_message(
-                "🔥 Ninguém está com fogo no momento!",
-                ephemeral=True
-            )
-            
-        embed = discord.Embed(
-            title="🔥 Ranking de Fogo",
-            description="Usuários com mais acertos consecutivos",
-            color=discord.Color.orange()
-        )
-        
-        for i, usuario in enumerate(resultados, 1):
-            user_obj = interaction.guild.get_member(usuario["user_id"])
-            nome = user_obj.display_name if user_obj else f"User_{usuario['user_id']}"
-            pontos = usuario["acertos_consecutivos"]
-            
-            medalha = ""
-            if i == 1:
-                medalha = "🥇"
-            elif i == 2:
-                medalha = "🥈" 
-            elif i == 3:
-                medalha = "🥉"
-                
-            embed.add_field(
-                name=f"{medalha} #{i} {nome}",
-                value=f"**{pontos} acertos** consecutivos 🔥",
-                inline=False
-            )
-            
-        await interaction.response.send_message(embed=embed)
-        logging.info(f"Top fogos consultado por {interaction.user.name}")
-        
-    except Exception as e:
-        await interaction.response.send_message(
-            "❌ Erro ao consultar ranking de fogo.",
-            ephemeral=True
-        )
-        logging.error(f"Erro no comando top_fogos: {e}")
+            return await interaction.followup.send("🔥 Ninguém está com fogo no momento!", ephemeral=True)
+
+        view = PaginaFogos(resultados, interaction.user)
+        await view.atualizar_embed(interaction)
+
     finally:
         cursor.close()
         conn.close()
 
+
+# ================= COMANDO SLASH =================
 @bot.tree.command(name="top_apostas", description="Veja os melhores apostadores")
 async def slash_top_apostas(interaction: discord.Interaction):
-
-    conn = conectar_futebol()
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute(
-            "SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC LIMIT 5"
-        )
-
-        top = cursor.fetchall()
-
-        if not top:
-            return await interaction.response.send_message(
-                "⚠️ Nenhum usuário possui pontos.",
-                ephemeral=True
-            )
-
-        embed = discord.Embed(
-            title="<a:30348trophyfixed:1457473332843778220> Top 5 Apostadores",
-            description="Os usuários com mais pontos no sistema de apostas",
-            color=discord.Color.gold()
-        )
-
-        medalhas = ["🥇", "🥈", "🥉", "🏅", "🏅"]
-
-        ranking = ""
-        for i, (nome, pontos) in enumerate(top):
-            ranking += f"{medalhas[i]} **{nome}** — `{pontos} pontos`\n"
-
-        embed.add_field(
-            name="📊 Ranking Atual",
-            value=ranking,
-            inline=False
-        )
-
-        await interaction.response.send_message(embed=embed)
-
-    except Exception as e:
-        logging.exception("Erro no slash top_apostas")
-
-        await interaction.response.send_message(
-            "❌ Erro ao consultar ranking.",
-            ephemeral=True
-        )
-
-    finally:
-        cursor.close()
-        conn.close()
-
-@bot.tree.command(name="bad apostas", description="Veja os piores apostadores")
-async def slash_bad_apostas(interaction: discord.Interaction):
-    """Mostra os piores apostadores"""
+    await interaction.response.defer()
     conn = conectar_futebol()
     cursor = conn.cursor(dictionary=True)
-    
-    try:
-        cursor.execute(
-            "SELECT u.user_id, u.nome_discord, COUNT(a.fixture_id) as total_apostas, "
-            "SUM(CASE WHEN a.palpite = j.resultado AND j.finalizado = 1 THEN 1 ELSE 0 END) as acertos "
-            "FROM usuarios u "
-            "LEFT JOIN apostas a ON u.user_id = a.user_id "
-            "LEFT JOIN jogos j ON a.fixture_id = j.fixture_id "
-            "GROUP BY u.user_id, u.nome_discord "
-            "HAVING total_apostas >= 5 "
-            "ORDER BY acertos ASC, total_apostas DESC "
-            "LIMIT 5"
-        )
-        resultados = cursor.fetchall()
-        
-        if not resultados:
-            return await interaction.response.send_message(
-                "📉 Nenhum apostador encontrado com mínimo de 5 apostas!",
-                ephemeral=True
-            )
-            
-        embed = discord.Embed(
-            title="📉 Piores Apostadores",
-            description="Apostadores com menor taxa de acerto",
-            color=discord.Color.red()
-        )
-        
-        for i, usuario in enumerate(resultados, 1):
-            user_id = usuario["user_id"]
-            nome = usuario["nome_discord"] or f"User_{user_id}"
-            total = usuario["total_apostas"]
-            acertos = usuario["acertos"] or 0
-            taxa = (acertos / total * 100) if total > 0 else 0
-            
-            # Emojis para piores posições
-            emoji_ruim = "💀" if taxa < 20 else "😢" if taxa < 40 else "😅"
-            
-            embed.add_field(
-                name=f"#{i} {emoji_ruim} {nome}",
-                value=f"**{acertos}/{total} acertos** ({taxa:.1f}%)\n📊 {total} apostas totais",
-                inline=False
-            )
-            
-        embed.set_footer(text="💡 Melhore suas apostas研究中!")
-        await interaction.response.send_message(embed=embed)
-        logging.info(f"Bad apostas consultado por {interaction.user.name}")
-        
-    except Exception as e:
-        await interaction.response.send_message(
-            "❌ Erro ao consultar ranking de piores apostadores.",
-            ephemeral=True
-        )
-        logging.error(f"Erro no comando bad_apostas: {e}")
-    finally:
-        cursor.close()
-        conn.close()
+    cursor.execute("SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC")
+    top = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    if not top:
+        return await interaction.followup.send("⚠️ Nenhum usuário possui pontos.", ephemeral=True)
+
+    view = PaginaRanking(top, interaction.user)
+    await view.atualizar_embed(interaction)
 
 @bot.tree.command(name="torcedores", description="Veja os torcedores do servidor")
 async def slash_torcedores(interaction: discord.Interaction):
@@ -622,40 +580,7 @@ async def slash_conquistas(
 
 
 
-MAPEAMENTO_TIMES = {
-    "flamengo": "flamengo",
-    "fluminense": "fluminense",
-    "vasco": "vasco",
-    "botafogo": "botafogo",
-    "corinthians": "corinthians",
-    "santos": "santos",
-    "sao_paulo": "sao_paulo",
-    "palmeiras": "palmeiras",
-    "cruzeiro": "cruzeiro",
-    "atletico_mineiro": "atletico_mineiro",
-    "america_mg": "america_mg",
-    "bahia": "bahia",
-    "vitoria": "vitoria",
-    "chapecoense": "chapecoense",
-    "parana": "parana",
-    "atletico_pr": "atletico_pr",
-    "coritiba": "coritiba",
-    "figueirense": "figueirense",
-    "avai": "avai",
-    "joinville": "joinville",
-    "ponte_preta": "ponte_preta",
-    "santa_cruz": "santa_cruz",
-    "nautico": "nautico",
-    "sport": "sport",
-    "recife": "recife",
-    "cuiaba": "cuiaba",
-    "juventude": "juventude",
-    "fortaleza": "fortaleza",
-    "bragantino": "bragantino",
-    "goias": "goias",
-    "ceara": "ceara",
-    "atlético_goianiense": "atlético_goianiense",
-}
+
 
 EMOJI_TIMES = {
 
@@ -749,7 +674,6 @@ EMOJI_TIMES = {
 }
 
 
-
 # Dicionário global para armazenar dados das apostas
 apostas_data = {}
 
@@ -761,6 +685,8 @@ async def on_interaction(interaction):
     cid = interaction.data.get("custom_id")
     
     # Usar dicionário global em vez de atributo da mensagem
+    if not interaction.message:
+        return
     message_id = interaction.message.id
     if message_id in apostas_data:
         fixture_id, home, away = apostas_data[message_id]
@@ -909,19 +835,19 @@ CONQUISTAS = {
     "mente_calculada": {
         "nome": "🧠 Mente Calculada",
         "descricao": "Acerte 3 apostas consecutivas.",
-        "condicao": lambda d: d['acertos_consecutivos'] >= 3,
+        "condicao": lambda d: d['maior_streak'] >= 3,
         "cargo": "Mente Calculada"
     },
     "oraculo": {
         "nome": "🔮 O Oráculo",
         "descricao": "Acerte 5 apostas consecutivas.",
-        "condicao": lambda d: d['acertos_consecutivos'] >= 5,
+        "condicao": lambda d: d['maior_streak'] >= 5,
         "cargo": "O Oráculo"
     },
     "lenda_apostas": {
         "nome": "🏆 Lenda das Apostas",
         "descricao": "Acerte 10 apostas consecutivas.",
-        "condicao": lambda d: d['acertos_consecutivos'] >= 10,
+        "condicao": lambda d: d['maior_streak'] >= 10,
         "cargo": "Lenda das Apostas"
     },
     "apoiador": {
@@ -985,9 +911,8 @@ def get_mencoes_bot(user_id):
     try:
         conn = conectar_vips()
         cur = conn.cursor()
-
         cur.execute(
-            "SELECT tentativas FROM mencoes_bot WHERE user_id = %s",
+            "SELECT total_mencoes FROM mencoes_bot WHERE user_id = %s",
             (user_id,)
         )
         result = cur.fetchone()
@@ -1002,7 +927,7 @@ def get_mencoes_bot(user_id):
 async def processar_conquistas(
     member,
     mensagens_semana,
-    acertos_consecutivos,
+    maior_streak,
     fez_doacao,
     tem_vip,
     tempo_em_call=0,
@@ -1020,7 +945,7 @@ async def processar_conquistas(
 
     dados = {
         "mensagens_semana": mensagens_semana,
-        "acertos_consecutivos": acertos_consecutivos,
+        "maior_streak": maior_streak,
         "fez_doacao": fez_doacao,
         "tem_vip": tem_vip,
         "tempo_em_call": tempo_em_call,
@@ -1029,7 +954,7 @@ async def processar_conquistas(
         "mencoes_bot": mencoes_bot,
         "azarao_vitoria": azarao_vitoria,
         "bloqueado": False,
-        "tem_cargo_artista": tem_cargo_artista  # 👈 NOVO
+        "tem_cargo_artista": tem_cargo_artista  
     }
 
     desbloqueadas = []
@@ -1326,6 +1251,14 @@ mensagens_curiosidade = [
     f"💸 Você pode ganhar pontos ajudando o desenvolvimento do bot! Veja mais em {MENCAO_CANAL_DOACAO}.",
     f"🤑 Quer vantagens exclusivas? Seja VIP! Veja mais em {MENCAO_CANAL_VIP}.",
     "🏯 Temos apostas de futebol e também de animes — normalmente as sextas e sábados!",
+    "🤖 Agora eu possuo comandos Slash! Basta apertar `/` e ver todas as opções que posso oferecer.",
+    "⚡ Com meus comandos Slash, você pode ver rankings, pontos e acertos consecutivos de forma rápida e divertida!",
+    "💡 É só digitar `/` e explorar minhas funções — apostas, top apostadores e mais!",
+    "🎉 Slash commands ativados! Facilito sua vida mostrando resultados e informações sem precisar lembrar de comandos complexos.",
+    "🏆 Quer conferir o top de apostadores ou os piores colocados? Meus comandos Slash mostram tudo em segundos!",
+    "✨ Digite `/` e descubra funções escondidas: sistema de futebol, pontos, acertos consecutivos e muito mais!",
+    "💬 Comandos Slash são interativos! Você escolhe a ação e eu trago embeds, mensagens e rankings diretamente no chat."
+    
 ]
 
 
@@ -1360,15 +1293,15 @@ async def on_ready():
     
     # Verificar usuários em call quando bot inicia
     await verificar_usuarios_em_call_inicial()
-    #Verifica jogos em questao
-    if not verificar_jogos_automaticamente.is_running():
-        verificar_jogos_automaticamente.start()
     
     # Adicionar listeners para interações
     bot.add_view(DoacaoView())  
 
     # View de vips
     bot.add_view(VipView())
+    
+    # Restaurar views das artes
+    await setup_views()
     
     # Restaurar mensagem de doação se existir
     doacao_data = get_mensagem_doacao()
@@ -1421,13 +1354,12 @@ async def on_ready():
         
 
     # ===== Verificador de gols =====
-    if await jogos_ao_vivo():
-        if not verificar_gols.is_running():
-            verificar_gols.start()
-            logging.info("✅ Verificador de gols iniciado!")
-    else:
-        logging.info("⚠️ Nenhum jogo ao vivo no momento.")
-
+    # if await jogos_ao_vivo():
+    #     if not verificar_gols.is_running():
+    #         verificar_gols.start()
+    #         logging.info("✅ Verificador de gols iniciado!")
+    # else:
+    #     logging.info("⚠️ Nenhum jogo ao vivo no momento.")
 
     # ===== TOP ATIVOS DOMINGO =====
     # Removido - agora handled por loop_top_ativos
@@ -1528,6 +1460,25 @@ async def on_reaction_add(reaction, user):
         
         if personagem_votado:
             logging.info(f"🗳️ {user.display_name} votou em {personagem_votado}")
+            
+            # REGISTRAR VOTO NO BANCO DE DADOS
+            try:
+                conn = conectar_vips()
+                cur = conn.cursor()
+                
+                # Inserir ou atualizar voto (INSERT com ON DUPLICATE KEY UPDATE)
+                cur.execute("""
+                    INSERT INTO votos_anime (user_id, message_id, personagem)
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE personagem = VALUES(personagem), data_voto = CURRENT_TIMESTAMP
+                """, (user.id, message.id, personagem_votado))
+                
+                conn.commit()
+                cur.close()
+                conn.close()
+                logging.info(f"✅ Voto registrado: {user.id} -> {personagem_votado}")
+            except Exception as e:
+                logging.error(f"Erro ao registrar voto anime: {e}")
         
         return  # Sair da função já que é uma reação de batalha
 
@@ -1602,6 +1553,35 @@ async def on_reaction_add(reaction, user):
 async def on_reaction_remove(reaction, user):
     if user.bot:
         return
+    
+    message = reaction.message
+    emoji = str(reaction.emoji)
+    
+    # ======================================================
+    # 0) SISTEMA DE VOTAÇÃO DE BATALHA DE ANIME - REMOVER VOTO
+    # ======================================================
+    if batalha_info.get("ativa") and batalha_info.get("msg_id") == message.id:
+        # Quando o usuário troca de voto, o Discord remove a reação antiga
+        # Não precisamos deletar do banco aqui porque o on_reaction_add já vai sobrescrever
+        # Mas se o usuário remover manualmente a reação, deletamos o voto
+        try:
+            conn = conectar_vips()
+            cur = conn.cursor()
+            cur.execute(
+                "DELETE FROM votos_anime WHERE user_id = %s AND message_id = %s",
+                (user.id, message.id)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            logging.info(f"🗑️ Voto removido: {user.id} da batalha {message.id}")
+        except Exception as e:
+            logging.error(f"Erro ao remover voto anime: {e}")
+        return
+    
+    # ======================================================
+    # 1) SISTEMA DE POSTS (👍 / 👎)
+    # ======================================================
     if reaction.message.channel.id != 1386805780140920954:
         return
 
@@ -2400,7 +2380,7 @@ async def dar_vip(ctx, membro: discord.Member, duracao: str):
             await processar_conquistas(
                 member=ctx.author,
                 mensagens_semana=0,  # valores padrão
-                acertos_consecutivos=0,
+                maior_streak=0,
                 fez_doacao=False,
                 tem_vip=True,  # ACABOU DE GANHAR VIP
                 tempo_em_call=0,
@@ -2870,7 +2850,7 @@ async def on_message(message):
                 await processar_conquistas(
                     member=message.author,
                     mensagens_semana=0,
-                    acertos_consecutivos=0,
+                    maior_streak=0,
                     fez_doacao=False,
                     tem_vip=True,
                     tempo_em_call=0,
@@ -3059,26 +3039,30 @@ async def on_message(message):
                 CREATE TABLE IF NOT EXISTS mencoes_bot (
                     user_id BIGINT PRIMARY KEY,
                     tentativas INT DEFAULT 0,
+                    total_mencoes INT DEFAULT 0,
                     bloqueado TINYINT DEFAULT 0,
                     ultimo TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            cur.execute("SELECT tentativas, bloqueado FROM mencoes_bot WHERE user_id = %s", (message.author.id,))
+            cur.execute("SELECT tentativas, total_mencoes, bloqueado FROM mencoes_bot WHERE user_id = %s", (message.author.id,))
             row = cur.fetchone()
             tentativas = 0
+            total_mencoes = 0
             bloqueado = 0
             if row:
                 tentativas = row[0]
-                bloqueado = row[1]
+                total_mencoes = row[1]
+                bloqueado = row[2]
             if bloqueado == 1:
                 cur.close(); conn.close()
                 return
             tentativas += 1
+            total_mencoes += 1
             if tentativas >= 5:
                 cur.execute(
-                    "INSERT INTO mencoes_bot (user_id, tentativas, bloqueado) VALUES (%s, %s, 1) "
-                    "ON DUPLICATE KEY UPDATE tentativas = VALUES(tentativas), bloqueado = 1, ultimo = CURRENT_TIMESTAMP",
-                    (message.author.id, tentativas)
+                    "INSERT INTO mencoes_bot (user_id, tentativas, total_mencoes, bloqueado) VALUES (%s, %s, %s, 1) "
+                    "ON DUPLICATE KEY UPDATE tentativas = VALUES(tentativas), total_mencoes = VALUES(total_mencoes), bloqueado = 1, ultimo = CURRENT_TIMESTAMP",
+                    (message.author.id, tentativas, total_mencoes)
                 )
                 conn.commit()
                 await message.channel.send(f"{message.author.mention} Chega, já deu, não vou falar mais contigo hoje, tenta mencionar ai.")
@@ -3086,9 +3070,9 @@ async def on_message(message):
                 return
             else:
                 cur.execute(
-                    "INSERT INTO mencoes_bot (user_id, tentativas, bloqueado) VALUES (%s, %s, 0) "
-                    "ON DUPLICATE KEY UPDATE tentativas = VALUES(tentativas), ultimo = CURRENT_TIMESTAMP",
-                    (message.author.id, tentativas)
+                    "INSERT INTO mencoes_bot (user_id, tentativas, total_mencoes, bloqueado) VALUES (%s, %s, %s, 0) "
+                    "ON DUPLICATE KEY UPDATE tentativas = VALUES(tentativas), total_mencoes = VALUES(total_mencoes), ultimo = CURRENT_TIMESTAMP",
+                    (message.author.id, tentativas, total_mencoes)
                 )
                 conn.commit()
                 reacao = random.choice(BOT_REACTION)
@@ -3200,7 +3184,7 @@ async def on_message(message):
         desbloqueadas, bloqueadas = await processar_conquistas(
             member=message.author,
             mensagens_semana=msgs_db,
-            acertos_consecutivos=acertos_db,
+            maior_streak=acertos_db,
             fez_doacao=doacao_db,
             tem_vip=vip_db,
             tempo_em_call=call_db,
@@ -4023,28 +4007,59 @@ async def finalizar_batalha_auto():
         base_pontos = 25 
         pontos_vitoria = int(base_pontos * (total_forca / vencedor["forca"]))
         pontos_vitoria = max(20, min(pontos_vitoria, 100))
-        # Contagem de votos
-        reaction_vencedora = None
-        for reaction in msg.reactions:
-            if str(reaction.emoji) == vencedor["emoji"]:
-                reaction_vencedora = reaction
-                break
         
-        # Processa os ganhadores
+        # ======================================================
+        # CONTAGEM DE VOTOS VIA BANCO DE DADOS (nova implementação)
+        # ======================================================
         ganhadores_ids = []
-        if reaction_vencedora:
-            async for user in reaction_vencedora.users():
-                if not user.bot:
-                    ganhadores_ids.append(user.id)
-        
-        # Processa os perdedores
         perdedores_ids = []
-        for reaction in msg.reactions:
-            if str(reaction.emoji) == perdedor["emoji"]:
-                async for user in reaction.users():
-                    if not user.bot:
-                        perdedores_ids.append(user.id)
         
+        try:
+            conn = conectar_vips()
+            cur = conn.cursor()
+            
+            # Buscar votos do vencedor
+            cur.execute(
+                "SELECT user_id FROM votos_anime WHERE message_id = %s AND personagem = %s",
+                (msg.id, vencedor["nome"])
+            )
+            ganhadores_ids = [row[0] for row in cur.fetchall()]
+            
+            # Buscar votos do perdedor
+            cur.execute(
+                "SELECT user_id FROM votos_anime WHERE message_id = %s AND personagem = %s",
+                (msg.id, perdedor["nome"])
+            )
+            perdedores_ids = [row[0] for row in cur.fetchall()]
+            
+            cur.close()
+            conn.close()
+            
+            logging.info(f"📊 Votos do banco - Vencedor ({vencedor['nome']}): {len(ganhadores_ids)} votos")
+            logging.info(f"📊 Votos do banco - Perdedor ({perdedor['nome']}): {len(perdedores_ids)} votos")
+        except Exception as e:
+            logging.error(f"Erro ao buscar votos do banco: {e}")
+            # Fallback: usa contagem de reações do Discord se o banco falhar
+            reaction_vencedora = None
+            for reaction in msg.reactions:
+                if str(reaction.emoji) == vencedor["emoji"]:
+                    reaction_vencedora = reaction
+                    break
+            
+            # Processa os ganhadores
+            ganhadores_ids = []
+            if reaction_vencedora:
+                async for user in reaction_vencedora.users():
+                    if not user.bot:
+                        ganhadores_ids.append(user.id)
+            
+            # Processa os perdedores
+            perdedores_ids = []
+            for reaction in msg.reactions:
+                if str(reaction.emoji) == perdedor["emoji"]:
+                    async for user in reaction.users():
+                        if not user.bot:
+                            perdedores_ids.append(user.id)
         # Atualiza pontos no banco de dados
         await atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, perdedor, pontos_vitoria)
         
@@ -4144,7 +4159,7 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
                         await processar_conquistas(
                             member=member,
                             mensagens_semana=0,
-                            acertos_consecutivos=0,
+                            maior_streak=0,
                             fez_doacao=False,
                             tem_vip=False,
                             tempo_em_call=0,
@@ -4732,12 +4747,12 @@ ROLE_ROBLOX    = 1422954452846907446
 ROLE_VALORANT  = 1422954672754397316
 ROLE_LOL       = 1422978913373651094
 
-class RoleView(View):
+class RoleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="Minecraft", style=discord.ButtonStyle.green, custom_id="minecraft")
-    async def minecraft_button(self, interaction: discord.Interaction, button: Button):
+    async def minecraft_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         role = guild.get_role(ROLE_MINECRAFT)   
         if role not in interaction.user.roles:
@@ -4747,7 +4762,7 @@ class RoleView(View):
             await interaction.response.send_message("❌ Você já tem esse cargo!", ephemeral=True)
 
     @discord.ui.button(label="Roblox", style=discord.ButtonStyle.red, custom_id="roblox")
-    async def roblox_button(self, interaction: discord.Interaction, button: Button):
+    async def roblox_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         role = guild.get_role(ROLE_ROBLOX)
         if role not in interaction.user.roles:
@@ -4757,7 +4772,7 @@ class RoleView(View):
             await interaction.response.send_message("❌ Você já tem esse cargo!", ephemeral=True)
 
     @discord.ui.button(label="Valorant", style=discord.ButtonStyle.blurple, custom_id="valorant")
-    async def valorant_button(self, interaction: discord.Interaction, button: Button):
+    async def valorant_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         role = guild.get_role(ROLE_VALORANT)
         if role not in interaction.user.roles:
@@ -4767,7 +4782,7 @@ class RoleView(View):
             await interaction.response.send_message("❌ Você já tem esse cargo!", ephemeral=True)
 
     @discord.ui.button(label="LoL", style=discord.ButtonStyle.gray, custom_id="lol")
-    async def lol_button(self, interaction: discord.Interaction, button: Button):
+    async def lol_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         role = guild.get_role(ROLE_LOL)
         if role not in interaction.user.roles:
@@ -4777,7 +4792,7 @@ class RoleView(View):
             await interaction.response.send_message("❌ Você já tem esse cargo!", ephemeral=True)
 
     @discord.ui.button(label="Brawlhalla", style=discord.ButtonStyle.green, custom_id="brawlhalla")
-    async def brawlhalla_button(self, interaction: discord.Interaction, button: Button):
+    async def brawlhalla_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         role = guild.get_role(ROLE_BRAWHALLA)
         if role not in interaction.user.roles:
@@ -4865,9 +4880,14 @@ ROLE_IDS_TIMES = {
     "corinthians": 1443227525458165903,
     "santos": 1443227595935187025,
     "botafogo": 1443759934054469703,
-    "vitoria": 1444483144270086267
+    "vitoria": 1444483144270086267,
+    "atletico paranaense": 1471640222713253949,
+    "bragantino": 1471640464208957632,
+    "mirassol": 1471640764311277670,
+    "coritiba": 1471640974902956196,
+    "remo": 1471641271570530335,
+    "fortaleza": 1442482777894293624
 }
-
 
 
 
@@ -5100,51 +5120,109 @@ async def fogo(ctx):
         conn.close()
 
 
-@bot.command()
-async def top_fogos(ctx):
-    try:
-        conn = conectar_futebol()
-        cursor = conn.cursor()
+class PaginaFogos(discord.ui.View):
+    def __init__(self, ranking, autor):
+        super().__init__(timeout=120)
+        self.ranking = ranking        # lista de dicts do MySQL
+        self.pagina = 0
+        self.por_pagina = 5
+        self.autor = autor
+        self.atualizar_estado_botoes()
 
-        cursor.execute("""
-            SELECT user_id, MAX(maior_streak) as maior_fogo
-            FROM apostas
-            GROUP BY user_id
-            ORDER BY maior_fogo DESC
-            LIMIT 5
-        """)
+    def atualizar_estado_botoes(self):
+        # Se os botões ainda não existirem, ignora
+        if hasattr(self, 'btn_anterior'):
+            self.btn_anterior.disabled = self.pagina == 0
+        if hasattr(self, 'btn_proximo'):
+            self.btn_proximo.disabled = (self.pagina + 1) * self.por_pagina >= len(self.ranking)
 
-        ranking = cursor.fetchall()
+    async def atualizar_embed(self, destino):
+        """
+        Atualiza o embed e envia para o destino:
+        - Se destino for Interaction: usa response/edit_message
+        - Se destino for Context: usa ctx.send
+        """
+        inicio = self.pagina * self.por_pagina
+        fim = inicio + self.por_pagina
+        ranking_pagina = self.ranking[inicio:fim]
 
-        cursor.close()
-        conn.close()
-
-        if not ranking:
-            return await ctx.send("🔥 Ainda não há fogos registrados!")
+        logging.info(f"🔥 Atualizando página de fogos: página {self.pagina+1}, mostrando {len(ranking_pagina)} usuários")
 
         embed = discord.Embed(
-            title="🔥 Top 5 Maiores Fogos",
+            title="🔥 Top Maiores Fogos",
             color=discord.Color.orange()
         )
 
         medalhas = ["🥇", "🥈", "🥉", "🏅", "🏅"]
 
-        for i, (user_id, fogo) in enumerate(ranking):
-            membro = ctx.guild.get_member(user_id)
+        for i, row in enumerate(ranking_pagina):
+            user_id = row["user_id"]
+            fogo = row["maior_streak"]
+            posicao = inicio + i + 1
+            medalha = medalhas[posicao-1] if posicao <= len(medalhas) else "🏅"
+            membro = None
+            # Pega o membro dependendo do tipo do destino
+            if isinstance(destino, discord.Interaction):
+                membro = destino.guild.get_member(user_id)
+            elif isinstance(destino, discord.ext.commands.Context):
+                membro = destino.guild.get_member(user_id)
 
             nome = membro.display_name if membro else f"Usuário ({user_id})"
-
+            logging.info(f"🔥 Fogo #{posicao}: {nome} - {fogo} (maior streak)")
             embed.add_field(
-                name=f"{medalhas[i]} {nome}",
+                name=f"{posicao}º {medalha} {nome}",
                 value=f"🔥 **Streak:** {fogo}",
                 inline=False
             )
 
-        await ctx.send(embed=embed)
+        embed.set_footer(text=f"Solicitado por {self.autor.display_name}")
 
-    except mysql.connector.Error as err:
-        print(f"Erro ao buscar top fogos: {err}")
-        await ctx.send("❌ Erro ao buscar ranking.")
+        # Envia o embed dependendo do tipo de destino
+        if isinstance(destino, discord.Interaction):
+            try:
+                await destino.response.edit_message(embed=embed, view=self)
+            except discord.errors.InteractionResponded:
+                if destino.message:
+                    await destino.followup.edit_message(message_id=destino.message.id, embed=embed, view=self)
+                else:
+                    await destino.followup.send(embed=embed, view=self)
+        elif isinstance(destino, discord.ext.commands.Context):
+            await destino.send(embed=embed, view=self)
+
+    @discord.ui.button(label="⬅️ Anterior", style=discord.ButtonStyle.primary)
+    async def btn_anterior(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina -= 1
+        self.atualizar_estado_botoes()
+        await self.atualizar_embed(interaction)
+
+    @discord.ui.button(label="➡️ Próximo", style=discord.ButtonStyle.primary)
+    async def btn_proximo(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina += 1
+        self.atualizar_estado_botoes()
+        await self.atualizar_embed(interaction)
+
+
+# ================= COMANDO =================
+@bot.command()
+async def top_fogos(ctx):
+    conn = conectar_futebol()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            "SELECT user_id, MAX(maior_streak) as maior_streak FROM apostas "
+            "WHERE maior_streak > 0 GROUP BY user_id ORDER BY maior_streak DESC"
+        )
+        resultados = cursor.fetchall()
+        if not resultados:
+            return await ctx.send("🔥 Ninguém está com fogo no momento!")
+
+        view = PaginaFogos(resultados, ctx.author)
+        await view.atualizar_embed(ctx)
+
+    finally:
+        cursor.close()
+        conn.close()
 
 
 CANAL_APOSTAS_ID = 1442495893365330138 
@@ -5583,6 +5661,7 @@ MAPEAMENTO_TIMES = {
 
     # RB Bragantino
     "rb bragantino": "bragantino",
+    "bragantino": "bragantino",
     #Chapecoense
     "associação chapecoense de futebol": "chapecoense",
     "chapecoense": "chapecoense",
@@ -5613,6 +5692,7 @@ MAPEAMENTO_TIMES = {
 
     # Athletico Paranaense
     "atlético paranaense": "athletico paranaense",
+    "atletico paranaense": "atletico paranaense",
     "atletico pr": "athletico paranaense",
     "athletico pr": "athletico paranaense",
     "athletico paranaense": "athletico paranaense",
@@ -6690,7 +6770,7 @@ async def comprar(ctx, item_nome: str):
             await processar_conquistas(
                 member=ctx.author,
                 mensagens_semana=0,  # valores padrão
-                acertos_consecutivos=0,
+                maior_streak=0,
                 fez_doacao=False,
                 tem_vip=True,  # ACABOU DE GANHAR VIP
                 tempo_em_call=0,
@@ -7216,7 +7296,7 @@ def processar_aposta(user_id, fixture_id, resultado, pontos_base, perda_base=7, 
                 processar_conquistas(
                     member=user_obj,
                     mensagens_semana=0,  
-                    acertos_consecutivos=acertos_consecutivos,
+                    maior_streak=acertos_consecutivos,
                     fez_doacao=fez_doacao,
                     tem_vip=tem_vip,
                     tempo_em_call=0  
@@ -7741,9 +7821,13 @@ async def terminar_jogo(ctx, fixture_id: int = None):
         
 
 
-@tasks.loop(minutes=15)
+@tasks.loop(minutes=16)
 async def verificar_jogos_automaticamente():
     """Loop automático que verifica e processa jogos finalizados a cada 12 minutos"""
+    # Só funciona se a API estiver ativa via !apistart
+    if not acompanhando:
+        return
+        
     try:
         logging.info("🔄 Iniciando verificação automática de jogos...")
 
@@ -7925,14 +8009,86 @@ async def info(ctx):
     logging.info(f"Usuário {ctx.author} solicitou a lista de comandos.")
 
 #LISTAR OS 5 MAIORES COM PONTUACOES DE APOSTAS
+class PaginaRanking(discord.ui.View):
+    def __init__(self, top, autor):
+        super().__init__(timeout=120)
+        self.top = top
+        self.pagina = 0
+        self.por_pagina = 5
+        self.autor = autor
+        self.atualizar_estado_botoes()
+
+    def atualizar_estado_botoes(self):
+        if hasattr(self, 'btn_anterior'):
+            self.btn_anterior.disabled = self.pagina == 0
+        if hasattr(self, 'btn_proximo'):
+            self.btn_proximo.disabled = (self.pagina + 1) * self.por_pagina >= len(self.top)
+
+    async def atualizar_embed(self, destino):
+        inicio = self.pagina * self.por_pagina
+        fim = inicio + self.por_pagina
+        ranking_pagina = self.top[inicio:fim]
+
+        logging.info(f"📊 Atualizando página de ranking: página {self.pagina+1}, mostrando {len(ranking_pagina)} usuários")
+
+        embed = discord.Embed(
+            title="<a:30348trophyfixed:1457473332843778220> Top Apostadores",
+            description="Ranking completo do sistema de apostas",
+            color=discord.Color.gold()
+        )
+
+        medalhas = ["<a:17952trophycoolbrawlstarspin:1457784734074535946>", "🥈", "🥉", "🏅", "🏅"]
+
+        texto = ""
+        for i, row in enumerate(ranking_pagina):
+            # caso seja dict (dictionary=True no cursor) ou tupla
+            if isinstance(row, dict):
+                nome = row.get("nome_discord")
+                pontos = row.get("pontos")
+            else:
+                nome, pontos = row
+
+            posicao = inicio + i + 1
+            medalha = medalhas[posicao-1] if posicao <= len(medalhas) else "🏅"
+            texto += f"{medalha} **{nome}** — `{pontos} pontos`\n"
+            logging.info(f"📊 Ranking #{posicao}: {nome} - {pontos} pontos")
+
+        embed.add_field(name=f"📊 Página {self.pagina+1}", value=texto, inline=False)
+        embed.set_footer(text=f"Solicitado por {self.autor.display_name}")
+
+        # envia dependendo do tipo de destino
+        if isinstance(destino, discord.Interaction):
+            try:
+                await destino.response.edit_message(embed=embed, view=self)
+            except discord.errors.InteractionResponded:
+                # caso já tenha respondido
+                if destino.message:
+                    await destino.followup.edit_message(message_id=destino.message.id, embed=embed, view=self)
+                else:
+                    await destino.followup.send(embed=embed, view=self)
+        elif isinstance(destino, discord.ext.commands.Context):
+            await destino.send(embed=embed, view=self)
+
+    # ================= BOTÕES =================
+    @discord.ui.button(label="⬅️ Anterior", style=discord.ButtonStyle.primary)
+    async def btn_anterior(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina -= 1
+        self.atualizar_estado_botoes()
+        await self.atualizar_embed(interaction)
+
+    @discord.ui.button(label="➡️ Próximo", style=discord.ButtonStyle.primary)
+    async def btn_proximo(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina += 1
+        self.atualizar_estado_botoes()
+        await self.atualizar_embed(interaction)
+
+# ================= COMANDO =================
 @bot.command()
 async def top_apostas(ctx):
-    async with ctx.typing():  # Mostra que o bot está digitando
+    async with ctx.typing():
         conn = conectar_futebol()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC LIMIT 5"
-        )
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos DESC")
         top = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -7940,26 +8096,45 @@ async def top_apostas(ctx):
         if not top:
             return await ctx.send("⚠️ Nenhum usuário possui pontos.")
 
+        logging.info(f"📊 Top apostas solicitado por {ctx.author.name}, total de {len(top)} usuários")
+        view = PaginaRanking(top, ctx.author)
+        await view.atualizar_embed(ctx)
+
+@bot.command()
+async def bad_apostas(ctx):
+    async with ctx.typing():  # Mostra que o bot está digitando
+        conn = conectar_futebol()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT nome_discord, pontos FROM pontuacoes ORDER BY pontos ASC LIMIT 5"
+        )
+        bottom = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        if not bottom:
+            return await ctx.send("⚠️ Nenhum usuário possui pontos.")
+
         embed = discord.Embed(
-            title="<a:30348trophyfixed:1457473332843778220> Top 5 Apostadores",
-            description="Os usuários com mais pontos no sistema de apostas",
-            color=discord.Color.gold()
+            title="💩 Top 5 Menos Apostadores",
+            description="Usuários com menos pontos no sistema de apostas",
+            color=discord.Color.dark_red()
         )
 
         ranking = ""
         medalhas = [
-            "<a:17952trophycoolbrawlstarspin:1457784734074535946>",
-            "🥈",
-            "🥉",
-            "🏅",
-            "🏅"
+            "💀",  # 1º pior
+            "🚑",
+            "🥴",
+            "🤡",
+            "😵"
         ]
 
-        for i, (nome, pontos) in enumerate(top):
+        for i, (nome, pontos) in enumerate(bottom):
             ranking += f"{medalhas[i]} **{nome}** — `{pontos} pontos`\n"
 
         embed.add_field(
-            name="📊 Ranking Atual",
+            name="📉 Ranking Atual",
             value=ranking,
             inline=False
         )
@@ -7970,40 +8145,33 @@ async def top_apostas(ctx):
 
     # Envia o embed depois que o typing acaba
     await ctx.send(embed=embed)
-    logging.info(f"Usuário {ctx.author} solicitou ver os 5 melhores apostadores.")
+    logging.info(f"Usuário {ctx.author} solicitou ver os 5 piores apostadores.")
 
 
 
 CANAL_COMANDOS = 1380564680774385724
 
-@bot.tree.command(name="dar_vip", description="Conceder VIP a um membro")
-@app_commands.default_permissions(administrator=True)
-
-@app_commands.describe(
-    membro="Membro que receberá o VIP",
-    duracao="Exemplo: 30d, 2m, 1y"
-)
-
+@bot.tree.command(name="dar_vip", description="Conceda VIP a um membro do servidor")
+@app_commands.describe(membro="Membro que receberá VIP", duracao="Duração do VIP (ex: 30d, 2m, 1y)")
 async def dar_vip_slash(interaction: discord.Interaction, membro: discord.Member, duracao: str):
-
-    await interaction.response.defer(ephemeral=True)  
-    # 👆 evita erro se o banco demorar
-
-    cargo_vip = discord.utils.get(interaction.guild.roles, name="Jinxed Vip")
-
-    if not cargo_vip:
-        await interaction.followup.send("❌ Cargo 'Jinxed Vip' não encontrado.")
+    # Verifica permissão de administrador
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Você precisa ser administrador para usar este comando.", ephemeral=True)
         return
 
-    duracao = duracao.strip().lower()
+    cargo_vip = discord.utils.get(interaction.guild.roles, name="Jinxed Vip")
+    if not cargo_vip:
+        await interaction.response.send_message("❌ Cargo 'Jinxed Vip' não encontrado.", ephemeral=True)
+        return
 
+    # Validação de formato da duração
+    duracao = duracao.strip().lower()
     if len(duracao) < 2 or not duracao[:-1].isdigit() or duracao[-1] not in {"d", "m", "y"}:
-        await interaction.followup.send("❌ Formato inválido! Use 30d, 2m ou 1y.")
+        await interaction.response.send_message("❌ Formato inválido! Use 30d, 2m ou 1y.", ephemeral=True)
         return
 
     valor = int(duracao[:-1])
     unidade = duracao[-1]
-
     if unidade == "d":
         delta = timedelta(days=valor)
     elif unidade == "m":
@@ -8012,11 +8180,12 @@ async def dar_vip_slash(interaction: discord.Interaction, membro: discord.Member
         delta = timedelta(days=365 * valor)
 
     if cargo_vip in membro.roles:
-        await interaction.followup.send(f"❌ {membro.display_name} já possui o cargo VIP.")
+        await interaction.response.send_message(f"❌ {membro.display_name} já possui o cargo VIP.", ephemeral=True)
         return
 
     await membro.add_roles(cargo_vip, reason="Concessão de VIP")
 
+    # Registro no banco de dados
     try:
         conexao = conectar_vips()
         cursor = conexao.cursor()
@@ -8035,26 +8204,204 @@ async def dar_vip_slash(interaction: discord.Interaction, membro: discord.Member
             """,
             (membro.id, f"{membro.name}#{membro.discriminator}", data_inicio, data_fim)
         )
-
         conexao.commit()
         cursor.close()
         conexao.close()
-
     except Exception as e:
-        logging.error(f"Erro ao salvar VIP: {e}")
+        logging.error(f"Erro ao registrar VIP no banco: {e}")
 
+    # Envia DM ao usuário
     try:
         await membro.send(f"<:Jinx_Watching:1390380695712694282> Você recebeu VIP por {duracao}!")
     except:
         pass
 
-    await interaction.followup.send(
-        f"<:Jinx_Watching:1390380695712694282> {membro.display_name} agora é VIP por {duracao}."
-    )
+    # Mensagem de confirmação
+    await interaction.response.send_message(f"<:Jinx_Watching:1390380695712694282> {membro.display_name} agora é VIP por {duracao}.")
+    logging.info(f"VIP concedido com sucesso: {membro.display_name} ({membro.id}) por {duracao}")
+
+    # Conceder conquista "Coroado" automaticamente
+    try:
+        await processar_conquistas(
+            member=interaction.user,
+            mensagens_semana=0,  # valores padrão
+            maior_streak=0,
+            fez_doacao=False,
+            tem_vip=True,  # ACABOU DE GANHAR VIP
+            tempo_em_call=0,
+            mencionou_miisha=False,
+            tocou_musica=False,
+            mencoes_bot=0
+        )
+        logging.info(f"{interaction.user.name} acabou de ganhar a conquista")
+    except Exception as e:
+        logging.error(f"Erro ao conceder conquista coroado para {membro.display_name}: {e}")
 
 
-@bot.tree.command(name="bad_apostas", description="Veja os piores apostadores")
+@bot.tree.command(name="entregar", description="Entregar pontos de doação a um usuário")
+@app_commands.describe(
+    membro="Selecione o usuário que vai receber os pontos",
+    valor="Escolha o valor da doação"
+)
+@app_commands.choices(valor=[
+    app_commands.Choice(name="R$ 5", value=5),
+    app_commands.Choice(name="R$ 10", value=10),
+    app_commands.Choice(name="R$ 25", value=25),
+    app_commands.Choice(name="R$ 50", value=50),
+])
+async def entregar(interaction: discord.Interaction, membro: discord.Member, valor: int):
+    if interaction.user.id != MEU_ID:
+        logging.warning(f"{interaction.user} tentou usar o comando entregar sem permissão.")
+        return await interaction.response.send_message(
+            "Apenas o brabo pode usar <a:1199777523261775963:1451401949667655730>",
+            ephemeral=True
+        )
+
+    tabela_conversao = {5: 300, 10: 700, 25: 2000, 50: 6000}
+    pontos = tabela_conversao[valor]
+
+    try:
+        # Adiciona pontos
+        adicionar_pontos_db(membro.id, pontos)
+
+        # Cargo de apoiador geral
+        cargo_doacao = discord.utils.get(interaction.guild.roles, name="Apoiador Dev")
+        status_cargo = ""
+
+        if cargo_doacao:
+            if cargo_doacao not in membro.roles:
+                await membro.add_roles(cargo_doacao)
+                status_cargo = (
+                    f"\n<a:PoggersRow:1449578774004895857> "
+                    f"{membro.mention} agora possui o cargo **{cargo_doacao.name}** "
+                    f"como agradecimento pela doação de **R$ {valor},00**! 🙏"
+                )
+            else:
+                status_cargo = f"\nℹ️ Você já possui o cargo **{cargo_doacao.name}**."
+        else:
+            status_cargo = "\n⚠️ Cargo **Apoiador Dev** não encontrado."
+
+        await interaction.response.send_message(
+            f"<a:105382toro:1454984271897825405> {membro.mention} recebeu **{pontos} pontos** por doar **R$ {valor},00**!"
+            f"{status_cargo}"
+        )
+
+        logging.info(f"{membro} recebeu {pontos} pontos por doar R$ {valor},00.")
+
+        # Registrar doação de R$50 no banco
+        if valor == 50:
+            try:
+                conn_do = conectar_futebol()
+                cur_do = conn_do.cursor()
+                cur_do.execute(
+                    """
+                    INSERT INTO loja_pontos 
+                    (user_id, item, pontos_gastos, data_compra, ativo)
+                    VALUES (%s, %s, %s, %s, 1)
+                    """,
+                    (membro.id, 'doacao_50', pontos, datetime.utcnow())
+                )
+                conn_do.commit()
+                cur_do.close()
+                conn_do.close()
+            except Exception as e:
+                logging.error(f"Erro ao registrar doação de 50 no banco: {e}")
+
+        # Processa conquistas
+        await processar_conquistas(
+            membro,
+            mensagens_semana=0,
+            maior_streak=0,
+            fez_doacao=(valor == 50),
+            tem_vip=False,
+            tempo_em_call=0,
+            mencionou_miisha=False,
+            tocou_musica=False,
+            mencoes_bot=0,
+            azarao_vitoria=False
+        )
+
+        embed = discord.Embed(
+            title="🙏 Obrigado pela Doação!",
+            description=f"<a:74731moneywave:1454721352698433730> Você recebeu **{pontos} pontos** por doar **R$ {valor},00** ao desenvolvedor!",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="Usuário", value=membro.mention, inline=True)
+        await membro.send(embed=embed)
+
+    except Exception as e:
+        await interaction.followup.send("❌ Erro ao entregar pontos. Verifique os logs.", ephemeral=True)
+        logging.error(f"Erro ao entregar pontos para {membro}: {e}")
+
+    
+
+@bot.tree.command(name="vip_list", description="Mostra a lista de VIPs ativos")
+@app_commands.checks.has_permissions(administrator=True)
+async def vip_list(interaction: discord.Interaction):
+    await interaction.response.defer()  # Mostra carregando
+
+    conn = None
+    cursor = None
+    try:
+        conn = conectar_vips()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, nome_discord, data_inicio, data_fim FROM vips")
+        vips = cursor.fetchall()
+
+        if not vips:
+            await interaction.followup.send("❌ Nenhum VIP registrado ainda.")
+            return
+
+        embed = discord.Embed(
+            title="<:discotoolsxyzicon_6:1444750406763679764> Lista de VIPs Ativos",
+            color=discord.Color.blue()
+        )
+
+        agora = datetime.now(timezone.utc)
+        itens = []
+
+        for id_vip, nome_discord, data_inicio, data_fim in vips:
+            if data_inicio.tzinfo is None:
+                data_inicio = data_inicio.replace(tzinfo=timezone.utc)
+            if data_fim.tzinfo is None:
+                data_fim = data_fim.replace(tzinfo=timezone.utc)
+
+            restante = data_fim - agora
+            ativo = restante.total_seconds() > 0
+            dias = max(0, restante.days)
+            horas = max(0, int((restante.total_seconds() % 86400) // 3600))
+            itens.append((ativo, data_fim, nome_discord, data_inicio, dias, horas))
+
+        itens.sort(key=lambda x: (not x[0], x[1]))
+
+        for ativo, _, nome_discord, data_inicio, dias, horas in itens:
+            status = "Ativo" if ativo else "Expirado"
+            valor = (
+                f"Início: `{data_inicio.strftime('%d/%m/%Y')}`\n"
+                + (f"Restam: **{dias}d {horas}h**" if ativo else "Status: **Expirado**")
+            )
+            embed.add_field(name=f"{nome_discord} — {status}", value=valor, inline=False)
+
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        await interaction.followup.send("❌ Erro ao acessar o banco de dados.")
+        logging.error(f"Erro vip_list: {e}")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+        
+@bot.tree.command(
+    name="bad_apostas",
+    description="Veja os piores apostadores"
+)
 async def slash_bad_apostas(interaction: discord.Interaction):
+
+    await interaction.response.defer()  # Mostra que o bot está pensando
 
     conn = conectar_futebol()
     cursor = conn.cursor()
@@ -8066,7 +8413,7 @@ async def slash_bad_apostas(interaction: discord.Interaction):
         bad = cursor.fetchall()
 
         if not bad:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 "⚠️ Nenhum usuário possui pontos.",
                 ephemeral=True
             )
@@ -8077,7 +8424,8 @@ async def slash_bad_apostas(interaction: discord.Interaction):
             color=discord.Color.red()
         )
 
-        emojis = ["💀", "🥴", "🤡", "😵", "🚑"]
+        # Emojis temáticos com o primeiro como ambulância
+        emojis = ["💀", "🚑", "🥴", "🤡", "😵"]
         ranking = ""
 
         for i, (nome, pontos) in enumerate(bad):
@@ -8091,12 +8439,11 @@ async def slash_bad_apostas(interaction: discord.Interaction):
 
         embed.set_footer(text=f"Solicitado por {interaction.user.display_name}")
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     except Exception as e:
         logging.error(f"Erro no slash_bad_apostas: {e}")
-
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "❌ Erro ao consultar ranking.",
             ephemeral=True
         )
@@ -8218,11 +8565,27 @@ async def lista_times(ctx):
         return "❓"
 
     times = sorted(ROLE_IDS_TIMES.keys())
-    linhas = [f"{emoji_do_time(t)} | {t.title()}" for t in times]
-    embed = discord.Embed(title="📋 Times Disponíveis", description="\n".join(linhas), color=discord.Color.blue())
+
+    embed = discord.Embed(
+        title="📋 Times Disponíveis",
+        description="Escolha seu time usando o comando correspondente!",
+        color=discord.Color.blue()
+    )
+
+    # 👉 Divide em grupos de 10 (ajuste se quiser)
+    chunk_size = 10
+    for i in range(0, len(times), chunk_size):
+        grupo = times[i:i + chunk_size]
+        linhas = "\n".join([f"{emoji_do_time(t)} | **{t.title()}**" for t in grupo])
+
+        embed.add_field(
+            name="⚽ Times",
+            value=linhas,
+            inline=True  # <- cria colunas
+        )
+
     await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou a lista de times.")
-
 
 #Mostrar os torcedores do servidor
 async def gerar_embed_torcedores(guild):
@@ -8306,9 +8669,9 @@ async def on_member_remove(member):
 
 
 # ----- CÓDIGO PARA VER TODOS OS COMANDOS ADMIN -----
-@bot.command() 
+@bot.tree.command(name="admin", description="Painel de comandos administrativos")
 @commands.has_permissions(administrator=True)
-async def admin(ctx):
+async def admin_slash(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🛠️ Painel de Comandos Administrativos",
         description="Aqui estão todos os comandos disponíveis para administradores:",
@@ -8318,7 +8681,7 @@ async def admin(ctx):
     embed.add_field(
         name="🔧 Administração Geral",
         value=(
-            "**!top_apostas** — mostra top jogadores nas apostas\n"
+            "**/top_apostas** — mostra top jogadores nas apostas\n"
             "**!resetar_jogo** — limpa as apostas de um jogo\n"
             "**!fixture_id** — busca informações de uma partida\n"
             "**!terminar_jogo** — finaliza e processa resultados\n"
@@ -8330,8 +8693,8 @@ async def admin(ctx):
     embed.add_field(
         name="<:discotoolsxyzicon_6:1444750406763679764> Sistema VIP",
         value=(
-            "**!dar_vip** — concede VIP ao usuário\n"
-            "**!remover_vip** — remove VIP do usuário\n"
+            "**/dar_vip** — concede VIP ao usuário\n"
+            "**/remover_vip** — remove VIP do usuário\n"
         ),
         inline=False
     )
@@ -8340,7 +8703,7 @@ async def admin(ctx):
         name="🛰️ API",
         value=(
             "**!apistart** — inicia a sincronização com a API\n"
-            "**!apistop** — para a sincronização\n"
+            "**/apistop** — para a sincronização\n"
         ),
         inline=False
     )
@@ -8364,9 +8727,9 @@ async def admin(ctx):
     )
 
     embed.set_footer(text="Use com responsabilidade. 😉")
-    logging.info(f"Administrador {ctx.author} solicitou o painel de comandos administrativos.")
+    logging.info(f"Administrador {interaction.user} solicitou o painel de comandos administrativos.")
 
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 
 async def enviar_alerta(moderador_id: int, total: int):
@@ -8700,7 +9063,7 @@ async def entregar(ctx, membro: discord.Member, valor: int):
         await processar_conquistas(
             membro,
             mensagens_semana=0,
-            acertos_consecutivos=0,
+            maior_streak=0,
             fez_doacao=(valor == 50),
             tem_vip=False,
             tempo_em_call=0,
@@ -8790,6 +9153,12 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
         acertos_consecutivos = (cur_fut.fetchone() or {}).get("acertos_consecutivos", 0)
 
         cur_fut.execute(
+            "SELECT MAX(maior_streak) as maior_streak FROM apostas WHERE user_id = %s",
+            (user_id,)
+        )
+        maior_streak = (cur_fut.fetchone() or {}).get("maior_streak", 0)
+
+        cur_fut.execute(
             """
             SELECT id FROM loja_pontos
             WHERE user_id = %s AND item = 'doacao_50' AND ativo = 1
@@ -8799,7 +9168,7 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
         fez_doacao = cur_fut.fetchone() is not None
 
         # --- TEMPO EM CALL ---
-        tempo_em_call = calcular_tempo_total_em_call(user_id, ctx.guild.id) if ctx.guild else 0
+        tempo_em_call = calcular_tempo_total_em_call(user_id, guild.id) if guild else 0
         # Garantir que não seja None
         if tempo_em_call is None:
             tempo_em_call = 0
@@ -8833,7 +9202,7 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
         desbloqueadas, bloqueadas = await processar_conquistas(
             alvo,
             mensagens_semana,
-            acertos_consecutivos,
+            maior_streak,
             fez_doacao,
             tem_vip,
             tempo_em_call=tempo_em_call,
@@ -9536,11 +9905,21 @@ class CartasView(discord.ui.View):
 
 
 class ArtesView(discord.ui.View):
-    def __init__(self, message_id):
-        super().__init__(timeout=None)
+    def __init__(self, message_id: int):
+        super().__init__(timeout=None)  # timeout=None é obrigatório para persistência
         self.message_id = message_id
-    @discord.ui.button(label="Curtir", emoji="❤️", style=discord.ButtonStyle.success)
-    async def like(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        # Ajusta o custom_id do botão dinamicamente para cada mensagem
+        self.like_button = discord.ui.Button(
+            label="Curtir",
+            emoji="❤️",
+            style=discord.ButtonStyle.success,
+            custom_id=f"like_{self.message_id}"  # único para cada mensagem
+        )
+        self.like_button.callback = self.like_callback  # define a função que será chamada
+        self.add_item(self.like_button)
+
+    async def like_callback(self, interaction: discord.Interaction):
         con = conectar_vips()
         cur = con.cursor()
         try:
@@ -9551,90 +9930,71 @@ class ArtesView(discord.ui.View):
             )
             row = cur.fetchone()
             if not row:
-                await interaction.response.send_message("Erro: Arte não encontrada no banco de dados.", ephemeral=True)
-                return
-            author_id = row[0]
-            author_name = row[1]
-            # 2. VERIFICA SE O USUÁRIO É O AUTOR
-            if interaction.user.id == author_id:
                 await interaction.response.send_message(
-                    "Você não pode votar na sua própria arte!",
-                    ephemeral=True
+                    "Erro: Arte não encontrada no banco de dados.", ephemeral=True
                 )
                 return
-            # Verifica se o usuário já votou nessa mensagem
+
+            author_id, author_name = row
+
+            # Verifica se o usuário é o autor
+            if interaction.user.id == author_id:
+                await interaction.response.send_message(
+                    "Você não pode votar na sua própria arte!", ephemeral=True
+                )
+                return
+
+            # Verifica se o usuário já votou nessa arte
             cur.execute(
                 "SELECT 1 FROM artes_votos WHERE message_id = %s AND voter_id = %s",
                 (self.message_id, interaction.user.id)
             )
             if cur.fetchone():
                 await interaction.response.send_message(
-                    "Você já votou nessa arte!",
-                    ephemeral=True
+                    "Você já votou nessa arte!", ephemeral=True
                 )
                 logging.info(f"[ARTES] Voto duplicado ignorado: voter={interaction.user.id} message={self.message_id}")
                 return
 
             # Registra o voto
             cur.execute(
-                """
-                INSERT INTO artes_votos (message_id, voter_id, voter_nome, tipo)
-                VALUES (%s, %s, %s, 'like')
-                """,
+                "INSERT INTO artes_votos (message_id, voter_id, voter_nome, tipo) VALUES (%s, %s, %s, 'like')",
                 (self.message_id, interaction.user.id, str(interaction.user))
             )
 
-            # Incrementa o contador de corações da arte
+            # Incrementa o contador de corações
             cur.execute(
-                """
-                UPDATE artes_posts
-                SET coracoes = coracoes + 1
-                WHERE message_id = %s
-                """,
+                "UPDATE artes_posts SET coracoes = coracoes + 1 WHERE message_id = %s",
                 (self.message_id,)
             )
 
             con.commit()
             logging.info(f"[ARTES] Voto registrado: voter={interaction.user} ({interaction.user.id}) message={self.message_id}")
 
-            # Recupera o autor da postagem para dar os pontos a quem foi votado
-            cur.execute(
-                "SELECT user_id, COALESCE(nome_discord, '') FROM artes_posts WHERE message_id = %s",
-                (self.message_id,)
-            )
-            row = cur.fetchone()
+            # Adiciona 10 pontos ao autor
+            try:
+                adicionar_pontos_db(author_id, 10, author_name or str(author_id))
+                logging.info(f"[ARTES] +10 pontos para autor {author_id} (message={self.message_id})")
+            except Exception as p_err:
+                logging.error(f"[ARTES] Erro ao adicionar pontos ao autor {author_id}: {p_err}")
 
-            if row:
-                author_id = row[0]
-                author_name = row[1] if len(row) > 1 else ''
-
-                # Adiciona 10 pontos ao autor (quem foi votado)
-                try:
-                    adicionar_pontos_db(author_id, 10, author_name or str(author_id))
-                    logging.info(f"[ARTES] +10 pontos para autor {author_id} (message={self.message_id})")
-                except Exception as p_err:
-                    logging.error(f"[ARTES] Erro ao adicionar pontos ao autor {author_id}: {p_err}")
-
-                # Envia DM ao autor informando que recebeu pontos
-                try:
-                    author_user = await bot.fetch_user(author_id)
-                    embed = discord.Embed(
-                        title="<a:143125redgemheart:1454722071618916530> Você recebeu pontos!",
-                        description="você ganhou 10 pontos ao usuário votar em você!",
-                        color=discord.Color.green()
-                    )
-                    embed.set_footer(text=f"Votado por {interaction.user}")
-                    await author_user.send(embed=embed)
-                    logging.info(f"[ARTES] DM enviada ao autor {author_id} informando +10 pontos")
-                except Exception as dm_err:
-                    logging.error(f"[ARTES] Falha ao enviar DM para {author_id}: {dm_err}")
-            else:
-                logging.warning(f"[ARTES] Autor não encontrado para message_id={self.message_id}")
+            # Envia DM ao autor informando pontos
+            try:
+                author_user = await bot.fetch_user(author_id)
+                embed = discord.Embed(
+                    title="<a:143125redgemheart:1454722071618916530> Você recebeu pontos!",
+                    description="Você ganhou 10 pontos ao usuário votar em você!",
+                    color=discord.Color.green()
+                )
+                embed.set_footer(text=f"Votado por {interaction.user}")
+                await author_user.send(embed=embed)
+                logging.info(f"[ARTES] DM enviada ao autor {author_id} informando +10 pontos")
+            except Exception as dm_err:
+                logging.error(f"[ARTES] Falha ao enviar DM para {author_id}: {dm_err}")
 
             # Confirmação ao votante
             await interaction.response.send_message(
-                "Voto registrado. Obrigado por apoiar o artista!",
-                ephemeral=True
+                "Voto registrado. Obrigado por apoiar o artista!", ephemeral=True
             )
 
         except Exception as e:
@@ -9645,6 +10005,18 @@ class ArtesView(discord.ui.View):
                 pass
         finally:
             con.close()
+
+
+# Função para recriar Views persistentes ao iniciar o bot
+async def setup_views():
+    con = conectar_vips()
+    cur = con.cursor()
+    cur.execute("SELECT message_id FROM artes_posts")
+    rows = cur.fetchall()
+    for row in rows:
+        message_id = row[0]
+        bot.add_view(ArtesView(message_id))  
+    con.close()
 
 @tasks.loop(hours=24)
 async def verificar_melhor_do_mes():
@@ -9752,7 +10124,7 @@ async def verificar_melhor_do_mes():
                 await processar_conquistas(
                     member,
                     mensagens_semana=0,
-                    acertos_consecutivos=0,
+                    maior_streak=0,
                     fez_doacao=False,
                     tem_vip=False,
                     tempo_em_call=0,
@@ -9774,8 +10146,6 @@ async def verificar_melhor_do_mes():
         con.close()
         logging.info("✅ Conexão encerrada. Ciclo completo!")
         logging.info("🎬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-
-
 
 
 bot.run(TOKEN)
