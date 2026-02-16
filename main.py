@@ -194,16 +194,122 @@ async def slash_loja(interaction: discord.Interaction):
         embed=gerar_embed_loja()
     )
 
+@bot.tree.command(name="compras", description="Veja seus itens ativos na loja")
+async def compras(interaction: discord.Interaction):
+
+    user_id = interaction.user.id
+    con = conectar_futebol()
+    cur = con.cursor(dictionary=True)
+
+    itens_ativos = []
+
+
+    cur.execute("""
+        SELECT data_expira 
+        FROM loja_vip 
+        WHERE user_id = %s AND ativo = 1
+    """, (user_id,))
+    
+    vip = cur.fetchone()
+    if vip:
+        itens_ativos.append(
+            f"<:discotoolsxyzicon_6:1444750406763679764> **VIP** — expira em `{vip['data_expira']}`"
+        )
+
+   
+    cur.execute("""
+        SELECT ativo 
+        FROM clown_bet 
+        WHERE user_id = %s AND ativo = 1
+    """, (user_id,))
+
+    if cur.fetchone():
+        itens_ativos.append(
+            "🎭 **Modo Clown** — ativo para a próxima aposta"
+        )
+
+    
+    cur.execute("""
+        SELECT item 
+        FROM loja_pontos 
+        WHERE user_id = %s 
+        AND ativo = 1
+    """, (user_id,))
+
+    outros = cur.fetchall()
+
+    nomes_formatados = {
+        "comemoracao": "<:827557party:1467578831106871610> **Comemoração**",
+        "mute_jinxed": "<:34000mute:1467578828313464861> **Mute Jinxed**",
+        "apelido": "<:561879carrotstare:1467578826614771746> **Apelido**",
+        "inverter": "<:7466megareverse:1467578833279385774> **Inverter Pontos**",
+        "emoji_personalizado": "<:312424paint:1467578829705842709> **Emoji Personalizado**"
+    }
+
+    for item in outros:
+        nome = nomes_formatados.get(item["item"])
+        if nome:
+            itens_ativos.append(nome)
+
+    con.close()
+
+  
+    if not itens_ativos:
+        await interaction.response.send_message(
+            "🛒 Você não possui itens ativos no momento.",
+            ephemeral=True
+        )
+        return
+
+    embed = discord.Embed(
+        title="🛍️ Suas Compras Ativas",
+        description="\n".join(itens_ativos),
+        color=0x2b2d31
+    )
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 @bot.tree.command(name="comprar", description="Compre um item")
 @discord.app_commands.choices(item=[
-    discord.app_commands.Choice(name="🎭 Modo Clown", value="clown_bet"),
-    discord.app_commands.Choice(name="🎁 Caixinha", value="caixinha"),
-    discord.app_commands.Choice(name="💎 VIP", value="jinxed_vip"),
-    discord.app_commands.Choice(name="🔇 Inverter", value="inverter"),
-    discord.app_commands.Choice(name="📞 Mute", value="mute_jinxed"),
-    discord.app_commands.Choice(name="🏷️ Apelido", value="apelido"),
-    discord.app_commands.Choice(name="🎉 Comemoração", value="comemoracao"),
-    discord.app_commands.Choice(name="🎨 Emoji", value="emoji_personalizado")
+    discord.app_commands.Choice(
+        name="🎭 Modo Clown",
+        value="clown_bet"
+    ),
+
+    discord.app_commands.Choice(
+        name="🎁 Caixinha",
+        value="caixinha"
+    ),
+
+    discord.app_commands.Choice(
+        name="💎 VIP",
+        value="jinxed_vip"
+    ),
+
+    discord.app_commands.Choice(
+        name="🔄 Inverter",
+        value="inverter"
+    ),
+
+    discord.app_commands.Choice(
+        name="🔇 Mute",
+        value="mute_jinxed"
+    ),
+
+    discord.app_commands.Choice(
+        name="🏷️ Apelido",
+        value="apelido"
+    ),
+
+    discord.app_commands.Choice(
+        name="🎉 Comemoração",
+        value="comemoracao"
+    ),
+
+    discord.app_commands.Choice(
+        name="🎨 Emoji",
+        value="emoji_personalizado"
+    ),
 ])
 async def slash_comprar(interaction: discord.Interaction, item: str):
 
@@ -924,6 +1030,29 @@ def get_mencoes_bot(user_id):
         return 0
 
 
+def processar_conquistas_db(user_id, novos_registros):
+    conexao = conectar_vips()
+    cursor = conexao.cursor()
+
+    try:
+        if novos_registros:
+            cursor.executemany(
+                "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
+                novos_registros
+            )
+            conexao.commit()
+
+        cursor.execute(
+            "SELECT conquista_id FROM conquistas_desbloqueadas WHERE user_id = %s",
+            (user_id,)
+        )
+
+        return {row[0] for row in cursor.fetchall()}
+
+    finally:
+        cursor.close()
+        conexao.close()
+
 async def processar_conquistas(
     member,
     mensagens_semana,
@@ -936,7 +1065,8 @@ async def processar_conquistas(
     mencoes_bot=0,
     azarao_vitoria=False
 ):
-    # 🔥 Verifica se o membro tem o cargo Artista
+
+    # 🔥 verifica cargo artista
     tem_cargo_artista = False
     if member.guild:
         cargo_artista = discord.utils.get(member.guild.roles, name="Artista")
@@ -954,35 +1084,26 @@ async def processar_conquistas(
         "mencoes_bot": mencoes_bot,
         "azarao_vitoria": azarao_vitoria,
         "bloqueado": False,
-        "tem_cargo_artista": tem_cargo_artista  
+        "tem_cargo_artista": tem_cargo_artista
     }
 
     desbloqueadas = []
     bloqueadas = []
     novas_conquistas = []
+    novos_registros = []
 
-    conexao = conectar_vips()
-    cursor = conexao.cursor()
+    loop = asyncio.get_running_loop()
 
-    # Garantir tabela
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS conquistas_desbloqueadas (
-            user_id BIGINT,
-            conquista_id VARCHAR(50),
-            data_desbloqueio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, conquista_id)
-        )
-    """)
-    conexao.commit()
-
-    # Buscar conquistas já desbloqueadas
-    cursor.execute(
-        "SELECT conquista_id FROM conquistas_desbloqueadas WHERE user_id = %s",
-        (member.id,)
+    # 🔥 pega conquistas existentes SEM travar o bot
+    conquistas_existentes = await loop.run_in_executor(
+        None,
+        processar_conquistas_db,
+        member.id,
+        []  
     )
-    conquistas_existentes = {row[0] for row in cursor.fetchall()}
 
     for key, conquista in CONQUISTAS.items():
+
         try:
             condicao_ok = conquista["condicao"](dados)
         except Exception as e:
@@ -998,34 +1119,31 @@ async def processar_conquistas(
             desbloqueadas.append(texto)
 
             if condicao_ok and not ja_no_banco:
-                try:
-                    cursor.execute(
-                        "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
-                        (member.id, key)
-                    )
-                    conexao.commit()
-                    novas_conquistas.append(conquista)
-                    logging.info(f"Conquista desbloqueada: {conquista['nome']} para {member.display_name}")
-                except Exception as e:
-                    logging.error(f"Erro ao registrar conquista {key} para {member}: {e}")
+                novos_registros.append((member.id, key))
+                novas_conquistas.append(conquista)
 
-            # === ENTREGA DE CARGO ===
+            # entrega cargo
             if member.guild:
                 cargo = discord.utils.get(member.guild.roles, name=conquista["cargo"])
                 if cargo and cargo not in member.roles:
                     try:
                         await member.add_roles(cargo)
-                        logging.info(f"Cargo '{cargo.name}' adicionado para {member.display_name}")
                     except Exception as e:
                         logging.error(f"Erro ao adicionar cargo {cargo} ao membro {member}: {e}")
 
         else:
             bloqueadas.append(texto)
 
-    cursor.close()
-    conexao.close()
+    # 🔥 salva tudo de uma vez (SEM travar)
+    if novos_registros:
+        await loop.run_in_executor(
+            None,
+            processar_conquistas_db,
+            member.id,
+            novos_registros
+        )
 
-    # === NOTIFICAÇÃO ===
+    # 🔔 notificação
     if novas_conquistas:
         try:
             embed = discord.Embed(
@@ -1449,38 +1567,56 @@ async def on_reaction_add(reaction, user):
     # ======================================================
     # 0) SISTEMA DE VOTAÇÃO DE BATALHA DE ANIME
     # ======================================================
-    # Verifica se é a mensagem da batalha ativa
     if batalha_info.get("ativa") and batalha_info.get("msg_id") == message.id:
-        # Encontra qual personagem corresponde ao emoji
+
         personagem_votado = None
+
         if batalha_info.get("p1") and emoji == batalha_info["p1"]["emoji"]:
             personagem_votado = batalha_info["p1"]["nome"]
+
         elif batalha_info.get("p2") and emoji == batalha_info["p2"]["emoji"]:
             personagem_votado = batalha_info["p2"]["nome"]
-        
-        if personagem_votado:
-            logging.info(f"🗳️ {user.display_name} votou em {personagem_votado}")
-            
-            # REGISTRAR VOTO NO BANCO DE DADOS
-            try:
-                conn = conectar_vips()
-                cur = conn.cursor()
-                
-                # Inserir ou atualizar voto (INSERT com ON DUPLICATE KEY UPDATE)
-                cur.execute("""
-                    INSERT INTO votos_anime (user_id, message_id, personagem)
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE personagem = VALUES(personagem), data_voto = CURRENT_TIMESTAMP
-                """, (user.id, message.id, personagem_votado))
-                
-                conn.commit()
-                cur.close()
-                conn.close()
-                logging.info(f"✅ Voto registrado: {user.id} -> {personagem_votado}")
-            except Exception as e:
-                logging.error(f"Erro ao registrar voto anime: {e}")
-        
-        return  # Sair da função já que é uma reação de batalha
+
+        if not personagem_votado:
+            return
+
+        logging.info(f"🗳️ {user.display_name} votou em {personagem_votado}")
+
+        try:
+            conn = conectar_vips()
+            cur = conn.cursor()
+
+            cur.execute("""
+                INSERT INTO votos_anime (user_id, message_id, personagem)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    personagem = VALUES(personagem),
+                    data_voto = CURRENT_TIMESTAMP
+            """, (user.id, message.id, personagem_votado))
+
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            logging.info(f"✅ Voto registrado: {user.id} -> {personagem_votado}")
+
+        except Exception as e:
+            logging.error(f"Erro ao registrar voto anime: {e}")
+            return
+
+        try:
+            if personagem_votado == batalha_info["p1"]["nome"]:
+                outra_reacao = batalha_info["p2"]["emoji"]
+            else:
+                outra_reacao = batalha_info["p1"]["emoji"]
+
+            await message.remove_reaction(outra_reacao, user)
+
+        except Exception:
+            # Evita crash se faltar permissão ou reação não existir
+            pass
+
+        return
 
     # ======================================================
     # 1) SISTEMA DE POSTS (👍 / 👎)
@@ -1556,28 +1692,6 @@ async def on_reaction_remove(reaction, user):
     
     message = reaction.message
     emoji = str(reaction.emoji)
-    
-    # ======================================================
-    # 0) SISTEMA DE VOTAÇÃO DE BATALHA DE ANIME - REMOVER VOTO
-    # ======================================================
-    if batalha_info.get("ativa") and batalha_info.get("msg_id") == message.id:
-        # Quando o usuário troca de voto, o Discord remove a reação antiga
-        # Não precisamos deletar do banco aqui porque o on_reaction_add já vai sobrescrever
-        # Mas se o usuário remover manualmente a reação, deletamos o voto
-        try:
-            conn = conectar_vips()
-            cur = conn.cursor()
-            cur.execute(
-                "DELETE FROM votos_anime WHERE user_id = %s AND message_id = %s",
-                (user.id, message.id)
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
-            logging.info(f"🗑️ Voto removido: {user.id} da batalha {message.id}")
-        except Exception as e:
-            logging.error(f"Erro ao remover voto anime: {e}")
-        return
     
     # ======================================================
     # 1) SISTEMA DE POSTS (👍 / 👎)
@@ -3768,7 +3882,7 @@ FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 # BERSERK
 # =========================
 PERSONAGENS = [
-    {"nome": "Griffith", "emoji": "<:GRIFFITH:1408187671179821128>", "forca": 65},
+    {"nome": "Griffith", "emoji": "<:43807griffith:1472351278733459669>", "forca": 65},
     {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 75},
 
 # =========================
@@ -3808,7 +3922,7 @@ PERSONAGENS = [
 # =========================
 # ONE PUNCH MAN
 # =========================
-    {"nome": "Saitama", "emoji": "<a:Saitama:1408190053846356038>", "forca": 100},
+    {"nome": "Saitama", "emoji": "<:Saitama:1408190053846356038>", "forca": 100},
     {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 88},
 
 # =========================
@@ -3816,6 +3930,8 @@ PERSONAGENS = [
 # =========================
     {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 78},
     {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 70},
+    {"nome": "Mikasa", "emoji": "<a:ES_mikasaSmile:1472366438491623465>", "forca": 60},
+
 
 # =========================
 # DEMON SLAYER
@@ -3858,6 +3974,13 @@ PERSONAGENS = [
 # =========================
     {"nome": "Edward Elric", "emoji": "<:erick:1466970104905334784>", "forca": 60},
     {"nome": "Roy Mustang", "emoji": "<:Roy:1466971340098765059>", "forca": 55},
+
+# =========================
+# DEVIL MAY CRY
+# =========================
+    {"nome": "Dante", "emoji": "<:3938dantesmile:1437791755096293510>", "forca": 85},
+    {"nome": "Vergil", "emoji": "<:MOTIVATED0:1472352686954385530>", "forca": 87},
+    {"nome": "Lady", "emoji": "<:images1:1472353187355824401>", "forca": 62},
 ]
 
 # Variável para guardar o estado da batalha na memória
@@ -4015,25 +4138,30 @@ async def finalizar_batalha_auto():
         perdedores_ids = []
         
         try:
-            conn = conectar_vips()
-            cur = conn.cursor()
+            def query():
+                conn = conectar_vips()
+                cur = conn.cursor()
+                
+                # Buscar votos do vencedor
+                cur.execute(
+                    "SELECT user_id FROM votos_anime WHERE message_id = %s AND personagem = %s",
+                    (msg.id, vencedor["nome"])
+                )
+                ganhadores = [row[0] for row in cur.fetchall()]
+                
+                # Buscar votos do perdedor
+                cur.execute(
+                    "SELECT user_id FROM votos_anime WHERE message_id = %s AND personagem = %s",
+                    (msg.id, perdedor["nome"])
+                )
+                perdedores = [row[0] for row in cur.fetchall()]
+                
+                cur.close()
+                conn.close()
+                
+                return ganhadores, perdedores
             
-            # Buscar votos do vencedor
-            cur.execute(
-                "SELECT user_id FROM votos_anime WHERE message_id = %s AND personagem = %s",
-                (msg.id, vencedor["nome"])
-            )
-            ganhadores_ids = [row[0] for row in cur.fetchall()]
-            
-            # Buscar votos do perdedor
-            cur.execute(
-                "SELECT user_id FROM votos_anime WHERE message_id = %s AND personagem = %s",
-                (msg.id, perdedor["nome"])
-            )
-            perdedores_ids = [row[0] for row in cur.fetchall()]
-            
-            cur.close()
-            conn.close()
+            ganhadores_ids, perdedores_ids = await asyncio.to_thread(query)
             
             logging.info(f"📊 Votos do banco - Vencedor ({vencedor['nome']}): {len(ganhadores_ids)} votos")
             logging.info(f"📊 Votos do banco - Perdedor ({perdedor['nome']}): {len(perdedores_ids)} votos")
@@ -4065,7 +4193,7 @@ async def finalizar_batalha_auto():
         
         # Resetar streak dos perdedores
         todos_participantes = ganhadores_ids + perdedores_ids
-        resetar_streak_perdedores(todos_participantes, ganhadores_ids)
+        await resetar_streak_perdedores(todos_participantes, ganhadores_ids)
         
         # Envia mensagem para perdedores
         await enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor, pontos_vitoria)
@@ -4129,8 +4257,8 @@ async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, perdedor, pon
 
         for uid in ganhadores_ids:
             try:
-                adicionar_pontos_db(uid, pontos_premio)
-                atualizar_streak(uid, True)  
+                await adicionar_pontos_db(uid, pontos_premio)
+                await asyncio.to_thread(atualizar_streak, uid, True)  
             except Exception as e:
                 logging.error(f"Falha ao adicionar pontos para {uid}: {e}")
 
@@ -4213,6 +4341,7 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Madara": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/madara.gif",
         "Pain": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/pain.gif",
         "Levi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ackerman-levi-rage.gif",
+        "Mikasa": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/aot-mikasa.gif",
         "Aizen": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ali-aizen.gif",
         "Bakugo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bakugou.gif",
         "Deku": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/deku-midoriya.gif",
@@ -4220,9 +4349,13 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Mob": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/mob-psycho100-mob-psycho.gif",
         "Edward Elric": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/edward-elric-fma.gif",
         "Roy Mustang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Roy%20Mustang.gif",
-        "Zaraki Kenpachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bleach-zaraki-kenpachi.gif"
-
+        "Zaraki Kenpachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bleach-zaraki-kenpachi.gif",
+        "Dante": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dante-devil-may-cry.gif",
+        "Vergil": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/vergil-devil-may-cry.gif",
+        "Lady": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lady-devil-may-cry%20(1).gif",
     }
+
+
     
     gif_vitoria = GIFS_VITORIA.get(vencedor['nome'])
     if gif_vitoria:
@@ -4258,7 +4391,7 @@ async def enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor, pontos_
     # Aplicar perda de pontos para cada perdedor
     for uid in perdedores_ids:
         try:
-            adicionar_pontos_db(uid, -pontos_perdidos)
+            await adicionar_pontos_db(uid, -pontos_perdidos)
         except Exception as e:
             logging.error(f"Falha ao remover pontos para {uid}: {e}")
     
@@ -4293,21 +4426,25 @@ async def enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor, pontos_
             except Exception:
                 logging.warning(f"Não foi possível enviar DM para o usuário {uid}")
 
-def resetar_streak_perdedores(todos_ids, ganhadores_ids):
+async def resetar_streak_perdedores(todos_ids, ganhadores_ids):
     perdedores = set(todos_ids) - set(ganhadores_ids)
 
-    conn = conectar_futebol()
-    cursor = conn.cursor()
+    def query():
+        conn = conectar_futebol()
+        cursor = conn.cursor()
 
-    for uid in perdedores:
-        cursor.execute("""
-            UPDATE apostas
-            SET acertos_consecutivos = 0
-            WHERE user_id = %s
-        """, (uid,))
+        for uid in perdedores:
+            cursor.execute("""
+                UPDATE apostas
+                SET acertos_consecutivos = 0
+                WHERE user_id = %s
+            """, (uid,))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    await asyncio.to_thread(query)
 
 async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_percent, pontos_premio):
     """Anuncia o resultado da batalha com embed, tratando erros via logging."""
@@ -4341,6 +4478,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Madara": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/madara.gif",
             "Pain": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/pain.gif",
             "Levi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ackerman-levi-rage.gif",
+            "Mikasa": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/aot-mikasa.gif",
             "Aizen": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ali-aizen.gif",
             "Bakugo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bakugou.gif",
             "Deku": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/deku-midoriya.gif",
@@ -6634,7 +6772,7 @@ def gerar_embed_loja():
     )
     
     embed.add_field(
-        name="<:561879carrotstare:1467578826614771746> Apelido — 1500 pontos",
+        name="<:451118spongebobishowspeedmeme:1473022252474958025> Apelido — 1500 pontos",
         value="• Troque o apelido de alguém usando !apelido\n• Uso único\n• Use: `!comprar apelido`",
         inline=False
     )
@@ -6678,41 +6816,102 @@ async def executar_compra(member, item, guild):
     # Lógica específica para cada item
     if item_lower == "jinxed_vip":
         # Lógica para VIP
+        logging.info(f"{member.name} (ID: {member.id}) comprou VIP por {preco} pontos.")
         cargo_vip = discord.utils.get(guild.roles, name="Jinxed Vip")
         if cargo_vip:
             await member.add_roles(cargo_vip)
-            return True, f"✅ Você agora é **VIP** por 15 dias! 🎉"
+            return True, f"<:discotoolsxyzicon_6:1444750406763679764> Você agora é **VIP** por 15 dias! 🎉"
     
     elif item_lower == "clown_bet":
         # Lógica para Clown Bet
-        return True, f"✅ Você comprou **Modo Clown**! Use na próxima aposta para multiplicar seus pontos!"
+        logging.info(f"{member.name} (ID: {member.id}) comprou Clown Bet por {preco} pontos.")
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO clown_bet (user_id, ativo) VALUES (%s, 1) ON DUPLICATE KEY UPDATE ativo = 1",
+            (member.id,)
+        )
+        con.commit()
+        con.close()
+        return True, f"🎭 Você comprou **Modo Clown**! Use na próxima aposta para multiplicar seus pontos!"
     
     elif item_lower in ["caixa_misteriosa", "caixinha"]:
         # Lógica para Caixa Surpresa
+        logging.info(f"{member.name} (ID: {member.id}) comprou Caixinha por {preco} pontos.")
         import random
         pontos_ganhos = random.randint(-200, 300)
         adicionar_pontos_db(member.id, pontos_ganhos)
-        return True, f"🎁 Você ganhou **{pontos_ganhos} pontos** na caixa surpresa!"
+        if pontos_ganhos > 0:
+            return True, f"<a:809469heartchocolate:1466494908243120256> Você ganhou **+{pontos_ganhos} pontos** na caixa surpresa! 💰"
+        elif pontos_ganhos < 0:
+            return True, f"<a:809469heartchocolate:1466494908243120256> Você perdeu **{abs(pontos_ganhos)} pontos** na caixa surpresa! 💔"
+        else:
+            return True, f"<a:809469heartchocolate:1466494908243120256> Você não ganhou nem perdeu pontos na caixa surpresa! 📦"
     
     elif item_lower == "inverter":
         # Lógica para Inverter
-        return True, f"✅ Você comprou **Inverter Pontos**! Use `/inverter @usuario` para inverter a próxima aposta de alguém."
+        logging.info(f"{member.name} (ID: {member.id}) comprou Inverter Pontos por {preco} pontos.")
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (member.id, item_lower, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        return True, f"<:7466megareverse:1467578833279385774> Você comprou **Inverter Pontos**! Use `!inverter @usuario` para inverter a próxima aposta de alguém."
     
     elif item_lower == "mute_jinxed":
         # Lógica para Mute
-        return True, f"✅ Você comprou **Mute Jinxed**! Use `/troll @usuario` para mutar alguém por 3 minutos."
+        logging.info(f"{member.name} (ID: {member.id}) comprou Mute Jinxed por {preco} pontos.")
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (member.id, item_lower, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        return True, f"<:34000mute:1467578828313464861> Você comprou **Mute Jinxed**! Use `!troll @usuario` para mutar alguém por 3 minutos."
     
     elif item_lower == "apelido":
         # Lógica para Apelido
-        return True, f"✅ Você comprou **Apelido**! Use `/apelido @usuario novo_apelido` para trocar o apelido de alguém."
+        logging.info(f"{member.name} (ID: {member.id}) comprou Apelido por {preco} pontos.")
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (member.id, item_lower, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        return True, f"<:451118spongebobishowspeedmeme:1473022252474958025> Você comprou **Apelido**! Use `!apelido @usuario novo_apelido` para trocar o apelido de alguém."
     
     elif item_lower == "comemoracao":
         # Lógica para Comemoração
-        return True, f"✅ Você comprou **Comemoração de Vitória**! Use `/comemorar time` para comemorar quando seu time vencer."
+        logging.info(f"{member.name} (ID: {member.id}) comprou Comemoração por {preco} pontos.")
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (member.id, item_lower, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        return True, f"<:827557party:1467578831106871610> Você comprou **Comemoração de Vitória**! Use `/comemorar time` para comemorar quando seu time vencer."
     
     elif item_lower == "emoji_personalizado":
         # Lógica para Emoji Personalizado
-        return True, f"✅ Você comprou **Emoji Personalizado**! Use `/setemoji` para registrar seu emoji personalizado."
+        logging.info(f"{member.name} (ID: {member.id}) comprou Emoji Personalizado por {preco} pontos.")
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (member.id, item_lower, preco, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        return True, f"<:312424paint:1467578829705842709> Você comprou **Emoji Personalizado**! Use `/setemoji` para registrar seu emoji personalizado."
     
     else:
         return True, f"✅ Você comprou **{item}** por {preco} pontos!"
@@ -6873,7 +7072,7 @@ async def comprar(ctx, item_nome: str):
         )
         con.commit()
         con.close()
-        await ctx.send("<a:561879carrotstare:1467578826614771746> Você comprou o Apelido! use !apelido @user <nome_do_apelido>")
+        await ctx.send("<:451118spongebobishowspeedmeme:1473022252474958025> Você comprou o Apelido! use !apelido @user <nome_do_apelido>")
     
     elif item == "inverter":
         logging.info(f"{ctx.author.name} (ID: {user_id}) comprou Inverter Pontos por {preco} pontos.")
@@ -8238,6 +8437,52 @@ async def dar_vip_slash(interaction: discord.Interaction, membro: discord.Member
         logging.error(f"Erro ao conceder conquista coroado para {membro.display_name}: {e}")
 
 
+
+@bot.tree.command(name="remover_vip", description="Remove o cargo VIP de um membro.")
+@app_commands.checks.has_permissions(administrator=True)
+async def remover_vip(interaction: discord.Interaction, membro: discord.Member):
+
+    cargo_vip = discord.utils.get(interaction.guild.roles, name="Jinxed Vip")
+    if not cargo_vip:
+        await interaction.response.send_message(
+            "❌ O cargo **Jinxed Vip** não foi encontrado no servidor.",
+            ephemeral=True
+        )
+        return
+
+    if cargo_vip not in membro.roles:
+        await interaction.response.send_message(
+            f"<:jinxedola:1390368939380445225> {membro.display_name} não possui VIP.",
+            ephemeral=True
+        )
+        return
+
+    try:
+        await membro.remove_roles(cargo_vip)
+
+        conexao = conectar_vips()
+        cursor = conexao.cursor()
+        cursor.execute(
+            "DELETE FROM vips WHERE id = %s",
+            (membro.id,)
+        )
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+
+        await interaction.response.send_message(
+            f"<:Jinx_Watching:1390380695712694282> VIP removido de {membro.mention}.",
+            ephemeral=True
+        )
+
+    except Exception as e:
+        await interaction.response.send_message(
+            "❌ Não consegui remover o VIP do banco de dados.",
+            ephemeral=True
+        )
+        logging.error(f"Erro ao remover VIP: {e}")
+        
+
 @bot.tree.command(name="entregar", description="Entregar pontos de doação a um usuário")
 @app_commands.describe(
     membro="Selecione o usuário que vai receber os pontos",
@@ -8592,7 +8837,7 @@ async def gerar_embed_torcedores(guild):
     conn = conectar_futebol()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT user_id, time_normalizado FROM times_usuarios")
+    cursor.execute("SELECT DISTINCT user_id, time_normalizado FROM times_usuarios")
     rows = cursor.fetchall()
 
     cursor.close()
@@ -8604,7 +8849,8 @@ async def gerar_embed_torcedores(guild):
     torcedores = {}
 
     for user_id, time_normalizado in rows:
-        torcedores.setdefault(time_normalizado, []).append(user_id)
+        if user_id not in torcedores.setdefault(time_normalizado, []):
+            torcedores[time_normalizado].append(user_id)
 
     embed = discord.Embed(
         title="🏟️ Torcedores por Time",
@@ -8619,6 +8865,23 @@ async def gerar_embed_torcedores(guild):
         "vitoria": "Vitória",
         "atletico paranaense": "Athletico-PR",
         "lanus": "Lanús",
+        "palmeiras": "Palmeiras",
+        "flamengo": "Flamengo",
+        "corinthians": "Corinthians",
+        "vasco": "Vasco",
+        "fluminense": "Fluminense",
+        "cruzeiro": "Cruzeiro",
+        "botafogo": "Botafogo",
+        "bahia": "Bahia",
+        "bragantino": "Bragantino",
+        "sport": "Sport",
+        "fortaleza": "Fortaleza",
+        "juventude": "Juventude",
+        "mirassol": "Mirassol",
+        "internacional": "Internacional",
+        "chapecoense": "Chapecoense",
+        "coritiba": "Coritiba",
+        "remo": "Remo"
     }
 
     itens = []
@@ -8681,7 +8944,6 @@ async def admin_slash(interaction: discord.Interaction):
     embed.add_field(
         name="🔧 Administração Geral",
         value=(
-            "**/top_apostas** — mostra top jogadores nas apostas\n"
             "**!resetar_jogo** — limpa as apostas de um jogo\n"
             "**!fixture_id** — busca informações de uma partida\n"
             "**!terminar_jogo** — finaliza e processa resultados\n"
@@ -8703,7 +8965,7 @@ async def admin_slash(interaction: discord.Interaction):
         name="🛰️ API",
         value=(
             "**!apistart** — inicia a sincronização com a API\n"
-            "**/apistop** — para a sincronização\n"
+            "**!apistop** — para a sincronização\n"
         ),
         inline=False
     )
@@ -9554,6 +9816,8 @@ CANAL_JIMBO = 1380564680552091789
 jimbo_lock = asyncio.Lock()  # Proteção contra race conditions
 
 async def jimbo_scheduler():
+    global jimbo_ja_apareceu_hoje  # ✅ TEM que ficar no topo
+
     await bot.wait_until_ready()
     logging.info("🃏 [JIMBO] Scheduler iniciado e aguardando horário permitido")
 
@@ -9561,42 +9825,54 @@ async def jimbo_scheduler():
         try:
             agora = datetime.now()
             hora_atual = agora.time()
-            data_atual = agora.date()
 
             from datetime import time as dt_time
-            inicio = dt_time(15, 0)
+            inicio = dt_time(12, 0)
             fim = dt_time(23, 59)
-            meia_noite = dt_time(0, 0)  # Reset acontece exatamente à meia-noite (00:00)
-            horario_reset = dt_time(0, 30)  # Janela de reset até 00:30
+            meia_noite = dt_time(0, 0)
+            horario_reset = dt_time(0, 30)
 
-            # Reset diário à meia-noite com sincronização
+            logging.info(
+                f"🃏 [JIMBO] Verificação - Hora atual: {hora_atual.strftime('%H:%M')} | Já apareceu: {jimbo_ja_apareceu_hoje} | Ativo: {jimbo_ativo}"
+            )
+
+            # Reset diário
             if meia_noite <= hora_atual < horario_reset:
                 async with jimbo_lock:
-                    global jimbo_ja_apareceu_hoje
-                    if jimbo_ja_apareceu_hoje:
-                        jimbo_ja_apareceu_hoje = False
-                        logging.info("🃏 [JIMBO] Reset diário realizado - Jimbo pode aparecer hoje")
 
-            # Executa apenas no horário permitido e se ainda não apareceu
-            if inicio <= hora_atual <= fim:
-                async with jimbo_lock:
                     if not jimbo_ativo and not jimbo_ja_apareceu_hoje:
-                        logging.info(f"🃏 [JIMBO] Horário permitido ({hora_atual.strftime('%H:%M')}) - Agendando aparição")
+                        logging.info(
+                            f"🃏 [JIMBO] Horário permitido ({hora_atual.strftime('%H:%M')}) - Agendando aparição"
+                        )
 
                         espera_minutos = random.randint(1, 420)
-                        espera = espera_minutos * 60
-                        logging.info(f"🃏 [JIMBO] Aguardando {espera_minutos} minutos para aparição...")
+                        espera_total = espera_minutos * 60
+                        espera_passada = 0
+                        sleep_curto = 30
 
-                        await asyncio.sleep(espera)
+                        logging.info(
+                            f"🃏 [JIMBO] Aguardando {espera_minutos} minutos para aparição..."
+                        )
 
-                        # Verificação final dentro da lock
+                        while espera_passada < espera_total:
+
+                            if jimbo_ativo or jimbo_ja_apareceu_hoje:
+                                logging.info("🃏 [JIMBO] Spawn cancelado durante espera")
+                                break
+
+                            await asyncio.sleep(sleep_curto)
+                            espera_passada += sleep_curto
+
                         if not jimbo_ativo and not jimbo_ja_apareceu_hoje:
                             jimbo_ja_apareceu_hoje = True
                             await spawn_jimbo()
                         else:
-                            logging.info("🃏 [JIMBO] Spawn cancelado - Jimbo já apareceu ou está ativo")
+                            logging.info(
+                                "🃏 [JIMBO] Spawn cancelado - Jimbo já apareceu ou está ativo"
+                            )
             else:
                 await asyncio.sleep(300)
+
         except Exception as e:
             logging.error(f"💥 Erro no scheduler Jimbo: {e}")
             await asyncio.sleep(60)
@@ -9906,116 +10182,154 @@ class CartasView(discord.ui.View):
 
 class ArtesView(discord.ui.View):
     def __init__(self, message_id: int):
-        super().__init__(timeout=None)  # timeout=None é obrigatório para persistência
+        super().__init__(timeout=None)
         self.message_id = message_id
 
-        # Ajusta o custom_id do botão dinamicamente para cada mensagem
         self.like_button = discord.ui.Button(
             label="Curtir",
             emoji="❤️",
             style=discord.ButtonStyle.success,
-            custom_id=f"like_{self.message_id}"  # único para cada mensagem
+            custom_id=f"like_{self.message_id}"
         )
-        self.like_button.callback = self.like_callback  # define a função que será chamada
+        self.like_button.callback = self.like_callback
         self.add_item(self.like_button)
 
     async def like_callback(self, interaction: discord.Interaction):
+
+        # ✅ evita Unknown Interaction
+        await interaction.response.defer(ephemeral=True)
+
         con = conectar_vips()
-        cur = con.cursor()
+        cur = con.cursor(buffered=True)
+
         try:
-            # Buscar Autor da Arte
+            # Buscar autor
             cur.execute(
                 "SELECT user_id, COALESCE(nome_discord, '') FROM artes_posts WHERE message_id = %s",
                 (self.message_id,)
             )
             row = cur.fetchone()
+
             if not row:
-                await interaction.response.send_message(
-                    "Erro: Arte não encontrada no banco de dados.", ephemeral=True
+                await interaction.followup.send(
+                    "Erro: Arte não encontrada no banco."
                 )
                 return
 
             author_id, author_name = row
 
-            # Verifica se o usuário é o autor
+            # Não pode votar na própria arte
             if interaction.user.id == author_id:
-                await interaction.response.send_message(
-                    "Você não pode votar na sua própria arte!", ephemeral=True
+                await interaction.followup.send(
+                    "Você não pode votar na sua própria arte!"
                 )
                 return
 
-            # Verifica se o usuário já votou nessa arte
-            cur.execute(
-                "SELECT 1 FROM artes_votos WHERE message_id = %s AND voter_id = %s",
-                (self.message_id, interaction.user.id)
-            )
-            if cur.fetchone():
-                await interaction.response.send_message(
-                    "Você já votou nessa arte!", ephemeral=True
+            # 🔥 INSERT protegido por UNIQUE
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO artes_votos 
+                    (message_id, voter_id, voter_nome, tipo) 
+                    VALUES (%s, %s, %s, 'like')
+                    """,
+                    (self.message_id, interaction.user.id, str(interaction.user))
                 )
-                logging.info(f"[ARTES] Voto duplicado ignorado: voter={interaction.user.id} message={self.message_id}")
+            except Exception:
+                con.rollback()
+
+                await interaction.followup.send(
+                    "Você já votou nessa arte!",
+                    ephemeral=True
+                )
                 return
 
-            # Registra o voto
-            cur.execute(
-                "INSERT INTO artes_votos (message_id, voter_id, voter_nome, tipo) VALUES (%s, %s, %s, 'like')",
-                (self.message_id, interaction.user.id, str(interaction.user))
-            )
-
-            # Incrementa o contador de corações
+            # Incrementa corações
             cur.execute(
                 "UPDATE artes_posts SET coracoes = coracoes + 1 WHERE message_id = %s",
                 (self.message_id,)
             )
 
             con.commit()
-            logging.info(f"[ARTES] Voto registrado: voter={interaction.user} ({interaction.user.id}) message={self.message_id}")
 
-            # Adiciona 10 pontos ao autor
+            logging.info(
+                f"[ARTES] Voto registrado: {interaction.user} -> msg {self.message_id}"
+            )
+
+            # Pontos (não quebrar fluxo)
             try:
                 adicionar_pontos_db(author_id, 10, author_name or str(author_id))
-                logging.info(f"[ARTES] +10 pontos para autor {author_id} (message={self.message_id})")
-            except Exception as p_err:
-                logging.error(f"[ARTES] Erro ao adicionar pontos ao autor {author_id}: {p_err}")
+            except Exception as e:
+                logging.error(f"[ARTES] Erro ao adicionar pontos: {e}")
 
-            # Envia DM ao autor informando pontos
-            try:
-                author_user = await bot.fetch_user(author_id)
-                embed = discord.Embed(
-                    title="<a:143125redgemheart:1454722071618916530> Você recebeu pontos!",
-                    description="Você ganhou 10 pontos ao usuário votar em você!",
-                    color=discord.Color.green()
-                )
-                embed.set_footer(text=f"Votado por {interaction.user}")
-                await author_user.send(embed=embed)
-                logging.info(f"[ARTES] DM enviada ao autor {author_id} informando +10 pontos")
-            except Exception as dm_err:
-                logging.error(f"[ARTES] Falha ao enviar DM para {author_id}: {dm_err}")
+            # DM em background
+            asyncio.create_task(
+                enviar_dm_autor(author_id, interaction.user)
+            )
 
-            # Confirmação ao votante
-            await interaction.response.send_message(
-                "Voto registrado. Obrigado por apoiar o artista!", ephemeral=True
+            await interaction.followup.send(
+                "💖 Voto confirmado! Seu apoio faz toda a diferença para o artista ✨",
+                ephemeral=True
             )
 
         except Exception as e:
+            con.rollback()
+
             logging.error(f"[ARTES] Erro ao processar voto: {e}\n{traceback.format_exc()}")
+
             try:
-                await interaction.response.send_message("Erro ao registrar voto.", ephemeral=True)
+                await interaction.followup.send(
+                    "Erro ao registrar voto."
+                )
             except:
                 pass
+
         finally:
             con.close()
 
 
-# Função para recriar Views persistentes ao iniciar o bot
+# ✅ DM fora do fluxo principal
+async def enviar_dm_autor(author_id: int, voter: str):
+    try:
+        author_user = await bot.fetch_user(author_id)
+
+        embed = discord.Embed(
+            title="<a:143125redgemheart:1454722071618916530> Sua arte recebeu um coração!",
+            description=(
+                "❤️ Alguém acabou de demonstrar carinho pela sua arte!\n"
+                "Você ganhou **10 pontos** por isso.\n\n"
+                "Quer acompanhar sua pontuação? Use **/pontos** para saber quantos pontos você possui!"
+            ),
+            color=discord.Color.green()
+        )
+
+        embed.set_footer(text=f"Coração enviado por {voter}")
+
+        await author_user.send(embed=embed)
+
+        logging.info(f"[ARTES] DM enviada ao autor {author_id}")
+
+    except discord.Forbidden:
+        logging.warning(f"[ARTES] Não foi possível enviar DM para {author_id} (DMs fechadas).")
+
+    except discord.HTTPException as e:
+        logging.error(f"[ARTES] Erro HTTP ao enviar DM para {author_id}: {e}")
+
+    except Exception as e:
+        logging.exception(f"[ARTES] Erro inesperado ao enviar DM para {author_id}: {e}")
+
+
+# ✅ Views persistentes
 async def setup_views():
     con = conectar_vips()
-    cur = con.cursor()
+    cur = con.cursor(buffered=True)
+
     cur.execute("SELECT message_id FROM artes_posts")
     rows = cur.fetchall()
-    for row in rows:
-        message_id = row[0]
-        bot.add_view(ArtesView(message_id))  
+
+    for (message_id,) in rows:
+        bot.add_view(ArtesView(message_id))
+
     con.close()
 
 @tasks.loop(hours=24)
