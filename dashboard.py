@@ -260,3 +260,43 @@ elif DATABASE == os.getenv("DB_VIPS"):
             mais_rara["conquista_id"],
             f'{mais_rara["percentual"]:.2f}% dos usuários'
         )
+
+    # =============================
+    # 📈 Ranking de Atividade
+    # =============================
+
+    st.header("💬 Ranking de Atividade Semanal")
+
+    sql_atividade = """
+    SELECT user_id, nome_discord, SUM(mensagens) as total_mensagens
+    FROM atividade
+    GROUP BY user_id, nome_discord
+    ORDER BY total_mensagens DESC
+    LIMIT 10;
+    """
+
+    df_atividade = consulta(sql_atividade, DB_VIPS)
+
+    if not df_atividade.empty:
+        fig = px.bar(
+            df_atividade,
+            x="total_mensagens",
+            y="nome_discord",
+            orientation="h",
+            text="total_mensagens",
+            title="Top 10 Usuários Mais Ativos na Semana",
+            color="total_mensagens",
+            color_continuous_scale="Blues"
+        )
+
+        fig.update_layout(
+            yaxis=dict(autorange="reversed"),  # colocar o mais ativo em cima
+            height=500,
+            title_x=0.5,
+            coloraxis_showscale=False
+        )
+
+        fig.update_traces(textposition="outside")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Nenhuma atividade registrada nesta semana.")
