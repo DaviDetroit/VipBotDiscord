@@ -5713,10 +5713,8 @@ def adicionar_pontos_db(user_id: int, pontos: int, nome_discord: str = None):
         con.close()
 
 def registrar_aposta_db(user_id: int, fixture_id: int, palpite: str) -> bool:
-    """
-    Retorna True se aposta registrada; False se o usuário já apostou nesse fixture.
-    Vai também consumir um uso de clown_bet (se existir) e salvar modo_clown na aposta.
-    """
+    
+ 
     con = conectar_futebol()
     cur = con.cursor()
 
@@ -5726,24 +5724,25 @@ def registrar_aposta_db(user_id: int, fixture_id: int, palpite: str) -> bool:
         con.close()
         return False
 
-    # 2) checa se usuário tem clown ativo (tabela clown_bet)
+    # 2) pega o nome do Discord
+    u = bot.get_user(int(user_id))
+    nome_discord = f"{u.name}#{u.discriminator}" if u else str(user_id)
+
+    # 3) checa se usuário tem clown ativo (tabela clown_bet)
     modo_clown = 0
     try:
         cur.execute("SELECT ativo FROM clown_bet WHERE user_id = %s", (user_id,))
         row = cur.fetchone()
         if row and row[0] == 1:
             modo_clown = 1
-            # consumir o uso (defina a lógica que preferir: desativar, decrementar ou remover)
-            # Exemplo: desativar (set ativo = 0)
             cur.execute("UPDATE clown_bet SET ativo = 0 WHERE user_id = %s", (user_id,))
     except Exception:
-        # se a tabela clown_bet não existir por algum motivo, seguimos sem modo_clown
         modo_clown = 0
 
-    # 3) inserir aposta com modo_clown
+    # 4) inserir aposta com modo_clown e nome_discord
     cur.execute(
-        "INSERT INTO apostas (user_id, fixture_id, palpite, modo_clown) VALUES (%s, %s, %s, %s)",
-        (user_id, fixture_id, palpite, modo_clown)
+        "INSERT INTO apostas (user_id, nome_discord, fixture_id, palpite, modo_clown) VALUES (%s, %s, %s, %s, %s)",
+        (user_id, nome_discord, fixture_id, palpite, modo_clown)
     )
 
     con.commit()

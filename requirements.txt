@@ -4,4 +4,7 @@ mysql-connector-python
 pytz
 requests
 aiomysql
+streamlit
+pandas
+plotly
 
