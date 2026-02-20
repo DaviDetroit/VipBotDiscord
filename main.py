@@ -174,6 +174,12 @@ async def on_command_error(interaction: discord.Interaction, error: discord.app_
 
 @bot.tree.command(name="pontos", description="Veja quantos pontos você tem")
 async def slash_pontos(interaction: discord.Interaction):
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
     pontos = pegar_pontos(interaction.user.id)
 
     await interaction.response.send_message(
@@ -196,6 +202,12 @@ async def slash_loja(interaction: discord.Interaction):
 
 @bot.tree.command(name="compras", description="Veja seus itens ativos na loja")
 async def compras(interaction: discord.Interaction):
+
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
 
     user_id = interaction.user.id
     con = conectar_futebol()
@@ -361,7 +373,7 @@ async def slash_time(interaction: discord.Interaction, nome: str):
         "sao paulo": "São Paulo",
         "galo": "Atlético Mineiro",
         "gremio": "Grêmio",
-        "athletico paranaense": "Athletico Paranaense",
+        "athletico_paranaense": "Athletico Paranaense",
         "ceara": "Ceará",
         "vitoria": "Vitória"
     }
@@ -429,6 +441,12 @@ async def slash_time(interaction: discord.Interaction, nome: str):
 
 @bot.tree.command(name="lista_times", description="Veja todos os times disponíveis")
 async def slash_lista_times(interaction: discord.Interaction):
+
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
 
     def emoji_do_time(nome: str) -> str:
         base = nome.strip().lower()
@@ -514,6 +532,12 @@ async def slash_sair_time(interaction: discord.Interaction):
 @bot.tree.command(name="info", description="Veja informações e comandos do bot")
 async def slash_info(interaction: discord.Interaction):
     """Mostra informações do bot"""
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
     embed = discord.Embed(
         title="📜 Comandos do Bot",
         description="Aqui estão todos os comandos disponíveis:",
@@ -560,6 +584,12 @@ async def slash_info(interaction: discord.Interaction):
 
 @bot.tree.command(name="fogo", description="Mostra seus acertos consecutivos atuais")
 async def slash_fogo(interaction: discord.Interaction):
+
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
 
     conn = conectar_futebol()
     cursor = conn.cursor(dictionary=True)
@@ -610,6 +640,12 @@ async def slash_fogo(interaction: discord.Interaction):
 
 @bot.tree.command(name="top_fogos", description="Veja os usuários com mais acertos consecutivos")
 async def slash_top_fogos(interaction: discord.Interaction):
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
     await interaction.response.defer()
     conn = conectar_futebol()
     cursor = conn.cursor(dictionary=True)
@@ -634,6 +670,12 @@ async def slash_top_fogos(interaction: discord.Interaction):
 # ================= COMANDO SLASH =================
 @bot.tree.command(name="top_apostas", description="Veja os melhores apostadores")
 async def slash_top_apostas(interaction: discord.Interaction):
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
     await interaction.response.defer()
     conn = conectar_futebol()
     cursor = conn.cursor(dictionary=True)
@@ -651,6 +693,12 @@ async def slash_top_apostas(interaction: discord.Interaction):
 @bot.tree.command(name="torcedores", description="Veja os torcedores do servidor")
 async def slash_torcedores(interaction: discord.Interaction):
 
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
     embed = await gerar_embed_torcedores(interaction.guild)
 
     if not embed:
@@ -667,6 +715,12 @@ async def slash_conquistas(
     membro: discord.Member = None
 ):
 
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
     alvo = membro or interaction.user
 
     embed = await gerar_conquistas_embed(alvo, interaction.guild)
@@ -681,9 +735,6 @@ async def slash_conquistas(
         embed=embed,
         ephemeral=True
     )
-
-
-
 
 
 
@@ -714,10 +765,7 @@ EMOJI_TIMES = {
     "flamengo": "<:Flamengo:1425990044623044659>",
     "palmeiras": "<:Palmeiras:1425989650513662044>",
     "lanus": "<:Lanus:1441436509281718383>",
-    "atletico paranaense": "<:atlpr:1443398482516775055>",
-    "atlético paranaense": "<:atlpr:1443398482516775055>",
-    "athletico paranaense": "<:atlpr:1443398482516775055>",
-    "atletico-pr": "<:atlpr:1443398482516775055>",
+    "athletico_paranaense": "<:atlpr:1443398482516775055>",
     "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
     "remo": "<:Remo:1443399201655492708>",
     "chapecoense": "<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
@@ -975,10 +1023,10 @@ CONQUISTAS = {
         "cargo": "O Azarão"
     },
     "conversador_em_call": {
-        "nome": "📞 Conversador em Call",
+        "nome": "🎙️ Veterano de Call",
         "descricao": "Fique 50 horas em call de voz (acumulado).",
         "condicao": lambda d: d['tempo_em_call'] >= 180000,
-        "cargo": "Conversador em Call"
+        "cargo": "Veterano de Call"
     },
     "chamando_ajuda": {
         "nome": "🤖 Alô Miisha?",
@@ -1029,29 +1077,36 @@ def get_mencoes_bot(user_id):
         logging.error(f"Erro em get_mencoes_bot: {e}")
         return 0
 
-
 def processar_conquistas_db(user_id, novos_registros):
     conexao = conectar_vips()
-    cursor = conexao.cursor()
+    cursor = conexao.cursor(buffered=True)
 
     try:
         if novos_registros:
+            logging.info(f"Adicionando {len(novos_registros)} novas conquistas para o usuário {user_id}")
             cursor.executemany(
                 "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
                 novos_registros
             )
             conexao.commit()
+            logging.info("Novas conquistas inseridas com sucesso")
 
         cursor.execute(
             "SELECT conquista_id FROM conquistas_desbloqueadas WHERE user_id = %s",
             (user_id,)
         )
+        resultados = cursor.fetchall()
+        conquistas = {row[0] for row in resultados}
+        return conquistas
 
-        return {row[0] for row in cursor.fetchall()}
+    except Exception as e:
+        logging.error(f"Erro ao processar conquistas do usuário {user_id}: {e}", exc_info=True)
+        return set()
 
     finally:
         cursor.close()
         conexao.close()
+        
 
 async def processar_conquistas(
     member,
@@ -1065,7 +1120,6 @@ async def processar_conquistas(
     mencoes_bot=0,
     azarao_vitoria=False
 ):
-
     # 🔥 verifica cargo artista
     tem_cargo_artista = False
     if member.guild:
@@ -1074,14 +1128,14 @@ async def processar_conquistas(
             tem_cargo_artista = True
 
     dados = {
-        "mensagens_semana": mensagens_semana,
-        "maior_streak": maior_streak,
+        "mensagens_semana": mensagens_semana or 0,
+        "maior_streak": maior_streak or 0,
         "fez_doacao": fez_doacao,
         "tem_vip": tem_vip,
-        "tempo_em_call": tempo_em_call,
+        "tempo_em_call": tempo_em_call or 0,
         "mencionou_miisha": mencionou_miisha,
         "tocou_musica": tocou_musica,
-        "mencoes_bot": mencoes_bot,
+        "mencoes_bot": mencoes_bot or 0,
         "azarao_vitoria": azarao_vitoria,
         "bloqueado": False,
         "tem_cargo_artista": tem_cargo_artista
@@ -1235,9 +1289,14 @@ async def desbloquear_conquistas_em_grupo(guild, user_ids, conquista_id):
             await canal.send(mentions, embed=embed)
 
 
+
+
+
 MENCAO_FUTEBOL = "<#1442495893365330138>"
 MENCAO_CANAL_DOACAO = "<#1454672224631128205>"
 MENCAO_CANAL_VIP = "<#1381380248511447040>"
+
+
 
 mensagens_bom_dia = [
     "🌞 Bom dia, pessoal! Vamos começar o dia com energia positiva!",
@@ -1277,6 +1336,18 @@ mensagens_bom_dia = [
     "😎 Bom dia! Mais um dia pra ficar um pouco melhor que ontem.",
     "🏆 Bom dia! Mentalidade de campeão começa cedo."
 ]
+
+
+def slash_mention(bot, nome):
+    try:
+        for cmd in bot.tree.walk_commands():
+            if cmd.name == nome:
+                if getattr(cmd, "id", None):
+                    return f"</{cmd.name}:{cmd.id}>"
+                return f"/{cmd.name}"
+    except Exception:
+        pass
+    return f"/{nome}"
 
 
 mensagens_curiosidade = [
@@ -1359,26 +1430,22 @@ mensagens_curiosidade = [
     "🎧 Sons ambientes podem melhorar o foco.",
     "🕒 Seu corpo tem um relógio biológico natural.",
 
+
     # ================= SERVER / BOT =================
 
     "🤖 O bot **Miisha** pode te ajudar com comandos e informações do servidor — é só chamar!",
     "⚡ Mencione @Miisha para descobrir funções e dicas rapidamente.",
-    "🆘 Dúvidas sobre o servidor? O Miisha pode te poupar tempo.",
+    "🆘 Dúvidas sobre o servidor? A Miisha pode te poupar tempo.",
     f"⚽ Você pode apostar no seu time favorito no canal {MENCAO_FUTEBOL}.",
-    "⚽ Use !lista_times para ver os times e escolha o seu com !time <nome>.",
+    f"<a:522143costco:1473869986773733396> Confira itens e vantagens usando {slash_mention(bot, 'loja')}.",
+    f"💰 Quer ver seus pontos e acertos consecutivos? Use {slash_mention(bot, 'pontos')}.",
+    f"⚽ Escolha seu time com {slash_mention(bot, 'time')} e represente ele nas apostas!",
     f"💸 Você pode ganhar pontos ajudando o desenvolvimento do bot! Veja mais em {MENCAO_CANAL_DOACAO}.",
     f"🤑 Quer vantagens exclusivas? Seja VIP! Veja mais em {MENCAO_CANAL_VIP}.",
-    "🏯 Temos apostas de futebol e também de animes — normalmente as sextas e sábados!",
+    "🏯 Temos apostas de futebol e também de animes — normalmente às sextas e sábados!",
     "🤖 Agora eu possuo comandos Slash! Basta apertar `/` e ver todas as opções que posso oferecer.",
-    "⚡ Com meus comandos Slash, você pode ver rankings, pontos e acertos consecutivos de forma rápida e divertida!",
-    "💡 É só digitar `/` e explorar minhas funções — apostas, top apostadores e mais!",
-    "🎉 Slash commands ativados! Facilito sua vida mostrando resultados e informações sem precisar lembrar de comandos complexos.",
-    "🏆 Quer conferir o top de apostadores ou os piores colocados? Meus comandos Slash mostram tudo em segundos!",
-    "✨ Digite `/` e descubra funções escondidas: sistema de futebol, pontos, acertos consecutivos e muito mais!",
-    "💬 Comandos Slash são interativos! Você escolhe a ação e eu trago embeds, mensagens e rankings diretamente no chat."
-    
+    "🎉 Slash commands ativados! Facilito sua vida mostrando resultados e informações sem precisar lembrar comandos antigos!"
 ]
-
 
 
 #===========================Bom Dia & Curiosidade===========================
@@ -1409,19 +1476,14 @@ async def enviar_mensagens_programadas():
 async def on_ready():
     logging.info(f"🌹 Bot conectado como {bot.user}")
     
-    # Verificar usuários em call quando bot inicia
     await verificar_usuarios_em_call_inicial()
     
-    # Adicionar listeners para interações
     bot.add_view(DoacaoView())  
 
-    # View de vips
     bot.add_view(VipView())
     
-    # Restaurar views das artes
     await setup_views()
     
-    # Restaurar mensagem de doação se existir
     doacao_data = get_mensagem_doacao()
     if doacao_data:
         try:
@@ -1429,7 +1491,6 @@ async def on_ready():
             if channel:
                 message = await channel.fetch_message(doacao_data["message_id"])
                 if message:
-                    # Re-adiciona a view à mensagem existente
                     await message.edit(view=DoacaoView())
                     logging.info(f"Mensagem de doação restaurada: message_id={doacao_data['message_id']}")
         except Exception as e:
@@ -1437,7 +1498,6 @@ async def on_ready():
     
     jogos_pendentes = buscar_jogos_pendentes()
 
-    # ===== Evita iniciar 2 vezes =====
     if not verificar_posts.is_running():
         verificar_posts.start()
 
@@ -1456,8 +1516,6 @@ async def on_ready():
     if not enviar_mensagens_programadas.is_running():
         enviar_mensagens_programadas.start()
         
-    # Task premiar_post_mais_votado removida - não existe no código
-        
     if not check_evento_anime.is_running():
         check_evento_anime.start()
 
@@ -1470,17 +1528,6 @@ async def on_ready():
     if not reset_mencoes_bloqueio.is_running():
         reset_mencoes_bloqueio.start()
         
-
-    # ===== Verificador de gols =====
-    # if await jogos_ao_vivo():
-    #     if not verificar_gols.is_running():
-    #         verificar_gols.start()
-    #         logging.info("✅ Verificador de gols iniciado!")
-    # else:
-    #     logging.info("⚠️ Nenhum jogo ao vivo no momento.")
-
-    # ===== TOP ATIVOS DOMINGO =====
-    # Removido - agora handled por loop_top_ativos
 
     conn = conectar_vips()
     c = conn.cursor()
@@ -1514,7 +1561,6 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Falha ao reconstruir contadores/alertas: {e}")
     
-    # ===== Jimbo Scheduler =====
     bot.loop.create_task(jimbo_scheduler())
 
     @tasks.loop(minutes=3)
@@ -1534,6 +1580,7 @@ async def on_ready():
         await channel.purge(check=check, limit=100)
     except Exception:
         pass
+
 
 @tasks.loop(hours=24)
 async def reset_mencoes_bloqueio():
@@ -2934,10 +2981,11 @@ async def on_message(message):
             try:
                 await message.delete()
                 await message.channel.send(
-                    f"{message.author.mention} ❌ **Você não tem VIP para usar o bot de música em qualquer lugar!**\n"
                     f"🎵 Use apenas nos canais <#1380564681093156940> ou <#1380564681093156941>\n"
                     f"💎 Ou adquira VIP em <#{CANAL_SEJA_VIP}>!"
                 )
+                await asyncio.sleep(3)
+                await msg.delete()
                 logging.info(
                     f"Tentativa de usar m!play em {message.channel.id} por {message.author.id} (sem VIP)"
                 )
@@ -3607,26 +3655,51 @@ async def on_voice_state_update(member, before, after):
     if member and member.id == BOT_MUSICA_PROIBIDO:
         if after and after.channel:
             canal_id = after.channel.id
+
+            #Se entrou em canal não permitido
             if canal_id not in CANAIS_MUSICAS_LIBERADO:
                 try:
-                    canais_permitidos = [bot.get_channel(cid) for cid in CANAIS_MUSICAS_LIBERADO]
-                    destino = next((c for c in canais_permitidos if c and c.guild.id == member.guild.id), None)
-                    if destino:
-                        await member.move_to(destino, reason="Mover bot de música para canal permitido")
+                    membros_do_canal = [
+                        m for m in after.channel.members
+                        if not m.bot
+
+                    ]
+                    nao_vip_encontrado = False
+                    conn = conectar_vips()
+                    cursor = conn.cursor()
+                    try:
+                        for m in membros_do_canal:
+                            try:
+                                cursor.execute(
+                                    "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
+                                    (m.id,)
+                                )
+                                tem_vip = cursor.fetchone() is not None
+                                if not tem_vip:
+                                    nao_vip_encontrado = True
+                                    break
+                            except Exception as e:
+                                logging.error(f"Erro ao verificar VIP: {e}")
+                    finally:
+                        cursor.close()
+                        conn.close()
+                    
+                    if nao_vip_encontrado:
+                        await member.edit(
+                            mute=True,
+                            deafen=True,
+                            reason="Canal não permitido para não VIP"
+                        )
+
                         try:
-                            await after.channel.send(f"{member.mention} foi movido para {destino.mention}.")
-                        except:
-                            pass
-                    else:
-                        await member.edit(mute=True, deafen=True, reason="Bot de música restrito a canais permitidos")
-                        try:
-                            await after.channel.send(f"{member.mention} está silenciado fora dos canais permitidos.")
+                            await after.channel.send(
+                                "🔇 Bot de música está silenciado.\n"
+                                "❌ Apenas VIP pode usar música fora dos canais permitidos."
+                            )
                         except:
                             pass
                 except Exception as e:
-                    logging.error(f"Falha ao aplicar restrição ao bot de música: {e}")
-
-    
+                    logging.error(f"Erro ao aplicar restrição: {e}")    
 
 
 # ======================================
@@ -3747,9 +3820,24 @@ async def on_presence_update(before, after):
         if len(jogando[jogo_atual]) == 3:
             channel = bot.get_channel(1380564680552091789)
             mentions = " ".join(f"<@{uid}>" for uid in jogando[jogo_atual])
+            
+            # Mapeamento de jogos para seus respectivos cargos
+            cargos_jogos = {
+                "Minecraft": 1422954037174603796,
+                "Roblox": 1422954452846907446,
+                "Valorant": 1422954672754397316,
+                "Dbd": 1444071303442071674,
+                "Lol": 1422978913373651094,
+                "Brawhalla": 1425160627487375533
+            }
+            
+            
+            cargo_id = cargos_jogos.get(jogo_atual)
+            cargo_mencao = f"<@&{cargo_id}>" if cargo_id else ""
+            
             await channel.send(
                 f"<a:5ad2b0ea20074b8c80a3fa600b4e8ec4:1410657064430075975> "
-                f"Os jogadores {mentions} estão jogando **{jogo_atual}** na call! Jogue você também!"
+                f"Os jogadores {mentions} estão jogando **{jogo_atual}** na call! {cargo_mencao} Jogue você também!"
             )
             await desbloquear_conquistas_em_grupo(
                 guild=channel.guild,
@@ -4544,29 +4632,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
 
 filas = {}  
 
-# Função para tocar a próxima música na fila
-async def tocar_proxima(ctx, voz):
-    guild_id = ctx.guild.id
-    if filas.get(guild_id):
-        # Pega a próxima música da fila
-        url = filas[guild_id].pop(0)
 
-        
-
-        await ctx.send(f"Tocando agora: {url} 🎶")  # Mensagem temporária
-    else:
-        # Se não tiver música na fila, desconecta depois de 1 minuto
-        async def desconectar_apos_espera():
-            try:
-                await asyncio.sleep(60)
-                if voz.is_connected() and not voz.is_playing():
-                    await voz.disconnect()
-                    await ctx.send("⏹ Esperei 1 minuto e nada de música, então fui!")
-            except Exception as e:
-                logging.error(f"Erro no timer de desconexão: {e}")
-
-        # Cria a tarefa de desconexão
-        bot.loop.create_task(desconectar_apos_espera())
 
 #COMANDO TICKET
 CARGO_AVISADO = 1445063169973424239
@@ -5019,7 +5085,7 @@ ROLE_IDS_TIMES = {
     "santos": 1443227595935187025,
     "botafogo": 1443759934054469703,
     "vitoria": 1444483144270086267,
-    "atletico paranaense": 1471640222713253949,
+    "athletico_paranaense": 1471640222713253949,
     "bragantino": 1471640464208957632,
     "mirassol": 1471640764311277670,
     "coritiba": 1471640974902956196,
@@ -5072,6 +5138,9 @@ async def apistart(ctx, horario: str = None):
         if not verificar_gols.is_running():
             verificar_gols.start()
 
+        if not verificar_jogos_automaticamente.is_running():
+            verificar_jogos_automaticamente.start()
+
         logging.info("Monitoramento iniciado MANUALMENTE.")
         return await ctx.send("🔵 **Monitoramento iniciado manualmente! Jogos ao vivo em andamento!**")
 
@@ -5109,6 +5178,9 @@ async def apistart(ctx, horario: str = None):
 
         if not verificar_gols.is_running():
             verificar_gols.start()
+
+        if not verificar_jogos_automaticamente.is_running():
+            verificar_jogos_automaticamente.start()
 
         logging.info("Monitoramento iniciado AUTOMATICAMENTE no horário agendado.")
         await ctx.send(f"🟢 **Monitoramento iniciado automaticamente às {horario_agendado.strftime('%H:%M')}!**")
@@ -5829,11 +5901,12 @@ MAPEAMENTO_TIMES = {
     "fortaleza": "fortaleza",
 
     # Athletico Paranaense
-    "atlético paranaense": "athletico paranaense",
-    "atletico paranaense": "atletico paranaense",
-    "atletico pr": "athletico paranaense",
-    "athletico pr": "athletico paranaense",
-    "athletico paranaense": "athletico paranaense",
+    "atlético paranaense": "athletico_paranaense",
+    "atletico paranaense": "athletico_paranaense",
+    "athletico paranaense": "athletico_paranaense",
+    "atletico pr": "athletico_paranaense",
+    "athletico pr": "athletico_paranaense",
+    "atl pr": "athletico_paranaense",
 
     # Coritiba
     "coritiba": "coritiba",
@@ -6002,7 +6075,7 @@ def get_estadio_time_casa(nome_time_api: str):
             "estadio": "Barradão",
             "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Barradão.jpg"
         },
-        "athletico paranaense": {
+        "athletico_paranaense": {
             "estadio": "Ligga Arena",
             "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Ligga%20Arena.png"
         },
@@ -6073,7 +6146,7 @@ PALAVRAS_GOL = {
     "vasco":       "⚓ GOOOOOOOOL DO GIGANTE DA COLINA!!!",
     "bragantino":  "🐂 GOOOOOOOL DO MASSA BRUTA!!!",
     "ceara":       "🦅 GOOOOOOOL DO VOZÃO!!!",
-    "atletico paranaense": "🌪️ GOOOOOOOL DO FURACÃO!!!",
+    "athletico_paranaense": "🌪️ GOOOOOOOL DO FURACÃO!!!",
     "fluminense":  "🍃❤️💚 GOOOOOOOL DO FLUZÃO",
     "internacional": "🎩 GOOOOOOOL DO COLORADO!!!",
     "coritiba":    "🍀 GOOOOOOOL DO COXA!!!",
@@ -6104,7 +6177,7 @@ GIFS_VITORIA_TIME = {
     # =======================
     # 🇧🇷 CLUBES BRASILEIROS 2025 - DOIS GIFs POR TIME
     # =======================
-    "athletico paranaense": [
+    "athletico_paranaense": [
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Athletic%20Paranaense/atlethic%20paranaense.gif",
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Athletic%20Paranaense/atletico%20paranaense.gif"
     ],
@@ -6838,15 +6911,42 @@ async def executar_compra(member, item, guild):
     elif item_lower in ["caixa_misteriosa", "caixinha"]:
         # Lógica para Caixa Surpresa
         logging.info(f"{member.name} (ID: {member.id}) comprou Caixinha por {preco} pontos.")
+        
+        # Verificar limite de 3 compras em 24 horas
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'caixinha' AND data_compra >= DATE_SUB(NOW(), INTERVAL 24 HOUR)",
+            (member.id,)
+        )
+        limite_24h = cur.fetchone()[0]
+        con.close()
+        
+        if limite_24h >= 3:
+            adicionar_pontos_db(member.id, preco)  # Devolver os pontos
+            return False, " Você já usou a **Caixinha** 3 vezes nas últimas 24 horas. Aguarde o cooldown de 24h após a última utilização."
+        
         import random
         pontos_ganhos = random.randint(-200, 300)
         adicionar_pontos_db(member.id, pontos_ganhos)
+        
+        # Registrar no banco
+        con = conectar_futebol()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
+            (member.id, item_lower, pontos_ganhos, datetime.utcnow())
+        )
+        con.commit()
+        con.close()
+        
         if pontos_ganhos > 0:
-            return True, f"<a:809469heartchocolate:1466494908243120256> Você ganhou **+{pontos_ganhos} pontos** na caixa surpresa! 💰"
+            return True, f"<a:809469heartchocolate:1466494908243120256> Você ganhou **+{pontos_ganhos} pontos** na caixa surpresa! "
         elif pontos_ganhos < 0:
-            return True, f"<a:809469heartchocolate:1466494908243120256> Você perdeu **{abs(pontos_ganhos)} pontos** na caixa surpresa! 💔"
+            return True, f"<a:809469heartchocolate:1466494908243120256> Você perdeu **{abs(pontos_ganhos)} pontos** na caixa surpresa! "
         else:
-            return True, f"<a:809469heartchocolate:1466494908243120256> Você não ganhou nem perdeu pontos na caixa surpresa! 📦"
+            return True, f"<a:809469heartchocolate:1466494908243120256> Você não ganhou nem perdeu pontos na caixa surpresa! "
+        
     
     elif item_lower == "inverter":
         # Lógica para Inverter
@@ -7774,7 +7874,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                         value=(
                             "<:apchikabounce:1408193721907941426> **!meuspontos**\n"
                             "<a:9612_aMCenchantedbook:1449948971916202125> **!info**\n"
-                            "🏪 **!loja**\n"
+                           "<a:522143costco:1473869986773733396> **!loja** compre comemoração, caixa surpresa vip e mais!\n"
                             "<a:17952trophycoolbrawlstarspin:1457784734074535946> **!conquistas**"
                         ),
                         inline=False
@@ -7841,7 +7941,8 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                         name="📊 Comandos",
                         value=(
                             "<a:6582red:1449949837763154081> **!meuspontos**\n"
-                            "<a:9612_aMCenchantedbook:1449948971916202125> **!info**"
+                            "<a:9612_aMCenchantedbook:1449948971916202125> **!info**\n"
+                            "<a:522143costco:1473869986773733396> **!loja** compre comemoração, caixa surpresa vip e mais!"
                         ),
                         inline=False
                     )
@@ -8020,7 +8121,7 @@ async def terminar_jogo(ctx, fixture_id: int = None):
         
 
 
-@tasks.loop(minutes=16)
+@tasks.loop(minutes=20)
 async def verificar_jogos_automaticamente():
     """Loop automático que verifica e processa jogos finalizados a cada 12 minutos"""
     # Só funciona se a API estiver ativa via !apistart
@@ -8646,6 +8747,12 @@ async def vip_list(interaction: discord.Interaction):
 )
 async def slash_bad_apostas(interaction: discord.Interaction):
 
+    if interaction.channel.id != CANAL_PERMITIDO_ID:
+        return await interaction.response.send_message(
+            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            ephemeral=True
+        )
+
     await interaction.response.defer()  # Mostra que o bot está pensando
 
     conn = conectar_futebol()
@@ -8696,6 +8803,9 @@ async def slash_bad_apostas(interaction: discord.Interaction):
     finally:
         cursor.close()
         conn.close()
+
+
+
 
 @bot.command()
 async def time(ctx, *, nome_time: str):
@@ -8799,6 +8909,8 @@ async def sair_time(ctx):
 
 @bot.command()
 async def lista_times(ctx):
+    if ctx.channel.id != CANAL_COMANDOS:
+        return await ctx.send("<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.")
     def emoji_do_time(nome: str) -> str:
         base = nome.strip().lower()
         e = EMOJI_TIMES.get(base) or EMOJI_TIMES.get(base.replace(" ", "_"))
@@ -8863,7 +8975,7 @@ async def gerar_embed_torcedores(guild):
         "gremio": "Grêmio",
         "ceara": "Ceará",
         "vitoria": "Vitória",
-        "atletico paranaense": "Athletico-PR",
+        "athletico_paranaense": "Athletico-PR",
         "lanus": "Lanús",
         "palmeiras": "Palmeiras",
         "flamengo": "Flamengo",
@@ -8983,7 +9095,8 @@ async def admin_slash(interaction: discord.Interaction):
         name="📨 Utilidades",
         value=(
             "**!enviar_mensagem** — envia uma mensagem para um canal\n"
-            "**!ticket** — gerencia tickets de suporte"
+            "**!ticket** — gerencia tickets de suporte\n"
+            "**!testjimbo** - Faz o jimbo aparecer na hora"
         ),
         inline=False
     )
@@ -9809,7 +9922,7 @@ CARTAS = [
     },
 ]
 # Jimbo
-
+ 
 jimbo_ativo = False
 jimbo_ja_apareceu_hoje = False
 CANAL_JIMBO = 1380564680552091789
@@ -9837,7 +9950,7 @@ async def jimbo_scheduler():
             )
 
             # Reset diário
-            if meia_noite <= hora_atual < horario_reset:
+            if inicio <= hora_atual <= fim:
                 async with jimbo_lock:
 
                     if not jimbo_ativo and not jimbo_ja_apareceu_hoje:
@@ -9954,6 +10067,9 @@ class JimboView(discord.ui.View):
                 )
             except Exception as e:
                 logging.error(f"⚠️ Erro ao editar timeout de Jimbo: {e}")
+
+
+
 
 def puxar_carta():
     """Puxa uma carta aleatória do baralho com validação."""
@@ -10178,6 +10294,11 @@ class CartasView(discord.ui.View):
                 )
             except:
                 pass
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def testjimbo(ctx):
+    await spawn_jimbo()
 
 
 class ArtesView(discord.ui.View):
