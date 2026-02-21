@@ -1,7 +1,7 @@
 from calendar import c
 import discord
 from discord.ext import commands, tasks
-from discord import app_commands
+from discord import app_commands, channel
 import os
 from dotenv import load_dotenv
 import asyncio
@@ -344,51 +344,79 @@ async def slash_comprar(interaction: discord.Interaction, item: str):
 
 
 
+DISPLAY_NOMES = {
+    "galo": "Atlético-MG",
+    "sao paulo": "São Paulo",
+    "gremio": "Grêmio",
+    "athletico paranaense": "Athletico-PR",
+    "ceara": "Ceará",
+    "vitoria": "Vitória",
+    "fluminense": "Fluminense",
+    "vasco": "Vasco",
+    "palmeiras": "Palmeiras",
+    "flamengo": "Flamengo",
+    "corinthians": "Corinthians",
+    "cruzeiro": "Cruzeiro",
+    "botafogo": "Botafogo",
+    "bahia": "Bahia",
+    "bragantino": "Bragantino",
+    "santos": "Santos",
+    "fortaleza": "Fortaleza",
+    "internacional": "Internacional",
+    "coritiba": "Coritiba",
+    "remo": "Remo",
+    "mirassol": "Mirassol"
+}
+
+ROLE_IDS_TIMES = {
+    "galo": 1443224658710364190,
+    "sao paulo": 1443227353412014081,
+    "gremio": 1442482642942689323,
+    "athletico paranaense": 1471640222713253949,
+    "ceara": 1442483144270086267,
+    "vitoria": 1444483144270086267,
+    "fluminense": 1442482502311739442,
+    "vasco": 1442482275546697860,
+    "palmeiras": 1443227045332123648,
+    "flamengo": 1443226719572988077,
+    "corinthians": 1443227525458165903,
+    "cruzeiro": 1443226573116538950,
+    "botafogo": 1443759934054469703,
+    "bahia": 1443227115561685033,
+    "bragantino": 1471640464208957632,
+    "santos": 1443227595935187025,
+    "fortaleza": 1442482777894293624,
+    "internacional": 1443226517219049512,
+    "coritiba": 1471640974902956196,
+    "remo": 1471641271570530335,
+    "mirassol": 1471640764311277670
+}
+
+# IDs de canal permitido
+CANAL_PERMITIDO_ID = 1380564680774385724
+
 @bot.tree.command(name="time", description="Entre para um time de torcedores")
-@discord.app_commands.describe(nome="Nome do time que você quer torcer")
-async def slash_time(interaction: discord.Interaction, nome: str):
+@app_commands.describe(nome="Selecione o time que você quer torcer")
+@app_commands.choices(nome=[app_commands.Choice(name=v, value=k) for k, v in DISPLAY_NOMES.items()])
+async def slash_time(interaction: discord.Interaction, nome: app_commands.Choice[str]):
     """Permite que usuário entre em um time de torcedores"""
+
     if interaction.channel.id != CANAL_PERMITIDO_ID:
         return await interaction.response.send_message(
-            "<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.",
+            "Este comando pode ser usado apenas no canal correto.",
             ephemeral=True
         )
     
-    nome_normalizado = nome.strip().lower()
-    
-    # Verificar no MAPEAMENTO_TIMES completo
-    time_key = MAPEAMENTO_TIMES.get(nome_normalizado)
-    if not time_key:
-        await interaction.response.send_message(
-            "❌ Time não encontrado! Use `/lista_times` para ver os times disponíveis.",
-            ephemeral=True
-        )
-        return
-    
-    # Mapear time_key para nome do cargo (title case)
-    cargo_nome = time_key.replace("_", " ").title()
-    
-    # Mapeamento especial para nomes específicos de cargos
-    cargos_especiais = {
-        "sao paulo": "São Paulo",
-        "galo": "Atlético Mineiro",
-        "gremio": "Grêmio",
-        "athletico_paranaense": "Athletico Paranaense",
-        "ceara": "Ceará",
-        "vitoria": "Vitória"
-    }
-    
-    if time_key in cargos_especiais:
-        cargo_nome = cargos_especiais[time_key]
+    time_key = nome.value          # ex: "galo"
+    cargo_nome = DISPLAY_NOMES[time_key]  # ex: "Atlético-MG"
     
     guild = interaction.guild
     member = interaction.user
     
-    # Conectar ao banco e verificar se já tem time
+    # ------ Banco ------
     conn = conectar_futebol()
     cursor = conn.cursor()
     
-    # Verificar se usuário já tem um time
     cursor.execute(
         "SELECT time_normalizado FROM times_usuarios WHERE user_id = %s",
         (member.id,)
@@ -399,44 +427,43 @@ async def slash_time(interaction: discord.Interaction, nome: str):
         cursor.close()
         conn.close()
         return await interaction.response.send_message(
-            f"⚽ {member.mention}, você já escolheu um time (**{resultado[0].title()}**).\n"
+            f"⚽ {member.mention}, você já escolheu um time (**{resultado[0]}**).\n"
             f"Use `/sair_time` para trocar.",
             ephemeral=True
         )
     
-    # Inserir novo time no banco
     cursor.execute("""
         INSERT INTO times_usuarios (user_id, time_normalizado)
         VALUES (%s, %s)
         ON DUPLICATE KEY UPDATE time_normalizado = VALUES(time_normalizado)
-    """, (member.id, time_key))
+    """, (member.id, cargo_nome))
     
     conn.commit()
     cursor.close()
     conn.close()
     
-    # Remover outros cargos de time (usando IDs do ROLE_IDS_TIMES)
-    for time_key_loop, role_id in ROLE_IDS_TIMES.items():
-        cargo = guild.get_role(role_id)
-        if cargo and cargo in member.roles:
-            await member.remove_roles(cargo)
+    # ------ Cargo ------
+    for t_key, role_id in ROLE_IDS_TIMES.items():
+        cargo_loop = guild.get_role(role_id)
+        if cargo_loop and cargo_loop in member.roles:
+            await member.remove_roles(cargo_loop)
     
-    # Adicionar cargo do time escolhido (usando ID do ROLE_IDS_TIMES)
     role_id = ROLE_IDS_TIMES.get(time_key)
     if role_id:
         cargo = guild.get_role(role_id)
-    if cargo:
-        await member.add_roles(cargo)
-        await interaction.response.send_message(
-                f"<a:995589misathumb:1443956356846719119> {member.mention}, você agora torce para **{cargo.name}**! ⚽",
-            ephemeral=True
-        )
-        logging.info(f"{member.name} entrou no time {cargo_nome} via slash command.")
-    else:
-        await interaction.response.send_message(
-            f"❌ Cargo do time {cargo_nome} não encontrado no servidor.",
-            ephemeral=True
-        )
+        if cargo:
+            await member.add_roles(cargo)
+            await interaction.response.send_message(
+                f"Você agora torce para **{cargo.name}**! ⚽",
+                ephemeral=True
+            )
+            logging.info(f"{member.name} entrou no time {cargo_nome} via slash command.")
+            return
+    
+    await interaction.response.send_message(
+        f"❌ Cargo do time **{cargo_nome}** não encontrado no servidor.",
+        ephemeral=True
+    )
     
 
 @bot.tree.command(name="lista_times", description="Veja todos os times disponíveis")
@@ -1527,6 +1554,9 @@ async def on_ready():
         
     if not reset_mencoes_bloqueio.is_running():
         reset_mencoes_bloqueio.start()
+
+    if not bump_loop.is_running():
+        bump_loop.start()
         
 
     conn = conectar_vips()
@@ -2552,11 +2582,6 @@ async def dar_vip(ctx, membro: discord.Member, duracao: str):
             logging.info(f"{ctx.author.name} acabou de ganhar a conquista")
         except Exception as e:
             logging.error(f"Erro ao conceder conquista coroado para {membro.display_name}: {e}")
-
-
-
-
-
 
 
 
@@ -4345,7 +4370,7 @@ async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, perdedor, pon
 
         for uid in ganhadores_ids:
             try:
-                await adicionar_pontos_db(uid, pontos_premio)
+                adicionar_pontos_db(uid, pontos_premio)
                 await asyncio.to_thread(atualizar_streak, uid, True)  
             except Exception as e:
                 logging.error(f"Falha ao adicionar pontos para {uid}: {e}")
@@ -4354,7 +4379,6 @@ async def atualizar_pontuacao_ganhadores(ganhadores_ids, vencedor, perdedor, pon
 
     except Exception as e:
         logging.error(f"Erro ao atualizar pontuação: {e}")
-
 
 
 async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_premio):
@@ -4389,9 +4413,9 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
     
     # Criar embed bonito
     embed = discord.Embed(
-        title="🎉 VITÓRIA NA BATALHA DE ANIME!" if not foi_azarao else "⚡ VITÓRIA DE AZARÃO!",
+        title="<a:105382toro:1454984271897825405> VITÓRIA NA BATALHA DE ANIME!" if not foi_azarao else "⚡ VITÓRIA DE AZARÃO!",
         description=(
-            f"{CARGO_ANIME}🏆 **{vencedor['nome']}** venceu a batalha épica!\n\n"
+            f"🏆 **{vencedor['nome']}** venceu a batalha épica!\n\n"
             f"💰 **Sua recompensa:** **+{pontos_premio} pontos**\n"
             f"⚔️ **Força do campeão:** `{vencedor['forca']}/100`\n\n"
             f"{'🎯 **Aposta de azarão bem-sucedida!**' if foi_azarao else '🎊 **Aposta certeira no favorito!**'}\n\n"
@@ -4479,7 +4503,7 @@ async def enviar_mensagem_derrota_dm(perdedores_ids, perdedor, vencedor, pontos_
     # Aplicar perda de pontos para cada perdedor
     for uid in perdedores_ids:
         try:
-            await adicionar_pontos_db(uid, -pontos_perdidos)
+            adicionar_pontos_db(uid, -pontos_perdidos)
         except Exception as e:
             logging.error(f"Falha ao remover pontos para {uid}: {e}")
     
@@ -4617,7 +4641,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
         embed.add_field(name="Diferença de Força", value=f"{diferenca_forca}", inline=True)
 
         # Footer
-        embed.set_footer(text=f"{CARGO_ANIME} | {len(ganhadores_ids)} apostadores vencedores")
+        embed.set_footer(text=f"{len(ganhadores_ids)} apostadores vencedores")
 
         
         await canal.send(content=f"{CARGO_ANIME} **Batalha Encerrada!**", embed=embed)
@@ -5073,7 +5097,6 @@ ROLE_IDS_TIMES = {
     "fluminense": 1442482502311739442,
     "vasco": 1442482275546697860,
     "gremio": 1442482642942689323,
-    "fortaleza": 1442482777894293624,
     "galo": 1443224658710364190,
     "internacional": 1443226517219049512,
     "cruzeiro": 1443226573116538950,
@@ -5867,6 +5890,11 @@ MAPEAMENTO_TIMES = {
 
     # Ceará
     "ceará": "ceara",
+    
+    # Santos
+    "santos": "santos",
+    "santos-fc": "santos",
+    "santos fc": "santos",
 
     # RB Bragantino
     "rb bragantino": "bragantino",
@@ -5998,11 +6026,7 @@ MAPEAMENTO_TIMES = {
 }
 
 def get_estadio_time_casa(nome_time_api: str):
-    """
-    Retorna informações do estádio com base no time da casa.
-    A imagem fica vazia para preenchimento manual depois.
-    """
-
+ 
     if not nome_time_api:
         return {
             "time": None,
@@ -8809,19 +8833,50 @@ async def slash_bad_apostas(interaction: discord.Interaction):
 @bot.command()
 async def time(ctx, *, nome_time: str):
     if ctx.channel.id != CANAL_COMANDOS:
-        return await ctx.send("<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>.")
+        return await ctx.send(
+            "<:480700twinshout:1443957065230844066> Este comando pode ser usado apenas no canal <#1380564680774385724>."
+        )
 
     logging.info(f"Alguém ({ctx.author}) tentou usar o comando time em um canal diferente ({ctx.channel.id}).")
 
     if not nome_time:
         return await ctx.send("<:Jinx_Watching:1390380695712694282> Desculpa, mas você precisa informar o nome do time")
 
-    nome = nome_time.lower().strip()
-    if nome not in MAPEAMENTO_TIMES:
+    # Normalizar entrada
+    nome_normalizado = nome_time.lower().strip()
+
+    # Verificar no mapeamento
+    if nome_normalizado not in MAPEAMENTO_TIMES:
         return await ctx.send("<:3894307:1443956354698969149> Desculpa, mas eu não reconheço esse time")
 
-    time_normalizado = MAPEAMENTO_TIMES[nome]
-    cargo_nome = time_normalizado.title()
+    time_chave = MAPEAMENTO_TIMES[nome_normalizado]
+
+    # Display bonito (para Discord e banco)
+    DISPLAY_NOMES = {
+        "galo": "Atlético-MG",
+        "sao paulo": "São Paulo",
+        "athletico_paranaense": "Athletico-PR",
+        "vasco": "Vasco",
+        "fluminense": "Fluminense",
+        "vitoria": "Vitória",
+        "gremio": "Grêmio",
+        "ceara": "Ceará",
+        "palmeiras": "Palmeiras",
+        "flamengo": "Flamengo",
+        "corinthians": "Corinthians",
+        "cruzeiro": "Cruzeiro",
+        "botafogo": "Botafogo",
+        "bahia": "Bahia",
+        "bragantino": "Bragantino",
+        "fortaleza": "Fortaleza",
+        "mirassol": "Mirassol",
+        "internacional": "Internacional",
+        "coritiba": "Coritiba",
+        "remo": "Remo",
+        "santos": "Santos"
+    }
+
+    nome_bonito = DISPLAY_NOMES.get(time_chave, time_chave.title())
 
     #------ Banco ------
     conn = conectar_futebol()
@@ -8835,40 +8890,43 @@ async def time(ctx, *, nome_time: str):
         cursor.close()
         conn.close()
         return await ctx.send(
-            f"⚽ {ctx.author.mention}, você já escolheu um time (**{resultado[0].title()}**).\n"
+            f"⚽ {ctx.author.mention}, você já escolheu um time (**{resultado[0]}**).\n"
             f"Use `!sair_time` para trocar."
         )
 
-    # Inserir novo time
+    # Inserir novo time com nome bonito
     cursor.execute("""
         INSERT INTO times_usuarios (user_id, time_normalizado)
         VALUES (%s, %s)
         ON DUPLICATE KEY UPDATE time_normalizado = VALUES(time_normalizado)
-    """, (ctx.author.id, time_normalizado))
+    """, (ctx.author.id, nome_bonito))
 
     conn.commit()
     cursor.close()
     conn.close()
 
     #------ Cargo ------
-    role_id = ROLE_IDS_TIMES.get(time_normalizado)
-    cargo = None
+    # Remover cargos antigos
+    for chave, role_id in ROLE_IDS_TIMES.items():
+        cargo_antigo = ctx.guild.get_role(role_id)
+        if cargo_antigo and cargo_antigo in ctx.author.roles:
+            await ctx.author.remove_roles(cargo_antigo)
 
-    if role_id:
-        cargo = discord.utils.get(ctx.guild.roles, id=role_id)
+    # Adicionar cargo do time escolhido
+    role_id = ROLE_IDS_TIMES.get(time_chave)
+    if not role_id:
+        return await ctx.send(f"❌ Cargo para o time **{nome_bonito}** não encontrado.")
 
+    cargo = ctx.guild.get_role(role_id)
     if not cargo:
-        cargo = discord.utils.get(ctx.guild.roles, name=cargo_nome)
-
-    if not cargo:
-        cargo = await ctx.guild.create_role(name=cargo_nome)
+        return await ctx.send(f"❌ Cargo para o time **{nome_bonito}** não encontrado no servidor.")
 
     await ctx.author.add_roles(cargo)
 
-    logging.info(f"Usuário {ctx.author} se registrou como torcedor do time {cargo_nome} (ID: {cargo.id}).")
+    logging.info(f"Usuário {ctx.author} se registrou como torcedor do time {nome_bonito} (ID: {cargo.id}).")
 
     await ctx.send(
-        f"<a:995589misathumb:1443956356846719119> {ctx.author.mention}, agora você está registrado como torcedor do **{cargo_nome}**!"
+        f"<a:995589misathumb:1443956356846719119> {ctx.author.mention}, agora você está registrado como torcedor do **{nome_bonito}**!"
     )
 
 
@@ -8904,7 +8962,6 @@ async def sair_time(ctx):
     conn.close()
 
     await ctx.send(f"✅ {ctx.author.mention}, você saiu do time **{cargo_nome}**!")
-
 
 @bot.command()
 async def lista_times(ctx):
@@ -8943,7 +9000,7 @@ async def lista_times(ctx):
     await ctx.send(embed=embed)
     logging.info(f"Usuário {ctx.author} solicitou a lista de times.")
 
-#Mostrar os torcedores do servidor
+# Mostrar os torcedores do servidor
 async def gerar_embed_torcedores(guild):
     conn = conectar_futebol()
     cursor = conn.cursor()
@@ -8957,59 +9014,30 @@ async def gerar_embed_torcedores(guild):
     if not rows:
         return None
 
+    # Organizar torcedores por time
     torcedores = {}
-
     for user_id, time_normalizado in rows:
-        if user_id not in torcedores.setdefault(time_normalizado, []):
-            torcedores[time_normalizado].append(user_id)
+        torcedores.setdefault(time_normalizado, []).append(user_id)
 
     embed = discord.Embed(
         title="🏟️ Torcedores por Time",
         color=discord.Color.blue()
     )
 
-    DISPLAY_NOMES = {
-        "galo": "Atlético-MG",
-        "sao paulo": "São Paulo",
-        "gremio": "Grêmio",
-        "ceara": "Ceará",
-        "vitoria": "Vitória",
-        "athletico_paranaense": "Athletico-PR",
-        "lanus": "Lanús",
-        "palmeiras": "Palmeiras",
-        "flamengo": "Flamengo",
-        "corinthians": "Corinthians",
-        "vasco": "Vasco",
-        "fluminense": "Fluminense",
-        "cruzeiro": "Cruzeiro",
-        "botafogo": "Botafogo",
-        "bahia": "Bahia",
-        "bragantino": "Bragantino",
-        "sport": "Sport",
-        "fortaleza": "Fortaleza",
-        "juventude": "Juventude",
-        "mirassol": "Mirassol",
-        "internacional": "Internacional",
-        "chapecoense": "Chapecoense",
-        "coritiba": "Coritiba",
-        "remo": "Remo"
-    }
-
     itens = []
-
     for time, usuarios in torcedores.items():
-        base = time.strip().lower()
-        display = DISPLAY_NOMES.get(base, time.title())
-        emoji = EMOJI_TIMES.get(base) or EMOJI_TIMES.get(base.replace(" ", "_")) or "⚽"
+        # Normaliza apenas para buscar emoji
+        time_chave = MAPEAMENTO_TIMES.get(time.lower(), time.lower())
+        emoji = EMOJI_TIMES.get(time_chave.replace(" ", "_")) or "⚽"
         mencoes = "\n".join(f"<@{uid}>" for uid in usuarios)
+        itens.append((time, emoji, mencoes))  # time original do banco aqui
 
-        itens.append((display, emoji, mencoes))
-
-    itens.sort(key=lambda x: x[0])
+    # Ordena alfabeticamente pelo nome do time
+    itens.sort(key=lambda x: x[0].lower())
 
     for display, emoji, mencoes in itens:
         embed.add_field(
-            name=f"{emoji} | {display}",
+            name=f"{emoji} | {display}",  # exibe o nome do banco
             value=mencoes,
             inline=False
         )
@@ -9027,19 +9055,32 @@ async def torcedores(ctx):
 
 @bot.event
 async def on_member_remove(member):
+    conn = None
+    cursor = None
     try:
         conn = conectar_futebol()
         cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM times_usuarios WHERE user_id = %s",
-            (member.id,)
-        )
+
+        cursor.execute("DELETE FROM times_usuarios WHERE user_id = %s", (member.id,))
+        cursor.execute("DELETE FROM apostas WHERE user_id = %s", (member.id,))
+        cursor.execute("DELETE FROM pontuacoes WHERE user_id = %s", (member.id,))
+
         conn.commit()
-        cursor.close()
-        conn.close()
         logging.info(f"Usuário {member.id} removido do banco ao sair do servidor.")
     except Exception as e:
         logging.error(f"Erro ao remover o usuário do banco de dados {e}")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+        finally:
+            if conn:
+                conn.close()
 
 
 # ----- CÓDIGO PARA VER TODOS OS COMANDOS ADMIN -----
@@ -10580,6 +10621,21 @@ async def verificar_melhor_do_mes():
         con.close()
         logging.info("✅ Conexão encerrada. Ciclo completo!")
         logging.info("🎬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+
+#Mencionar cargo bump
+CARGO_BUMP = 1380564679222628494
+CANAL_BUMP = 1380564680552091781
+
+@tasks.loop(hours=4)
+async def bump_loop():
+    channel = bot.get_channel(CANAL_BUMP)
+    if channel:
+        try:
+            # Menciona o cargo corretamente
+            await channel.send(f"Faça o bump! <@&{CARGO_BUMP}> 🚀")
+        except Exception as e:
+            logging.info(f"Erro ao dar o bump :( {e}")
 
 
 bot.run(TOKEN)

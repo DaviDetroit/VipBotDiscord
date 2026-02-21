@@ -1,7 +1,9 @@
+from _plotly_utils.colors.plotlyjs import Reds
 import streamlit as st
 import pandas as pd
 import mysql.connector
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -111,6 +113,7 @@ if DATABASE == os.getenv("DB_FUTEBOL"):
 
     st.header("⚽ Distribuição de Torcedores")
 
+
     sql_times = """
     SELECT time_normalizado, COUNT(*) as total
     FROM times_usuarios
@@ -121,35 +124,219 @@ if DATABASE == os.getenv("DB_FUTEBOL"):
 
     if not df_times.empty:
         df_times = df_times.sort_values(by="total", ascending=False)
-
+        
         total_torcedores = df_times["total"].sum()
         time_lider = df_times.iloc[0]["time_normalizado"]
+        percentual_lider = (df_times.iloc[0]["total"] / total_torcedores) * 100
 
-        col1, col2 = st.columns(2)
-        col1.metric("Total de Participantes", total_torcedores)
-        col2.metric("Maior Torcida", time_lider)
+        # Cards métricos com design moderno
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                            padding: 1.5rem; 
+                            border-radius: 15px; 
+                            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                            text-align: center;
+                            margin: 0.5rem 0;
+                            border: 1px solid rgba(255,255,255,0.1);'>
+                    <div style='color: rgba(255,255,255,0.8); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;'>Total de Participantes</div>
+                    <div style='color: white; font-size: 2.5rem; font-weight: bold; margin: 0.5rem 0;'>{total_torcedores:,}</div>
+                    <div style='color: rgba(255,255,255,0.7); font-size: 0.8rem;'>torcedores registrados</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                            padding: 1.5rem; 
+                            border-radius: 15px; 
+                            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                            text-align: center;
+                            margin: 0.5rem 0;
+                            border: 1px solid rgba(255,255,255,0.1);'>
+                    <div style='color: rgba(255,255,255,0.8); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;'>Maior Torcida</div>
+                    <div style='color: white; font-size: 2rem; font-weight: bold; margin: 0.5rem 0;'>{time_lider}</div>
+                    <div style='color: rgba(255,255,255,0.7); font-size: 0.8rem;'>{df_times.iloc[0]["total"]} torcedores</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                            padding: 1.5rem; 
+                            border-radius: 15px; 
+                            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                            text-align: center;
+                            margin: 0.5rem 0;
+                            border: 1px solid rgba(255,255,255,0.1);'>
+                    <div style='color: rgba(255,255,255,0.8); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;'>Domínio do Líder</div>
+                    <div style='color: white; font-size: 2.5rem; font-weight: bold; margin: 0.5rem 0;'>{percentual_lider:.1f}%</div>
+                    <div style='color: rgba(255,255,255,0.7); font-size: 0.8rem;'>do total de torcedores</div>
+                </div>
+            """, unsafe_allow_html=True)
 
+        # Container para o gráfico com título
+        st.markdown("""
+            <div style='margin-top: 2rem; margin-bottom: 1rem;'>
+                <h3 style='color: white; text-align: center; font-size: 1.5rem; margin-bottom: 1rem;'>
+                    📊 Distribuição Percentual por Time
+                </h3>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Dicionário de cores gradientes para cada time
+        cores_gradientes = {
+            'Atlético-MG': ['#E93A3A', '#FFFFFF'],  # Vermelho para Branco (Galo)
+            'Athletico-PR': ['#C8102E', '#FF6B6B'],  # Vermelho escuro para vermelho claro
+            'Bahia': ['#0033A0', '#4D7FFF'],  # Azul escuro para azul claro
+            'Botafogo': ['#000000', '#4D4D4D'],  # Preto para cinza
+            'Bragantino': ['#C40000', '#FF4D4D'],  # Vermelho para vermelho claro
+            'Ceará': ['#000000', '#4D4D4D'],  # Preto para cinza
+            'Corinthians': ['#000000', '#4D4D4D'],  # Preto para cinza
+            'Cruzeiro': ['#0033A0', '#4D7FFF'],  # Azul escuro para azul claro
+            'Flamengo': ['#CC0000', '#FF4D4D'],  # Vermelho para vermelho claro
+            'Fluminense': ['#7A0026', '#C41E3A'],  # Vinho para vermelho
+            'Fortaleza': ['#0033A0', '#4D7FFF'],  # Azul escuro para azul claro
+            'Grêmio': ['#0A3A77', '#2A6FB0'],  # Azul marinho para azul médio
+            'Internacional': ['#CC0000', '#FF4D4D'],  # Vermelho para vermelho claro
+            'Juventude': ['#006437', '#00B050'],  # Verde escuro para verde
+            'Palmeiras': ['#006437', '#00B050'],  # Verde escuro para verde
+            'Santos': ['#000000', '#4D4D4D'],  # Preto para cinza
+            'São Paulo': ['#FF0000', '#FF6B6B'],  # Vermelho para vermelho claro
+            'Sport': ['#C8102E', '#FF6B6B'],  # Vermelho para vermelho claro
+            'Vasco': ['#000000', '#4D4D4D'],  # Preto para cinza
+            'Vitória': ['#C8102E', '#FF6B6B'],  # Vermelho para vermelho claro
+        }
+        fig = go.Figure()
+
+        # Criar lista de cores baseada nos times
+        colors = []
+        for time in df_times['time_normalizado']:
+            if time in cores_gradientes:
+                # Para gradiente, usamos a primeira cor como base
+                colors.append(cores_gradientes[time][0])
+            else:
+                colors.append('#4A90E2')
+
+        # Criar gráfico com Plotly Express (mais simples e confiável)
         fig = px.pie(
             df_times,
-            names="time_normalizado",
-            values="total",
-            hole=0.5,
-            color_discrete_sequence=px.colors.qualitative.Pastel,
-            template="plotly_white"
+            values='total',
+            names='time_normalizado',
+            hole=0.6,
+            color_discrete_sequence=colors,
+            template='plotly_white'
         )
 
+        # Atualizar traços para melhor visualização
         fig.update_traces(
-            textposition="inside",
-            textinfo="percent+label",
-            marker=dict(line=dict(color="#000000", width=1))
+            textposition='inside',
+            textinfo='percent+label',
+            textfont=dict(size=14, color='white', family="Arial Black"),
+            marker=dict(line=dict(color='white', width=3)),
+            hovertemplate='<b>%{label}</b><br>Torcedores: %{value}<br>Percentual: %{percent}<extra></extra>'
         )
 
+        # Atualizar layout
         fig.update_layout(
             showlegend=False,
-            margin=dict(t=30, b=0, l=0, r=0)
+            margin=dict(t=30, b=30, l=30, r=30),
+            height=500,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(family="Arial", size=12, color="#1f1f1f"),
+            annotations=[
+                dict(
+                    text=f"Total<br>{total_torcedores}",
+                    x=0.5, y=0.5,
+                    font_size=20,
+                    font_family="Arial Black",
+                    showarrow=False
+                )
+            ]
         )
 
+        # Container para o gráfico com sombra
+        st.markdown("""
+            <div style='background: white; padding: 1rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin: 1rem 0;'>
+        """, unsafe_allow_html=True)
+        
         st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        
+
+        # Cards adicionais com cores gradientes dos times
+        st.markdown("""
+            <div style='margin-top: 2rem;'>
+                <h3 style='color: white; text-align: center; font-size: 1.5rem; margin-bottom: 1rem;'>
+                    🏟 Maiores Torcidas
+                </h3>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Mostrar cards para os top 3 times
+        col1, col2, col3 = st.columns(3)
+        
+        top_3_times = df_times.head(3).reset_index(drop=True)
+        
+        for idx, col in enumerate([col1, col2, col3]):
+            if idx < len(top_3_times):
+                with col:
+                    time = top_3_times.iloc[idx]['time_normalizado']
+                    total = top_3_times.iloc[idx]['total']
+                    percentual = (total / total_torcedores) * 100
+                    
+                    if time in cores_gradientes:
+                        cor1, cor2 = cores_gradientes[time]
+                        gradiente = f"linear-gradient(135deg, {cor1}, {cor2})"
+                    else:
+                        gradiente = "linear-gradient(135deg, #667eea, #764ba2)"
+                    
+                    medalha = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉"
+                    
+                    st.markdown(f"""
+                        <div style='background: {gradiente}; 
+                                    padding: 1.5rem; 
+                                    border-radius: 15px; 
+                                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                                    text-align: center;
+                                    margin: 0.5rem 0;
+                                    border: 2px solid white;'>
+                            <div style='font-size: 3rem; margin-bottom: 0.5rem;'>{medalha}</div>
+                            <div style='color: white; font-size: 1.5rem; font-weight: bold; margin: 0.5rem 0;'>{time}</div>
+                            <div style='color: white; font-size: 2rem; font-weight: bold;'>{total:,}</div>
+                            <div style='color: rgba(255,255,255,0.8); font-size: 1rem;'>{percentual:.1f}% dos torcedores</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+    else:
+        st.markdown("""
+            <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                        padding: 3rem; 
+                        border-radius: 15px; 
+                        text-align: center;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                        margin: 2rem 0;'>
+                <h2 style='color: white; margin-bottom: 1rem;'>😕 Nenhum dado encontrado</h2>
+                <p style='color: rgba(255,255,255,0.9); font-size: 1.1rem;'>
+                    Aguardando os primeiros torcedores se registrarem!
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Rodapé
+    st.markdown("""
+        <div style='text-align: center; margin-top: 3rem; padding: 1rem; color: #6c757d; border-top: 1px solid #dee2e6;'>
+            <p style='font-size: 0.9rem;'>
+                ⚽ Dados atualizados em tempo real • Total de {total} torcedores distribuídos entre {times} times
+            </p>
+        </div>
+    """.format(total=total_torcedores if not df_times.empty else 0, 
+               times=len(df_times) if not df_times.empty else 0), unsafe_allow_html=True)
 
     # =============================
     # Ranking Pontos
@@ -300,3 +487,237 @@ elif DATABASE == os.getenv("DB_VIPS"):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Nenhuma atividade registrada nesta semana.")
+
+    # =============================
+    # 🎌 Ranking Anime (AGORA DENTRO DO BLOCO DB_VIPS)
+    # =============================
+    
+    # Estilo personalizado com CSS
+    st.markdown("""
+    <style>
+        .ranking-title {
+            background: linear-gradient(90deg, #FF4B4B 0%, #FF8E8E 100%);
+            padding: 20px;
+            border-radius: 15px;
+            color: white;
+            text-align: center;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(255,75,75,0.3);
+        }
+        .ranking-title h2 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        .ranking-title p {
+            margin: 10px 0 0 0;
+            opacity: 0.95;
+            font-size: 1.1em;
+        }
+        .champion-card {
+            background: linear-gradient(135deg, #FFF9C4 0%, #FFE082 100%);
+            padding: 25px;
+            border-radius: 20px;
+            border: 2px solid #FFD700;
+            box-shadow: 0 10px 25px rgba(255,215,0,0.3);
+            margin: 20px 0;
+            text-align: center;
+        }
+        .crown-icon {
+            font-size: 3em;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .votes-count {
+            background: rgba(255,255,255,0.3);
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: bold;
+            backdrop-filter: blur(5px);
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+        }
+        .stat-value {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #FF4B4B;
+            line-height: 1.2;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Título estilizado
+    st.markdown("""
+    <div class="ranking-title">
+        <h2>🏆 Ranking dos Personagens</h2>
+        <p>✨ Descubra os favoritos da comunidade! ✨</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Container principal com efeito de vidro
+    with st.container():
+        # Consulta SQL
+        sql_anime = """
+            SELECT personagem, COUNT(*) AS votos_personagem
+            FROM votos_anime
+            GROUP BY personagem
+            ORDER BY votos_personagem DESC
+            LIMIT 10;
+            """
+        df_anime = consulta(sql_anime, DB_VIPS)
+
+        if not df_anime.empty:
+            # Cards de estatísticas rápidas
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown("""
+                <div class="stat-card">
+                    <div class="stat-value">{}</div>
+                    <div class="stat-label">Total de Personagens</div>
+                </div>
+                """.format(len(df_anime)), unsafe_allow_html=True)
+            
+            with col2:
+                total_votos = df_anime['votos_personagem'].sum()
+                st.markdown("""
+                <div class="stat-card">
+                    <div class="stat-value">{}</div>
+                    <div class="stat-label">Total de Votos</div>
+                </div>
+                """.format(total_votos), unsafe_allow_html=True)
+            
+            with col3:
+                media_votos = int(df_anime['votos_personagem'].mean())
+                st.markdown("""
+                <div class="stat-card">
+                    <div class="stat-value">{}</div>
+                    <div class="stat-label">Média de Votos</div>
+                </div>
+                """.format(media_votos), unsafe_allow_html=True)
+            
+            with col4:
+                mais_votado = df_anime.iloc[0]
+                st.markdown("""
+                <div class="stat-card">
+                    <div class="stat-value">🥇</div>
+                    <div class="stat-label">Campeão</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Gráfico melhorado
+            fig = px.bar(
+                df_anime,
+                x="votos_personagem",
+                y="personagem",
+                orientation="h",
+                text="votos_personagem",
+                color="votos_personagem",
+                color_continuous_scale=[
+                    [0, '#FFE5E5'],
+                    [0.3, '#FFB8B8'],
+                    [0.6, '#FF8A8A'],
+                    [0.8, '#FF5C5C'],
+                    [1, '#FF2E2E']
+                ],
+                template="plotly_white"
+            )
+            
+            fig.update_layout(
+                height=500,
+                title_x=0.5,
+                xaxis_title="Número de Votos",
+                yaxis_title="",
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Arial", size=12),
+                margin=dict(l=10, r=10, t=30, b=10)
+            )
+
+            fig.update_traces(
+                textposition='outside',
+                textfont=dict(size=12, color='#FF4B4B'),
+                marker=dict(line=dict(color='#FF4B4B', width=1)),
+                hovertemplate='<b>%{y}</b><br>Votos: %{x}<extra></extra>'
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Card do campeão com animação
+            st.markdown(f"""
+            <div class="champion-card">
+                <div class="crown-icon">👑</div>
+                <h1 style="margin: 10px 0; font-size: 2.5em; color: #8B4513;">{mais_votado['personagem']}</h1>
+                <div style="font-size: 1.3em; color: #666; margin: 10px 0;">
+                    ⭐ Campeão Absoluto ⭐
+                </div>
+                <div class="votes-count">
+                    🗳️ {mais_votado['votos_personagem']} votos
+                </div>
+                <div style="margin-top: 20px; font-size: 0.9em; color: #8B4513;">
+                    🏆 O favorito da comunidade!
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Ranking em formato de lista (opcional)
+            with st.expander("📊 Ver ranking completo detalhado"):
+                for i, row in df_anime.iterrows():
+                    medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "📌"
+                    st.markdown(f"""
+                    <div style="
+                        background: {'#FFF9C4' if i < 3 else 'white'};
+                        padding: 12px;
+                        border-radius: 10px;
+                        margin: 5px 0;
+                        border-left: 5px solid {'#FFD700' if i == 0 else '#C0C0C0' if i == 1 else '#CD7F32' if i == 2 else '#FF4B4B'};
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+                    ">
+                        <span style="font-size: 1.3em; margin-right: 10px;">{medal}</span>
+                        <span style="font-weight: bold; font-size: 1.1em;">{i+1}. {row['personagem']}</span>
+                        <span style="float: right; background: #FF4B4B; color: white; padding: 4px 12px; border-radius: 20px;">
+                            {row['votos_personagem']} votos
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        else:
+            # Mensagem de vazio mais atraente
+            st.markdown("""
+            <div style="
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 40px;
+                border-radius: 20px;
+                text-align: center;
+                color: white;
+                box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+            ">
+                <div style="font-size: 4em; margin-bottom: 20px;">🎭</div>
+                <h2 style="margin-bottom: 15px;">Nenhum voto registrado ainda!</h2>
+                <p style="font-size: 1.1em; opacity: 0.9;">Seja o primeiro a votar no seu personagem favorito! ✨</p>
+            </div>
+            """, unsafe_allow_html=True)
