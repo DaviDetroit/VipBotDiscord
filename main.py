@@ -3995,62 +3995,61 @@ FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 # BERSERK
 # =========================
 PERSONAGENS = [
-    {"nome": "Griffith", "emoji": "<:43807griffith:1472351278733459669>", "forca": 65},
-    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 75},
+    {"nome": "Griffith", "emoji": "<:43807griffith:1472351278733459669>", "forca": 80},
+    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 74},
 
 # =========================
 # DRAGON BALL
 # =========================
     {"nome": "Goku", "emoji": "<a:Goku:1448782376670068766>", "forca": 100},
-    {"nome": "Vegeta", "emoji": "<:Majin_vegeta53:1448781902545813566>", "forca": 95},
-    {"nome": "Cell", "emoji": "<a:3549cellthink:1450487722094362817>", "forca": 90},
+    {"nome": "Vegeta", "emoji": "<a:laughingdyingezgif:1474859474358636565>", "forca": 98},
+    {"nome": "Cell", "emoji": "<a:3549cellthink:1450487722094362817>", "forca": 93},
 
 # =========================
 # NARUTO
 # =========================
-    {"nome": "Naruto", "emoji": "<:Narutin:1408189027437379655>", "forca": 85},
-    {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 88},
-    {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 80},
-    {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 78},
+    {"nome": "Naruto", "emoji": "<a:narutoharukakanataezgif:1474858993032892467>", "forca": 87},
+    {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 90},
+    {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 82},
+    {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 80},
 
 # =========================
 # BLEACH
 # =========================
-    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 90},
-    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 92},
-    {"nome": "Zaraki Kenpachi", "emoji": "<:Zaraki:1466974469976231987>", "forca": 88},
+    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 94},
+    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 95},
+    {"nome": "Zaraki Kenpachi", "emoji": "<:Zaraki:1466974469976231987>", "forca": 91},
 
 # =========================
 # JUJUTSU KAISEN
 # =========================
-    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 92},
+    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 89},
     {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 90},
 
 # =========================
 # ONE PIECE
 # =========================
-    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 85},
-    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 80},
+    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 87},
+    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 84},
 
 # =========================
 # ONE PUNCH MAN
 # =========================
-    {"nome": "Saitama", "emoji": "<:Saitama:1408190053846356038>", "forca": 100},
+    {"nome": "Saitama", "emoji": "<:onepunchmanlounysezgif:1474857609226879040>", "forca": 99},
     {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 88},
 
 # =========================
 # ATTACK ON TITAN
 # =========================
-    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 78},
-    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 70},
-    {"nome": "Mikasa", "emoji": "<a:ES_mikasaSmile:1472366438491623465>", "forca": 60},
-
+    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 70},
+    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 66},
+    {"nome": "Mikasa", "emoji": "<a:ES_mikasaSmile:1472366438491623465>", "forca": 62},
 
 # =========================
 # DEMON SLAYER
 # =========================
-    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 65},
-    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 68},
+    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 68},
+    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 72},
 
 # =========================
 # BLACK CLOVER
@@ -4060,40 +4059,62 @@ PERSONAGENS = [
 # =========================
 # HUNTER X HUNTER
 # =========================
-    {"nome": "Gon", "emoji": "<:vrz_rage:1448784303248113734>", "forca": 75},
-    {"nome": "Killua", "emoji": "<a:killua_rage:1448784148796932166>", "forca": 73},
+    {"nome": "Gon", "emoji": "<:vrz_rage:1448784303248113734>", "forca": 76},
+    {"nome": "Killua", "emoji": "<a:killua_rage:1448784148796932166>", "forca": 74},
 
 # =========================
 # NANATSU NO TAIZAI
 # =========================
-    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 82},
-    {"nome": "Escanor", "emoji": "<:icon_stamp_escanor_0787:1448784567799517216>", "forca": 90},
+    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 91},
+    {"nome": "Escanor", "emoji": "<a:escanorezgif:1474860078933868676>", "forca": 93},
 
 # =========================
 # DEATH NOTE
 # =========================
-    {"nome": "Light Yagami", "emoji": "<:Hahahahah:1448785029537730560>", "forca": 20},
-    {"nome": "L", "emoji": "<:L_:1448785130431975444>", "forca": 18},
+    {"nome": "Light Yagami", "emoji": "<:Hahahahah:1448785029537730560>", "forca": 12},
+    {"nome": "L", "emoji": "<:L_:1448785130431975444>", "forca": 10},
 
 # =========================
 # MY HERO ACADEMIA
 # =========================
-    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 80},
-    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 78},
-    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 88},
+    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 81},
+    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 79},
+    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 86},
 
 # =========================
 # FULLMETAL ALCHEMIST
 # =========================
     {"nome": "Edward Elric", "emoji": "<:erick:1466970104905334784>", "forca": 60},
-    {"nome": "Roy Mustang", "emoji": "<:Roy:1466971340098765059>", "forca": 55},
+    {"nome": "Roy Mustang", "emoji": "<:Roy:1466971340098765059>", "forca": 64},
 
 # =========================
 # DEVIL MAY CRY
 # =========================
     {"nome": "Dante", "emoji": "<:3938dantesmile:1437791755096293510>", "forca": 85},
     {"nome": "Vergil", "emoji": "<:MOTIVATED0:1472352686954385530>", "forca": 87},
-    {"nome": "Lady", "emoji": "<:images1:1472353187355824401>", "forca": 62},
+    {"nome": "Lady", "emoji": "<a:Lady:1474857276278968490>", "forca": 58},
+
+# =========================
+# JOJO'S BIZARRE ADVENTURE
+# =========================
+    {"nome": "Dio Brando", "emoji": "<a:Dio:1474855660712759428>", "forca": 89},
+    {"nome": "Jotaro Kujo", "emoji": "<a:Jotaro:1474856079895822468>", "forca": 86},
+    {"nome": "Joseph Joestar", "emoji": "<a:Joseph:1474856343138472036>", "forca": 73},
+
+# =========================
+# HELLSING
+# =========================
+    {"nome": "Alucard", "emoji": "<:11945alucarddark:1474850114685374560>", "forca": 89},
+    {"nome": "Integra Hellsing", "emoji": "<:Integra_Hellsingezgif:1474850823245795429>", "forca": 30},
+    {"nome": "Seras Victoria", "emoji": "<:serasvictoriaisoneofmyfavanimech:1474851133464776725>", "forca": 75},
+
+# =========================
+# MITOLOGIA/HISTÓRIA
+# =========================
+    {"nome": "Adam", "emoji": "<:9465adan01:1474851374830194810>", "forca": 92},
+    {"nome": "Zeus", "emoji": "<a:zeusanimeezgif:1474851870953574400>", "forca": 93},
+    {"nome": "Qin Shi Huang", "emoji": "<:F74r6BUWwAAGpqdezgif:1474852272503656580>", "forca": 90},
+    {"nome": "Jack the Ripper", "emoji": "<a:JackTheRipper:1474855039427285032>", "forca": 83},
 ]
 
 # Variável para guardar o estado da batalha na memória
@@ -4125,11 +4146,11 @@ async def check_evento_anime():
         agora = datetime.now(FUSO_HORARIO)
         
         # --- INÍCIO: Sexta-feira às 18:00 ---
-        if agora.weekday() in (4, 5) and agora.hour == 18 and agora.minute == 0:
+        if agora.weekday() in (4, 5, 6) and agora.hour == 18 and agora.minute == 0:
             if not batalha_info.get("ativa", False):
                 await iniciar_batalha_auto()
         # --- FIM: Sexta-feira às 22:00 ---
-        if agora.weekday() in (4, 5) and agora.hour == 22 and agora.minute == 0:
+        if agora.weekday() in (4, 5, 6) and agora.hour == 22 and agora.minute == 0:
             if batalha_info.get("ativa", False):
                 await finalizar_batalha_auto()
     except Exception as e:
@@ -4465,6 +4486,15 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Dante": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dante-devil-may-cry.gif",
         "Vergil": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/vergil-devil-may-cry.gif",
         "Lady": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lady-devil-may-cry%20(1).gif",
+        "Dio Brando": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Dio.gif",
+        "Jotaro Kujo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/yaroo-jotaro.gif",
+        "Joseph Joestar": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/joseph-joestar-memed.gif",
+        "Giorno Giovanna": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/giorno-giovanna.gif",
+        "Bruno Bucciarati": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bruno-bucciarati.gif",
+        "Narancia Ghirga": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/narancia-ghirga.gif",
+        "Guido Mista": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/guido-mista.gif",
+        "Trish Una": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/trish-una.gif",
+        "Diavolo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/diavolo.gif",
     }
 
 
@@ -4595,7 +4625,17 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Bakugo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bakugou.gif",
             "Deku": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/deku-midoriya.gif",
             "All Might": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/all-might-one-for-all.gif",
-            "Mob": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/mob-psycho100-mob-psycho.gif"
+            "Mob": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/mob-psycho100-mob-psycho.gif",
+            "Dio Brando": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Dio.gif",
+            "Jotaro Kujo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/yaroo-jotaro.gif",
+            "Joseph Joestar": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/joseph-joestar-memed.gif",
+            "Alucard": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/hellsing-hellsing-ultimate.gif",
+            "Integra Hellsing": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/integra-hellsing.gif",
+            "Seras Victoria": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Seras%20Victoria.gif",
+            "Adam": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Adam.gif",
+            "Zeus": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Zeus.gif",
+            "Qin Shi Huang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Qin%20Shin.gif",
+            "Jack the Ripper": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/jack-the-ripper-valkyrie-apocalypse.gif"
         }
 
         # Determina se foi azarão e se houve massacre

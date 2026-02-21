@@ -209,6 +209,7 @@ if DATABASE == os.getenv("DB_FUTEBOL"):
             'Vasco': ['#000000', '#4D4D4D'],  # Preto para cinza
             'Vitória': ['#C8102E', '#FF6B6B'],  # Vermelho para vermelho claro
         }
+        
         fig = go.Figure()
 
         # Criar lista de cores baseada nos times
