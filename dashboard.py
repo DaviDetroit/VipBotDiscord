@@ -733,14 +733,14 @@ elif DATABASE == os.getenv("DB_VIPS"):
             
             with col4:
                 mais_votado = df_anime.iloc[0]
-                st.markdown("""
+                st.markdown(f"""
                 <div class="stat-card">
-                    <div class="stat-value">🥇</div>
+                    <div class="stat-value">🥇 {mais_votado['personagem']}</div>
                     <div class="stat-label">Campeão</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            # Gráfico melhorado
+            # Gráfico melhorados
             fig = px.bar(
                 df_anime,
                 x="votos_personagem",
