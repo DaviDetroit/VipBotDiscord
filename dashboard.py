@@ -448,6 +448,117 @@ elif DATABASE == os.getenv("DB_VIPS"):
             mais_rara["conquista_id"],
             f'{mais_rara["percentual"]:.2f}% dos usuários'
         )
+    # =============================
+    # 🎨 Ranking de Artes por Corações
+    # =============================
+    st.header("🎨 Ranking de Artes - Mais Amados da Comunidade")
+    sql_artes = """
+        SELECT nome_discord, SUM(coracoes) AS total_coracao
+        FROM artes_posts
+        GROUP BY nome_discord
+        ORDER BY total_coracao DESC;
+        """
+    
+    df_artes = consulta(sql_artes, DB_VIPS)
+    if not df_artes.empty:
+        mais_amado = df_artes.iloc[0]
+
+        # Card do Campeão (Agora em Lilás)
+
+        st.markdown(f"""
+            <div class="champion-card" style="
+                background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+                padding: 30px;
+                border-radius: 20px;
+                text-align: center;
+                color: white;
+                box-shadow: 0 10px 30px rgba(155,89,182,0.4);
+                margin-bottom: 25px;
+            ">
+                <div class="crown-icon" style="font-size: 4em; margin-bottom: 10px;">🎨</div>
+                <h1 style="margin: 10px 0; font-size: 2.5em; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
+                    {mais_amado['nome_discord']}
+                </h1>
+                <div style="font-size: 1.3em; color: #f8f0ff; margin: 10px 0;">
+                    💜 Artista Mais Amado da Comunidade 💜
+                </div>
+                <div style="
+                    background: rgba(255,255,255,0.2);
+                    padding: 15px 30px;
+                    border-radius: 50px;
+                    display: inline-block;
+                    margin: 15px 0;
+                    font-size: 1.8em;
+                    font-weight: bold;
+                ">
+                    ❤️ {mais_amado['total_coracao']} corações
+                </div>
+                <div style="margin-top: 20px; font-size: 1.1em; color: #f8f0ff;">
+                    👑 O artista mais querido da comunidade! 👑
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Ranking Completo (Agora em Tons Lilás)
+        with st.expander("📊 Ver ranking completo detalhado"):
+            for i, row in df_artes.iterrows():
+                medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "🎨"
+                
+                # Cores em degrade lilás para o top 3
+                if i == 0:
+                    bg_color = "linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)"
+                    border_color = "#9b59b6"
+                elif i == 1:
+                    bg_color = "linear-gradient(135deg, #b48ab4 0%, #9b59b6 100%)"
+                    border_color = "#b48ab4"
+                elif i == 2:
+                    bg_color = "linear-gradient(135deg, #c39bd3 0%, #b48ab4 100%)"
+                    border_color = "#c39bd3"
+                else:
+                    bg_color = "white"
+                    border_color = "#9b59b6"
+                
+                text_color = "white" if i < 3 else "#000000"
+                
+                st.markdown(f"""
+                <div style="
+                    background: {bg_color};
+                    padding: 12px;
+                    border-radius: 10px;
+                    margin: 5px 0;
+                    border-left: 5px solid {border_color};
+                    box-shadow: 0 2px 5px rgba(155,89,182,0.2);
+                    color: {text_color};
+                ">
+                    <span style="font-size: 1.3em; margin-right: 10px;">{medal}</span>
+                    <span style="font-weight: bold; font-size: 1.1em;">
+                        {i+1}. {row['nome_discord']}
+                    </span>
+                    <span style="float: right; background: {'rgba(255,255,255,0.3)' if i < 3 else '#9b59b6'}; color: white; padding: 4px 12px; border-radius: 20px;">
+                        ❤️ {row['total_coracao']}
+                    </span>
+                </div>
+                """,unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 10px 30px rgba(155,89,182,0.4);
+        ">
+            <div style="font-size: 4em; margin-bottom: 20px;">🎨</div>
+            <h2 style="margin-bottom: 15px;">Nenhuma arte postada ainda!</h2>
+            <p style="font-size: 1.1em; opacity: 0.9;">
+                Poste sua arte e conquiste corações! 💜✨
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+
 
     # =============================
     # 📈 Ranking de Atividade

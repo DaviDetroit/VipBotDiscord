@@ -4054,7 +4054,7 @@ PERSONAGENS = [
 # =========================
 # BLACK CLOVER
 # =========================
-    {"nome": "Asta", "emoji": "<:Asta_Glare13:1448783934639964402>", "forca": 88},
+    {"nome": "Asta", "emoji": "<a:blackcloverheartkingdomarcezgif:1474904524434051247>", "forca": 84},
 
 # =========================
 # HUNTER X HUNTER
@@ -4065,7 +4065,7 @@ PERSONAGENS = [
 # =========================
 # NANATSU NO TAIZAI
 # =========================
-    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 91},
+    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 86},
     {"nome": "Escanor", "emoji": "<a:escanorezgif:1474860078933868676>", "forca": 93},
 
 # =========================
@@ -4090,8 +4090,8 @@ PERSONAGENS = [
 # =========================
 # DEVIL MAY CRY
 # =========================
-    {"nome": "Dante", "emoji": "<:3938dantesmile:1437791755096293510>", "forca": 85},
-    {"nome": "Vergil", "emoji": "<:MOTIVATED0:1472352686954385530>", "forca": 87},
+    {"nome": "Dante", "emoji": "<a:devilmaycrydanteezgif:1474902237238001876>", "forca": 82},
+    {"nome": "Vergil", "emoji": "<a:petafarbarpetrfarbarezgif:1474903335302860973>", "forca": 84},
     {"nome": "Lady", "emoji": "<a:Lady:1474857276278968490>", "forca": 58},
 
 # =========================
@@ -4109,12 +4109,20 @@ PERSONAGENS = [
     {"nome": "Seras Victoria", "emoji": "<:serasvictoriaisoneofmyfavanimech:1474851133464776725>", "forca": 75},
 
 # =========================
-# MITOLOGIA/HISTÓRIA
+# AKAME GA KILL
+# =========================
+    {"nome": "Akame", "emoji": "<a:akamegakillakameezgif:1474899172229513390>", "forca": 75},
+    {"nome": "Esdeath", "emoji": "<a:gifdeaaronanimeezgif:1474899649398571061>", "forca": 80},
+    {"nome": "Leone", "emoji": "<a:leoneakamegakillezgif:1474899867871740066>", "forca": 64},
+    {"nome": "Tatsumi", "emoji": "<a:tatsumiezgif:1474900456240316507>", "forca": 70},
+
+# =========================
+# SHUMATSU
 # =========================
     {"nome": "Adam", "emoji": "<:9465adan01:1474851374830194810>", "forca": 92},
     {"nome": "Zeus", "emoji": "<a:zeusanimeezgif:1474851870953574400>", "forca": 93},
     {"nome": "Qin Shi Huang", "emoji": "<:F74r6BUWwAAGpqdezgif:1474852272503656580>", "forca": 90},
-    {"nome": "Jack the Ripper", "emoji": "<a:JackTheRipper:1474855039427285032>", "forca": 83},
+    {"nome": "Jack the Ripper", "emoji": "<a:JackTheRipper:1474855039427285032>", "forca": 78},
 ]
 
 # Variável para guardar o estado da batalha na memória
@@ -4635,7 +4643,15 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Adam": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Adam.gif",
             "Zeus": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Zeus.gif",
             "Qin Shi Huang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Qin%20Shin.gif",
-            "Jack the Ripper": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/jack-the-ripper-valkyrie-apocalypse.gif"
+            "Jack the Ripper": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/jack-the-ripper-valkyrie-apocalypse.gif",
+            "Akame": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Akame.gif",
+            "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
+            "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
+            "Tatsumi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Tatsumi.gif",
+            "Akame": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Akame.gif",
+            "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
+            "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
+            "Tatsumi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Tatsumi.gif"
         }
 
         # Determina se foi azarão e se houve massacre
