@@ -4421,10 +4421,12 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
     if foi_azarao:
         guild = bot.get_guild(1380564680552091789)  # ID do servidor
         if guild:
+            logging.info(f"🎯 Processando conquista de azarão para {len(ganhadores_ids)} ganhadores")
             for uid in ganhadores_ids:
                 member = guild.get_member(uid)
                 if member:
                     try:
+                        logging.info(f"🐗 Processando azarão para {member.name} (ID: {uid})")
                         await processar_conquistas(
                             member=member,
                             mensagens_semana=0,
@@ -4437,8 +4439,13 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
                             mencoes_bot=0,
                             azarao_vitoria=True 
                         )
+                        logging.info(f"✅ Conquista de azarão processada com sucesso para {member.name}")
                     except Exception as e:
-                        logging.error(f"Erro ao processar conquista azarão para {uid}: {e}")
+                        logging.error(f"❌ Erro ao processar conquista azarão para {uid}: {e}")
+                else:
+                    logging.warning(f"⚠️ Membro {uid} não encontrado no servidor")
+        else:
+            logging.error("❌ Guild não encontrada")
     
     # Criar embed bonito
     embed = discord.Embed(
@@ -4497,12 +4504,21 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Dio Brando": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Dio.gif",
         "Jotaro Kujo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/yaroo-jotaro.gif",
         "Joseph Joestar": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/joseph-joestar-memed.gif",
-        "Giorno Giovanna": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/giorno-giovanna.gif",
-        "Bruno Bucciarati": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bruno-bucciarati.gif",
-        "Narancia Ghirga": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/narancia-ghirga.gif",
-        "Guido Mista": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/guido-mista.gif",
-        "Trish Una": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/trish-una.gif",
-        "Diavolo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/diavolo.gif",
+         "Alucard": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/hellsing-hellsing-ultimate.gif",
+        "Integra Hellsing": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/integra-hellsing.gif",
+        "Seras Victoria": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Seras%20Victoria.gif",
+        "Adam": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Adam.gif",
+        "Zeus": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Zeus.gif",
+        "Qin Shi Huang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Qin%20Shin.gif",
+        "Jack the Ripper": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/jack-the-ripper-valkyrie-apocalypse.gif",
+        "Akame": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Akame.gif",
+        "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
+        "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
+        "Tatsumi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Tatsumi.gif",
+        "Akame": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Akame.gif",
+        "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
+        "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
+        "Tatsumi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Tatsumi.gif"
     }
 
 
@@ -9680,7 +9696,7 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
             mencionou_miisha=False,
             tocou_musica=False,
             mencoes_bot=0,
-            azarao_vitoria=False
+            azarao_vitoria='azarao' in conquistas  # Verifica se já tem a conquista no banco
         )
 
         # =========================

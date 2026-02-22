@@ -810,7 +810,7 @@ elif DATABASE == os.getenv("DB_VIPS"):
                         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
                     ">
                         <span style="font-size: 1.3em; margin-right: 10px;">{medal}</span>
-                        <span style="font-weight: bold; font-size: 1.1em;">{i+1}. {row['personagem']}</span>
+                        <span style="font-weight: bold; font-size: 1.1em; color: black;">{i+1}. {row['personagem']}</span>
                         <span style="float: right; background: #FF4B4B; color: white; padding: 4px 12px; border-radius: 20px;">
                             {row['votos_personagem']} votos
                         </span>
