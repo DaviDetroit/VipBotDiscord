@@ -614,56 +614,27 @@ async def slash_fogo(interaction: discord.Interaction):
 
     if interaction.channel.id != CANAL_PERMITIDO_ID:
         return await interaction.response.send_message(
-            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+            f"Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
             ephemeral=True
         )
 
-    conn = conectar_futebol()
-    cursor = conn.cursor(dictionary=True)
-
     try:
-        cursor.execute("""
-            SELECT acertos_consecutivos, maior_streak 
-            FROM apostas 
-            WHERE user_id = %s
-            ORDER BY data_aposta DESC
-            LIMIT 1
-        """, (interaction.user.id,))
+        acertos_atuais, maior_streak = buscar_fogo_usuario(interaction.user.id)
 
-        resultado = cursor.fetchone()
-
-        if resultado is None:
-            acertos_atuais = 0
-            maior_streak = 0
-        else:
-            acertos_atuais = resultado.get("acertos_consecutivos", 0) or 0
-            maior_streak = resultado.get("maior_streak", 0) or 0
-
-        em_fogo = acertos_atuais >= 3
-
-        embed = discord.Embed(
-            title="🔥 SEU FOGO ATUAL",
-            description=(
-                f"📊 **Acertos Consecutivos:** **{acertos_atuais}**\n"
-                f"🏆 **Maior Sequência:** **{maior_streak}**\n\n"
-                f"{'🔥 **VOCÊ ESTÁ EM FOGO!**' if em_fogo else '❄️ Continue tentando!'}"
-            ),
-            color=discord.Color.red() if em_fogo else discord.Color.blue()
+        embed = gerar_embed_fogo(
+            acertos_atuais,
+            maior_streak,
+            interaction.user.display_name
         )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    except Exception as e:
-        logging.exception(f"Erro ao consultar fogo do usuário {interaction.user.id}")
-
+    except Exception:
+        logging.exception("Erro ao consultar fogo.")
         await interaction.response.send_message(
             "❌ Ocorreu um erro ao consultar seu fogo.",
             ephemeral=True
         )
-
-    finally:
-        cursor.close()
-        conn.close()
 
 @bot.tree.command(name="top_fogos", description="Veja os usuários com mais acertos consecutivos")
 async def slash_top_fogos(interaction: discord.Interaction):
@@ -4149,20 +4120,28 @@ GIFS_ANIME = [
 
 @tasks.loop(minutes=1)
 async def check_evento_anime():
-    """Verifica a cada minuto se é hora de iniciar ou encerrar a batalha."""
     try:
         agora = datetime.now(FUSO_HORARIO)
-        
-        # --- INÍCIO: Sexta-feira às 18:00 ---
-        if agora.weekday() in (4, 5, 6) and agora.hour == 18 and agora.minute == 0:
+        hoje = agora.date()
+
+        # INÍCIO
+        if agora.weekday() in (4, 5, 6) and agora.hour == 18:
             if not batalha_info.get("ativa", False):
-                await iniciar_batalha_auto()
-        # --- FIM: Sexta-feira às 22:00 ---
-        if agora.weekday() in (4, 5, 6) and agora.hour == 22 and agora.minute == 0:
+                if batalha_info.get("ultima_execucao_inicio") != hoje:
+                    await iniciar_batalha_auto()
+                    batalha_info["ultima_execucao_inicio"] = hoje
+
+        # FIM
+        if agora.weekday() in (4, 5, 6) and agora.hour == 22:
             if batalha_info.get("ativa", False):
-                await finalizar_batalha_auto()
+                if batalha_info.get("ultima_execucao_fim") != hoje:
+                    await finalizar_batalha_auto()
+                    batalha_info["ultima_execucao_fim"] = hoje
+
     except Exception as e:
         logging.error(f"Erro em check_evento_anime: {e}")
+
+
 async def iniciar_batalha_auto():
     """Inicia automaticamente uma batalha entre dois personagens aleatórios."""
     global batalha_info
@@ -5161,10 +5140,6 @@ async def enviar_mensagem():
 #--------------------FUTEBOL PALPITE---------------------
 
 
-
-
-
-
 ROLE_IDS_TIMES = {
     "fluminense": 1442482502311739442,
     "vasco": 1442482275546697860,
@@ -5342,88 +5317,24 @@ async def meuspontos(ctx):
         pontos = pegar_pontos(ctx.author.id)
         await ctx.send(f"<a:565724creditcard:1467671052053254235> {ctx.author.mention}, você tem **{pontos} pontos**!")
         logging.info(f"Usuário {ctx.author.name} ({ctx.author.id}) solicitou os pontos.")
+        
+
+
 
 @bot.command()
 async def fogo(ctx):
-    """Mostra seus acertos consecutivos atuais e sua maior sequência"""
-
-    conn = conectar_futebol()
-    cursor = conn.cursor(dictionary=True)
-
     try:
-        # 🔥 Pega SEMPRE o registro mais recente
-        cursor.execute("""
-            SELECT acertos_consecutivos, maior_streak 
-            FROM apostas 
-            WHERE user_id = %s
-            ORDER BY data_aposta DESC
-            LIMIT 1
-        """, (ctx.author.id,))
-
-        resultado = cursor.fetchone()
-
-        # Se nunca apostou
-        if resultado is None:
-            acertos_atuais = 0
-            maior_streak = 0
-        else:
-            acertos_atuais = resultado.get("acertos_consecutivos", 0) or 0
-            maior_streak = resultado.get("maior_streak", 0) or 0
-
-        # Embed
-        em_fogo = acertos_atuais >= 3
-
-        embed = discord.Embed(
-            title="🔥 SEU FOGO ATUAL",
-            description=(
-                f"📊 **Acertos Consecutivos:** **{acertos_atuais}**\n"
-                f"🏆 **Maior Sequência:** **{maior_streak}**\n\n"
-                f"{'🔥 **VOCÊ ESTÁ EM FOGO!**' if em_fogo else '❄️ Continue tentando!'}"
-            ),
-            color=discord.Color.red() if em_fogo else discord.Color.blue(),
-            timestamp=datetime.now(FUSO_HORARIO)
+        acertos_atuais, maior_streak = buscar_jogo_usuario(ctx.author.id)
+        
+        embed = gerar_embed_fogo(
+            acertos_atuais,
+            maior_streak,
+            ctx.author.display_name
         )
-
-        # Barra visual
-        progresso = "🔥" * min(acertos_atuais, 10)
-        vazio = "⚫" * (10 - min(acertos_atuais, 10))
-
-        embed.add_field(
-            name="📈 Progresso",
-            value=f"{progresso}{vazio} ({acertos_atuais}/10+)",
-            inline=False
-        )
-
-        # Dica inteligente
-        if acertos_atuais < 3:
-            embed.add_field(
-                name="💡 Dica",
-                value=f"Faltam **{3 - acertos_atuais}** acertos para entrar em FOGO 🔥",
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="🚀 Ritmo forte!",
-                value="Continue assim para subir no ranking!",
-                inline=False
-            )
-
-        embed.set_footer(text=f"Solicitado por {ctx.author.display_name}")
-
         await ctx.send(embed=embed)
-
     except Exception as e:
-        logging.exception(f"Erro ao consultar fogo do usuário {ctx.author.id}")
-
-        await ctx.send(
-            "❌ Ocorreu um erro ao consultar seu fogo.\n"
-            "Se continuar acontecendo, avise um admin."
-        )
-
-    finally:
-        cursor.close()
-        conn.close()
-
+        logging.error(f"Erro ao buscar fogo: {e}")
+        await ctx.send("⚠️ Erro ao buscar fogo. Tente novamente mais tarde.")
 
 class PaginaFogos(discord.ui.View):
     def __init__(self, ranking, autor):
@@ -5899,6 +5810,53 @@ def buscar_jogo_por_fixture(fixture_id: int):
 # ---------- inicializa tabelas
 garantir_tabelas()
 
+def gerar_embed_fogo(acertos_atuais: int, maior_streak: int, nome_usuario: str):
+    em_fogo = acertos_atuais >= 3
+
+    embed = discord.Embed(
+        title="🔥 SEU FOGO ATUAL",
+        description=(
+            f"📊 **Acertos Consecutivos:** **{acertos_atuais}**\n"
+            f"🏆 **Maior Sequência:** **{maior_streak}**\n\n"
+            f"{'🔥 **VOCÊ ESTÁ EM FOGO!**' if em_fogo else '❄️ Continue tentando!'}"
+        ),
+        color=discord.Color.red() if em_fogo else discord.Color.blue()
+    )
+
+    return embed
+
+def buscar_fogo_usuario(user_id: int):
+    conn = conectar_futebol()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT 
+                (
+                    SELECT acertos_consecutivos
+                    FROM apostas
+                    WHERE user_id = %s
+                    ORDER BY data_aposta DESC
+                    LIMIT 1
+                ) AS acertos_consecutivos,
+                MAX(maior_streak) AS maior_streak
+            FROM apostas
+            WHERE user_id = %s
+        """, (user_id, user_id))
+
+        resultado = cursor.fetchone()
+
+        if not resultado or resultado["acertos_consecutivos"] is None:
+            return 0, 0
+
+        return (
+            resultado["acertos_consecutivos"] or 0,
+            resultado["maior_streak"] or 0
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
 # ---------- Manipulação de reações (usa on_raw_reaction_add para pegar reações em mensagens antigas)
 
 MAPEAMENTO_TIMES = {
