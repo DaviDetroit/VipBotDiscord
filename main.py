@@ -1186,7 +1186,7 @@ async def processar_conquistas(
         else:
             bloqueadas.append(texto)
 
-    # 🔥 salva tudo de uma vez (SEM travar)
+    
     if novos_registros:
         await loop.run_in_executor(
             None,
@@ -3967,7 +3967,7 @@ FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 # =========================
 PERSONAGENS = [
     {"nome": "Griffith", "emoji": "<:43807griffith:1472351278733459669>", "forca": 80},
-    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 74},
+    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 76},
 
 # =========================
 # DRAGON BALL
@@ -3979,10 +3979,10 @@ PERSONAGENS = [
 # =========================
 # NARUTO
 # =========================
-    {"nome": "Naruto", "emoji": "<a:narutoharukakanataezgif:1474858993032892467>", "forca": 87},
-    {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 90},
-    {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 82},
-    {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 80},
+    {"nome": "Naruto", "emoji": "<a:narutoharukakanataezgif:1474858993032892467>", "forca": 84},
+    {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 87},
+    {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 79},
+    {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 77},
 
 # =========================
 # BLEACH
@@ -4008,6 +4008,8 @@ PERSONAGENS = [
 # =========================
     {"nome": "Saitama", "emoji": "<:onepunchmanlounysezgif:1474857609226879040>", "forca": 99},
     {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 88},
+    {"nome": "Garou", "emoji": "<a:garouonepunchmangarouezgif:1475310369747501066>", "forca": 95},
+    {"nome": "Genos", "emoji": "<a:onepunchmangenosezgif:1475310739311951994>", "forca": 75},
 
 # =========================
 # ATTACK ON TITAN
@@ -4021,11 +4023,15 @@ PERSONAGENS = [
 # =========================
     {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 68},
     {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 72},
+    {"nome": "Muzan Kibutsuji", "emoji": "<a:mudzanpfpezgif:1475314842285113374>", "forca": 75},
+    {"nome": "Rengoku Kyojuro", "emoji": "<a:kyojurokyojurorengokuezgif:1475314647942041600>", "forca": 68},
 
 # =========================
 # BLACK CLOVER
 # =========================
     {"nome": "Asta", "emoji": "<a:blackcloverheartkingdomarcezgif:1474904524434051247>", "forca": 84},
+    {"nome": "Yuno", "emoji": "<a:yunoezgif:1475315176797638726>", "forca": 89},
+    {"nome": "Yami Sukehiro", "emoji": "<a:yamisukehirolaughezgif:1475315328115282062>", "forca": 92},
 
 # =========================
 # HUNTER X HUNTER
@@ -4048,9 +4054,9 @@ PERSONAGENS = [
 # =========================
 # MY HERO ACADEMIA
 # =========================
-    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 81},
-    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 79},
-    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 86},
+    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 76},
+    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 74},
+    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 81},
 
 # =========================
 # FULLMETAL ALCHEMIST
@@ -4061,8 +4067,8 @@ PERSONAGENS = [
 # =========================
 # DEVIL MAY CRY
 # =========================
-    {"nome": "Dante", "emoji": "<a:devilmaycrydanteezgif:1474902237238001876>", "forca": 82},
-    {"nome": "Vergil", "emoji": "<a:petafarbarpetrfarbarezgif:1474903335302860973>", "forca": 84},
+    {"nome": "Dante", "emoji": "<a:devilmaycrydanteezgif:1474902237238001876>", "forca": 80},
+    {"nome": "Vergil", "emoji": "<a:petafarbarpetrfarbarezgif:1474903335302860973>", "forca": 82},
     {"nome": "Lady", "emoji": "<a:Lady:1474857276278968490>", "forca": 58},
 
 # =========================
@@ -4082,10 +4088,10 @@ PERSONAGENS = [
 # =========================
 # AKAME GA KILL
 # =========================
-    {"nome": "Akame", "emoji": "<a:akamegakillakameezgif:1474899172229513390>", "forca": 75},
-    {"nome": "Esdeath", "emoji": "<a:gifdeaaronanimeezgif:1474899649398571061>", "forca": 80},
-    {"nome": "Leone", "emoji": "<a:leoneakamegakillezgif:1474899867871740066>", "forca": 64},
-    {"nome": "Tatsumi", "emoji": "<a:tatsumiezgif:1474900456240316507>", "forca": 70},
+    {"nome": "Akame", "emoji": "<a:akamegakillakameezgif:1474899172229513390>", "forca": 70},
+    {"nome": "Esdeath", "emoji": "<a:gifdeaaronanimeezgif:1474899649398571061>", "forca": 75},
+    {"nome": "Leone", "emoji": "<a:leoneakamegakillezgif:1474899867871740066>", "forca": 59},
+    {"nome": "Tatsumi", "emoji": "<a:tatsumiezgif:1474900456240316507>", "forca": 65},
 
 # =========================
 # SHUMATSU
@@ -4442,6 +4448,7 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
     
     # Adicionar thumbnail com GIF do vencedor
     GIFS_VITORIA = {
+        "Rengoku Kyojuro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Rengoku.gif",
         "Goku":"https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-goku.gif",
         "Cell": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/cell-dragon-ball.gif",
         "Griffith": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/grifith-berserk.gif",
@@ -4451,6 +4458,11 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Ichigo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ichigo.gif",
         "Sukuna": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/sukuna-smile-grin-jjk-yuji-itadori.gif",
         "Saitama": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/saitama-onepunchman.gif",
+        "Garou": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Garou.gif",
+        "Genos": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Genos.gif",
+        "Muzan Kibutsuji": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Muzan.gif",
+        "Yuno": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Yuno.gif",
+        "Yami Sukehiro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Yami.gif",
         "Eren": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/eren-fortnite-eren-fortnite-dance.gif",
         "Vegeta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-majin-vegeta.gif",
         "Luffy": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/luffy-wano.gif",
@@ -4490,10 +4502,6 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Zeus": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Zeus.gif",
         "Qin Shi Huang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Qin%20Shin.gif",
         "Jack the Ripper": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/jack-the-ripper-valkyrie-apocalypse.gif",
-        "Akame": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Akame.gif",
-        "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
-        "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
-        "Tatsumi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Tatsumi.gif",
         "Akame": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Akame.gif",
         "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
         "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
@@ -4606,11 +4614,20 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Ichigo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ichigo.gif",
             "Sukuna": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/sukuna-smile-grin-jjk-yuji-itadori.gif",
             "Saitama": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/saitama-onepunchman.gif",
+            "Garou": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Garou.gif",
+            "Genos": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Genos.gif",
             "Eren": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/eren-fortnite-eren-fortnite-dance.gif",
             "Vegeta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-majin-vegeta.gif",
             "Luffy": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/luffy-wano.gif",
+            "Edward Elric": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/edward-elric-fma.gif",
+            "Roy Mustang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Roy%20Mustang.gif",
+            "Zaraki Kenpachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/bleach-zaraki-kenpachi.gif",
+            "Dante": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dante-devil-may-cry.gif",
+            "Vergil": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/vergil-devil-may-cry.gif",
+            "Lady": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lady-devil-may-cry%20(1).gif",
             "Zoro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/zoro.gif",
             "Tanjiro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/tanjiro-tanjiro-kamado.gif",
+            "Rengoku Kyojuro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Rengoku.gif",
             "Nezuko": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/nezuko-demon-slayer.gif",
             "Gojo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/anime-jujutsu-kaisen.gif",
             "Asta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/asta-swordofthewizardking.gif",
@@ -4643,10 +4660,9 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
             "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
             "Tatsumi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Tatsumi.gif",
-            "Akame": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Akame.gif",
-            "Esdeath": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Esdeath.gif",
-            "Leone": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Leone.gif",
-            "Tatsumi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Tatsumi.gif"
+            "Muzan Kibutsuji": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Muzan.gif",
+            "Yuno": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Yuno.gif",
+            "Yami Sukehiro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Yami.gif",
         }
 
         # Determina se foi azarão e se houve massacre
@@ -4696,7 +4712,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
 
         
         await canal.send(content=f"{CARGO_ANIME} **Batalha Encerrada!**", embed=embed)
-        logging.info(f"Resultado da batalha enviado: {vencedor['nome']} venceu {perdedor['nome']}")
+        logging.info(f"🎎 Resultado da batalha enviado: {vencedor['nome']} venceu {perdedor['nome']}")
 
     except Exception as e:
         logging.error(f"Erro ao anunciar resultado da batalha: {e}")
@@ -5324,7 +5340,7 @@ async def meuspontos(ctx):
 @bot.command()
 async def fogo(ctx):
     try:
-        acertos_atuais, maior_streak = buscar_jogo_usuario(ctx.author.id)
+        acertos_atuais, maior_streak = buscar_fogo_usuario(ctx.author.id)
         
         embed = gerar_embed_fogo(
             acertos_atuais,

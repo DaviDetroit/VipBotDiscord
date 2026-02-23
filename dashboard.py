@@ -254,6 +254,7 @@ if DATABASE == os.getenv("DB_FUTEBOL"):
                     x=0.5, y=0.5,
                     font_size=20,
                     font_family="Arial Black",
+                    font_color="white",
                     showarrow=False
                 )
             ]
@@ -787,7 +788,7 @@ elif DATABASE == os.getenv("DB_VIPS"):
                 <div style="font-size: 1.3em; color: #666; margin: 10px 0;">
                     ⭐ Campeão Absoluto ⭐
                 </div>
-                <div class="votes-count">
+                <div class="votes-count" style="color: black;">
                     🗳️ {mais_votado['votos_personagem']} votos
                 </div>
                 <div style="margin-top: 20px; font-size: 0.9em; color: #8B4513;">
