@@ -107,7 +107,7 @@ if DATABASE == os.getenv("DB_FUTEBOL"):
             
             st.markdown(f"""
                 <div class="leaderboard-row">
-                    <span class="user-id">{icon} ID: {row['nome_discord']}</span>
+                    <span class="user-id">{icon} Apostador: {row['nome_discord']}</span>
                     <span class="streak-val">{row['recorde_streak']}🔥</span>
                 </div>
             """, unsafe_allow_html=True)
