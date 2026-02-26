@@ -30,6 +30,11 @@ DATABASE = bancos[nome_escolhido]
 
 DB_FUTEBOL = os.getenv("DB_FUTEBOL")
 DB_VIPS = os.getenv("DB_VIPS")
+DB_USER = os.getenv("DB_USER") 
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+
 
 # =============================
 # CONEXÃO MYSQL
@@ -48,6 +53,8 @@ def conectar(database_name: str):
         connection_timeout=10,
         use_pure=True  
     )
+
+DB_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_VIPS}"
 
 def consulta(sql, database_name: str | None = None):
     conn = conectar(database_name or DATABASE)

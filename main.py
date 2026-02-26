@@ -443,6 +443,7 @@ async def slash_time(interaction: discord.Interaction, nome: app_commands.Choice
     conn.close()
     
     # ------ Cargo ------
+    
     for t_key, role_id in ROLE_IDS_TIMES.items():
         cargo_loop = guild.get_role(role_id)
         if cargo_loop and cargo_loop in member.roles:
@@ -454,7 +455,7 @@ async def slash_time(interaction: discord.Interaction, nome: app_commands.Choice
         if cargo:
             await member.add_roles(cargo)
             await interaction.response.send_message(
-                f"Você agora torce para **{cargo.name}**! ⚽",
+                f"<a:995589misathumb:1443956356846719119> {member.mention}, agora você está registrado como torcedor do **{cargo_nome}**!",
                 ephemeral=True
             )
             logging.info(f"{member.name} entrou no time {cargo_nome} via slash command.")
@@ -763,7 +764,7 @@ EMOJI_TIMES = {
     "flamengo": "<:Flamengo:1425990044623044659>",
     "palmeiras": "<:Palmeiras:1425989650513662044>",
     "lanus": "<:Lanus:1441436509281718383>",
-    "athletico_paranaense": "<:atlpr:1443398482516775055>",
+    "atletico paranaense": "<:Athletico_Paranaense__Logo_2019_:1476340287461920859>",
     "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
     "remo": "<:Remo:1443399201655492708>",
     "chapecoense": "<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
@@ -931,7 +932,17 @@ class ApostaView(discord.ui.View):
 
         # Limpar os botões e editar a mensagem
         self.clear_items()
-        await self.message.edit(content=msg_text, view=self)
+        try:
+            await self.message.edit(content=msg_text, view=self)
+        except discord.NotFound:
+            # Mensagem foi deletada, não pode editar
+            logging.warning(f"⚠️ Mensagem da aposta não encontrada (deletada) - Fixture ID: {self.fixture_id}")
+        except discord.Forbidden:
+            # Sem permissão para editar
+            logging.warning(f"⚠️ Sem permissão para editar mensagem da aposta - Fixture ID: {self.fixture_id}")
+        except Exception as e:
+            # Outros erros
+            logging.error(f"❌ Erro ao editar mensagem da aposta: {e} - Fixture ID: {self.fixture_id}")
 
 async def processar_aposta_botao(interaction, fixture_id, palpite, home, away):
     # Verificar se ainda está aberto para apostas
@@ -1083,11 +1094,11 @@ def processar_conquistas_db(user_id, novos_registros):
         if novos_registros:
             logging.info(f"Adicionando {len(novos_registros)} novas conquistas para o usuário {user_id}")
             cursor.executemany(
-                "INSERT INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
+                "INSERT IGNORE INTO conquistas_desbloqueadas (user_id, conquista_id) VALUES (%s, %s)",
                 novos_registros
             )
             conexao.commit()
-            logging.info("Novas conquistas inseridas com sucesso")
+            logging.info("Novas conquistas inseridas com sucesso (duplicatas ignoradas)")
 
         cursor.execute(
             "SELECT conquista_id FROM conquistas_desbloqueadas WHERE user_id = %s",
@@ -2981,7 +2992,7 @@ async def on_message(message):
                     f"💎 Ou adquira VIP em <#{CANAL_SEJA_VIP}>!"
                 )
                 await asyncio.sleep(3)
-                await msg.delete()
+                await message.delete()
                 logging.info(
                     f"Tentativa de usar m!play em {message.channel.id} por {message.author.id} (sem VIP)"
                 )
@@ -3966,8 +3977,8 @@ FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 # BERSERK
 # =========================
 PERSONAGENS = [
-    {"nome": "Griffith", "emoji": "<:43807griffith:1472351278733459669>", "forca": 80},
-    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 76},
+    {"nome": "Griffith", "emoji": "<:43807griffith:1472351278733459669>", "forca": 87},
+    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 55},
 
 # =========================
 # DRAGON BALL
@@ -3975,6 +3986,8 @@ PERSONAGENS = [
     {"nome": "Goku", "emoji": "<a:Goku:1448782376670068766>", "forca": 100},
     {"nome": "Vegeta", "emoji": "<a:laughingdyingezgif:1474859474358636565>", "forca": 98},
     {"nome": "Cell", "emoji": "<a:3549cellthink:1450487722094362817>", "forca": 93},
+    {"nome": "Chi-Chi", "emoji": "<a:chichiexcitedezgif:1475906434913931529>", "forca": 54},
+    
 
 # =========================
 # NARUTO
@@ -3987,51 +4000,53 @@ PERSONAGENS = [
 # =========================
 # BLEACH
 # =========================
-    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 94},
-    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 95},
-    {"nome": "Zaraki Kenpachi", "emoji": "<:Zaraki:1466974469976231987>", "forca": 91},
+    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 92},
+    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 93},
+    {"nome": "Zaraki Kenpachi", "emoji": "<:Zaraki:1466974469976231987>", "forca": 89},
 
 # =========================
 # JUJUTSU KAISEN
 # =========================
-    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 89},
-    {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 90},
+    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 85},
+    {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 88},
+    {"nome": "Toji", "emoji": "<a:tojifushigurotojiezgif:1475838270729617418>", "forca": 62},
 
 # =========================
 # ONE PIECE
 # =========================
-    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 87},
-    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 84},
+    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 84},
+    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 78},
+    {"nome": "Shanks", "emoji": "<a:onepieceshanksezgif:1475839084726321234>", "forca": 85},
 
 # =========================
 # ONE PUNCH MAN
 # =========================
     {"nome": "Saitama", "emoji": "<:onepunchmanlounysezgif:1474857609226879040>", "forca": 99},
     {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 88},
-    {"nome": "Garou", "emoji": "<a:garouonepunchmangarouezgif:1475310369747501066>", "forca": 95},
+    {"nome": "Garou", "emoji": "<a:garouonepunchmangarouezgif:1475310369747501066>", "forca": 97},
     {"nome": "Genos", "emoji": "<a:onepunchmangenosezgif:1475310739311951994>", "forca": 75},
 
 # =========================
 # ATTACK ON TITAN
 # =========================
-    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 70},
-    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 66},
-    {"nome": "Mikasa", "emoji": "<a:ES_mikasaSmile:1472366438491623465>", "forca": 62},
+    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 60},
+    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 55},
+    {"nome": "Mikasa", "emoji": "<a:ES_mikasaSmile:1472366438491623465>", "forca": 54},
 
 # =========================
 # DEMON SLAYER
 # =========================
-    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 68},
-    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 72},
-    {"nome": "Muzan Kibutsuji", "emoji": "<a:mudzanpfpezgif:1475314842285113374>", "forca": 75},
-    {"nome": "Rengoku Kyojuro", "emoji": "<a:kyojurokyojurorengokuezgif:1475314647942041600>", "forca": 68},
+    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 64},
+    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 68},
+    {"nome": "Muzan Kibutsuji", "emoji": "<a:mudzanpfpezgif:1475314842285113374>", "forca": 71},
+    {"nome": "Rengoku Kyojuro", "emoji": "<a:kyojurokyojurorengokuezgif:1475314647942041600>", "forca": 65},
 
 # =========================
 # BLACK CLOVER
 # =========================
-    {"nome": "Asta", "emoji": "<a:blackcloverheartkingdomarcezgif:1474904524434051247>", "forca": 84},
-    {"nome": "Yuno", "emoji": "<a:yunoezgif:1475315176797638726>", "forca": 89},
-    {"nome": "Yami Sukehiro", "emoji": "<a:yamisukehirolaughezgif:1475315328115282062>", "forca": 92},
+    {"nome": "Asta", "emoji": "<a:blackcloverheartkingdomarcezgif:1474904524434051247>", "forca": 78},
+    {"nome": "Yuno", "emoji": "<a:yunoezgif:1475315176797638726>", "forca": 83},
+    {"nome": "Yami Sukehiro", "emoji": "<a:yamisukehirolaughezgif:1475315328115282062>", "forca": 86},
 
 # =========================
 # HUNTER X HUNTER
@@ -4042,8 +4057,9 @@ PERSONAGENS = [
 # =========================
 # NANATSU NO TAIZAI
 # =========================
-    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 86},
-    {"nome": "Escanor", "emoji": "<a:escanorezgif:1474860078933868676>", "forca": 93},
+    {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 83},
+    {"nome": "Escanor", "emoji": "<a:escanorezgif:1474860078933868676>", "forca": 86},
+    {"nome": "Ban", "emoji": "<a:animesevendeadlysinsezgif:1475905684397752420>", "forca": 79},
 
 # =========================
 # DEATH NOTE
@@ -4054,15 +4070,15 @@ PERSONAGENS = [
 # =========================
 # MY HERO ACADEMIA
 # =========================
-    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 76},
-    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 74},
-    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 81},
+    {"nome": "Deku", "emoji": "<a:Deku_Sword:1448786527462096977>", "forca": 74},
+    {"nome": "Bakugo", "emoji": "<a:Bakugo_Brush:1448786231793025119>", "forca": 72},
+    {"nome": "All Might", "emoji": "<:AllMightTF:1448786659725283449>", "forca": 79},
 
 # =========================
 # FULLMETAL ALCHEMIST
 # =========================
-    {"nome": "Edward Elric", "emoji": "<:erick:1466970104905334784>", "forca": 60},
-    {"nome": "Roy Mustang", "emoji": "<:Roy:1466971340098765059>", "forca": 64},
+    {"nome": "Edward Elric", "emoji": "<:erick:1466970104905334784>", "forca": 64},
+    {"nome": "Roy Mustang", "emoji": "<:Roy:1466971340098765059>", "forca": 68},
 
 # =========================
 # DEVIL MAY CRY
@@ -4074,9 +4090,9 @@ PERSONAGENS = [
 # =========================
 # JOJO'S BIZARRE ADVENTURE
 # =========================
-    {"nome": "Dio Brando", "emoji": "<a:Dio:1474855660712759428>", "forca": 89},
-    {"nome": "Jotaro Kujo", "emoji": "<a:Jotaro:1474856079895822468>", "forca": 86},
-    {"nome": "Joseph Joestar", "emoji": "<a:Joseph:1474856343138472036>", "forca": 73},
+    {"nome": "Dio Brando", "emoji": "<a:Dio:1474855660712759428>", "forca": 82},
+    {"nome": "Jotaro Kujo", "emoji": "<a:Jotaro:1474856079895822468>", "forca": 79},
+    {"nome": "Joseph Joestar", "emoji": "<a:Joseph:1474856343138472036>", "forca": 69},
 
 # =========================
 # HELLSING
@@ -4096,9 +4112,9 @@ PERSONAGENS = [
 # =========================
 # SHUMATSU
 # =========================
-    {"nome": "Adam", "emoji": "<:9465adan01:1474851374830194810>", "forca": 92},
-    {"nome": "Zeus", "emoji": "<a:zeusanimeezgif:1474851870953574400>", "forca": 93},
-    {"nome": "Qin Shi Huang", "emoji": "<:F74r6BUWwAAGpqdezgif:1474852272503656580>", "forca": 90},
+    {"nome": "Adam", "emoji": "<:9465adan01:1474851374830194810>", "forca": 83},
+    {"nome": "Zeus", "emoji": "<a:zeusanimeezgif:1474851870953574400>", "forca": 84},
+    {"nome": "Qin Shi Huang", "emoji": "<:F74r6BUWwAAGpqdezgif:1474852272503656580>", "forca": 85},
     {"nome": "Jack the Ripper", "emoji": "<a:JackTheRipper:1474855039427285032>", "forca": 78},
 ]
 
@@ -4353,11 +4369,17 @@ def atualizar_streak(user_id, ganhou: bool):
     try:
         # Sistema unificado (tabela apostas)
         if ganhou:
+            # Primeiro incrementa acertos_consecutivos
             cursor.execute("""
                 UPDATE apostas
-                SET 
-                    acertos_consecutivos = acertos_consecutivos + 1,
-                    maior_streak = GREATEST(maior_streak, acertos_consecutivos + 1)
+                SET acertos_consecutivos = acertos_consecutivos + 1
+                WHERE user_id = %s
+            """, (user_id,))
+            
+            # Depois atualiza maior_streak com o novo valor
+            cursor.execute("""
+                UPDATE apostas
+                SET maior_streak = GREATEST(maior_streak, acertos_consecutivos)
                 WHERE user_id = %s
             """, (user_id,))
         else:
@@ -4453,6 +4475,7 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Cell": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/cell-dragon-ball.gif",
         "Griffith": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/grifith-berserk.gif",
         "Guts": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/guts-berserk-berserk.gif",
+        "Chi-Chi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Chi%20Chi.gif",
         "Itachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lol-itachi.gif",
         "Naruto": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/naruto.gif",
         "Ichigo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ichigo.gif",
@@ -4466,14 +4489,17 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Eren": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/eren-fortnite-eren-fortnite-dance.gif",
         "Vegeta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-majin-vegeta.gif",
         "Luffy": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/luffy-wano.gif",
+        "Shanks": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Shanks.gif",
         "Zoro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/zoro.gif",
         "Tanjiro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/tanjiro-tanjiro-kamado.gif",
         "Nezuko": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/nezuko-demon-slayer.gif",
         "Gojo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/anime-jujutsu-kaisen.gif",
+        "Toji": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Toji.gif",
         "Asta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/asta-swordofthewizardking.gif",
         "Killua": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/killua-gon.gif",
         "Gon": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/gon.gif",
         "Meliodas": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/meliodas-seven-deadly-sins.gif",
+        "Ban": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Ban.gif",
         "Escanor": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/escanor.gif",
         "Light Yagami": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-kira.gif",
         "L": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-animeL.gif",
@@ -4495,7 +4521,7 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Dio Brando": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Dio.gif",
         "Jotaro Kujo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/yaroo-jotaro.gif",
         "Joseph Joestar": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/joseph-joestar-memed.gif",
-         "Alucard": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/hellsing-hellsing-ultimate.gif",
+        "Alucard": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/hellsing-hellsing-ultimate.gif",
         "Integra Hellsing": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/integra-hellsing.gif",
         "Seras Victoria": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Seras%20Victoria.gif",
         "Adam": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Adam.gif",
@@ -4618,6 +4644,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Genos": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Genos.gif",
             "Eren": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/eren-fortnite-eren-fortnite-dance.gif",
             "Vegeta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-majin-vegeta.gif",
+            "Chi-Chi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Chi%20Chi.gif",
             "Luffy": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/luffy-wano.gif",
             "Edward Elric": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/edward-elric-fma.gif",
             "Roy Mustang": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Roy%20Mustang.gif",
@@ -4634,6 +4661,7 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Killua": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/killua-gon.gif",
             "Gon": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/gon.gif",
             "Meliodas": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/meliodas-seven-deadly-sins.gif",
+            "Ban": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Ban.gif",
             "Escanor": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/escanor.gif",
             "Light Yagami": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-kira.gif",
             "L": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/death-note-animeL.gif",
@@ -4648,6 +4676,8 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
             "Mob": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/mob-psycho100-mob-psycho.gif",
             "Dio Brando": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Dio.gif",
             "Jotaro Kujo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/yaroo-jotaro.gif",
+            "Shanks": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Shanks.gif",
+            "Toji": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Toji.gif",
             "Joseph Joestar": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/joseph-joestar-memed.gif",
             "Alucard": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/hellsing-hellsing-ultimate.gif",
             "Integra Hellsing": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/integra-hellsing.gif",
@@ -5171,7 +5201,7 @@ ROLE_IDS_TIMES = {
     "santos": 1443227595935187025,
     "botafogo": 1443759934054469703,
     "vitoria": 1444483144270086267,
-    "athletico_paranaense": 1471640222713253949,
+    "atletico paranaense": 1471640222713253949,
     "bragantino": 1471640464208957632,
     "mirassol": 1471640764311277670,
     "coritiba": 1471640974902956196,
@@ -5974,12 +6004,12 @@ MAPEAMENTO_TIMES = {
     "fortaleza": "fortaleza",
 
     # Athletico Paranaense
-    "atlético paranaense": "athletico_paranaense",
-    "atletico paranaense": "athletico_paranaense",
-    "athletico paranaense": "athletico_paranaense",
-    "atletico pr": "athletico_paranaense",
-    "athletico pr": "athletico_paranaense",
-    "atl pr": "athletico_paranaense",
+    "atlético paranaense": "atletico paranaense",
+    "atletico paranaense": "atletico paranaense",
+    "athletico paranaense": "atletico paranaense",
+    "atletico pr": "atletico paranaense",
+    "athletico pr": "atletico paranaense",
+    "atl pr": "atletico paranaense",
 
     # Coritiba
     "coritiba": "coritiba",
@@ -6144,7 +6174,7 @@ def get_estadio_time_casa(nome_time_api: str):
             "estadio": "Barradão",
             "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Barradão.jpg"
         },
-        "athletico_paranaense": {
+        "atletico paranaense": {
             "estadio": "Ligga Arena",
             "imagem": "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Ligga%20Arena.png"
         },
@@ -6215,7 +6245,7 @@ PALAVRAS_GOL = {
     "vasco":       "⚓ GOOOOOOOOL DO GIGANTE DA COLINA!!!",
     "bragantino":  "🐂 GOOOOOOOL DO MASSA BRUTA!!!",
     "ceara":       "🦅 GOOOOOOOL DO VOZÃO!!!",
-    "athletico_paranaense": "🌪️ GOOOOOOOL DO FURACÃO!!!",
+    "atletico paranaense": "🌪️ GOOOOOOOL DO FURACÃO!!!",
     "fluminense":  "🍃❤️💚 GOOOOOOOL DO FLUZÃO",
     "internacional": "🎩 GOOOOOOOL DO COLORADO!!!",
     "coritiba":    "🍀 GOOOOOOOL DO COXA!!!",
@@ -6246,7 +6276,7 @@ GIFS_VITORIA_TIME = {
     # =======================
     # 🇧🇷 CLUBES BRASILEIROS 2025 - DOIS GIFs POR TIME
     # =======================
-    "athletico_paranaense": [
+    "atletico paranaense": [
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Athletic%20Paranaense/atlethic%20paranaense.gif",
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Athletic%20Paranaense/atletico%20paranaense.gif"
     ],
@@ -6416,7 +6446,7 @@ FALAS_BOT = {
     ]
 }
 
-LIGAS_PERMITIDAS = [1, 2, 71, 73, 11, 13]
+LIGAS_PERMITIDAS = [1, 2, 71, 11, 13] #73copa do brasil remoção temporaria
 
 
 # ---------- Integração com verificar_gols 
@@ -6803,6 +6833,8 @@ async def verificar_gols():
         }
 
 
+
+
 PRECOS = {
     "jinxed_vip": 1000,
     "caixinha": 50,
@@ -6864,6 +6896,8 @@ async def verificar_vips_expirados():
 
     conn.commit()
     conn.close()
+
+
 
 CANAL_PERMITIDO_ID = 1380564680774385724
 
@@ -7707,7 +7741,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
             cursor = None
             return {'processado': False, 'mensagem': f"⚠️ Jogo {fixture_id} já foi processado.", 'erro': None}
 
-        # Buscar dados da API
+        # Buscar dados da API com tratamento robusto de erros
         logging.info(f"🔗 Buscando dados do jogo {fixture_id} na API...")
         async with aiohttp.ClientSession() as session:
             async with session.get(URL, headers=HEADERS, params={"id": fixture_id}) as response:
@@ -8901,7 +8935,7 @@ async def time(ctx, *, nome_time: str):
     DISPLAY_NOMES = {
         "galo": "Atlético-MG",
         "sao paulo": "São Paulo",
-        "athletico_paranaense": "Athletico-PR",
+        "atletico paranaense": "Athletico-PR",
         "vasco": "Vasco",
         "fluminense": "Fluminense",
         "vitoria": "Vitória",
@@ -9670,7 +9704,7 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
             mencionou_miisha=False,
             tocou_musica=False,
             mencoes_bot=0,
-            azarao_vitoria='azarao' in conquistas  # Verifica se já tem a conquista no banco
+            azarao_vitoria=False  
         )
 
         # =========================
