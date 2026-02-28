@@ -1609,6 +1609,8 @@ async def reset_mencoes_bloqueio():
     except Exception as e:
         logging.error(f"Erro ao resetar bloqueios de menções: {e}")
 
+
+
 CARGOS_POR_REACAO = {
     "1409886253658279936": 1451376980581683354,  # Pelúcia Goku
     "1437791755096293510": 1451378090025549976   # Pelúcia Dante
@@ -2074,17 +2076,20 @@ async def ranking_mensal():
         conexao.close()
     
 
-
 @bot.command()
 async def enviar_mensagem(ctx, *, mensagem):
+
     canal_id = 1380564680552091789
     canal_enviar = bot.get_channel(canal_id)
+    if ctx.author.id != ADM_BRABO:
+        await ctx.send("Apenas o brabo pode usar!")
+        return
+    
     if canal_enviar:
         await canal_enviar.send(mensagem)
         await ctx.send(f"✅ Mensagem enviada para {canal_enviar.mention}!")
     else:
         await ctx.send("Não encontrei o canal correto")
-
 
 
 class VipView(discord.ui.View):
@@ -4052,14 +4057,14 @@ PERSONAGENS = [
 # HUNTER X HUNTER
 # =========================
     {"nome": "Gon", "emoji": "<:vrz_rage:1448784303248113734>", "forca": 76},
-    {"nome": "Killua", "emoji": "<a:killua_rage:1448784148796932166>", "forca": 74},
+    {"nome": "Killua", "emoji": "<a:killua_rage:1448784148796932166>", "forca": 72},
 
 # =========================
 # NANATSU NO TAIZAI
 # =========================
     {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 83},
     {"nome": "Escanor", "emoji": "<a:escanorezgif:1474860078933868676>", "forca": 86},
-    {"nome": "Ban", "emoji": "<a:animesevendeadlysinsezgif:1475905684397752420>", "forca": 79},
+    {"nome": "Ban", "emoji": "<a:animesevendeadlysinsezgif:1475905684397752420>", "forca": 74},
 
 # =========================
 # DEATH NOTE
@@ -10415,11 +10420,6 @@ class CartasView(discord.ui.View):
             except:
                 pass
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def testjimbo(ctx):
-    await spawn_jimbo()
-
 
 class ArtesView(discord.ui.View):
     def __init__(self, message_id: int):
@@ -10651,19 +10651,26 @@ async def verificar_melhor_do_mes():
         adicionar_pontos_db(user_id, 200, str(member))
         logging.info(f"💰 +200 pontos creditados! Saldo atualizado.")
 
-        mensagem_celebracao = (
-            f"🎨 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"<:534480paint:1471217810897113281> PARABÉNS ABSOLUTO! 🏆\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"Sua arte foi SENSACIONAL! 🌟\n"
-            f"Total de ❤️: {coracoes} coracões abrilhantados!\n\n"
-            f"Prêmios conquistados:\n"
-            f"👑 Cargo **Artista**\n"
-            f"💰 +200 pontos\n\n"
-            f"Você é o destaque do mês! Merecia mesmo! ✨"
+        # Criar embed de celebração
+        embed_celebracao = discord.Embed(
+            title="🎨 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            description=(
+                f"<:534480paint:1471217810897113281> **PARABÉNS ABSOLUTO!** 🏆\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"Sua arte foi **SENSACIONAL**! 🌟\n"
+                f"Total de ❤️: **{coracoes}** corações abrilhantados!\n\n"
+                f"**Prêmios conquistados:**\n"
+                f"👑 Cargo **Artista**\n"
+                f"💰 **+200 pontos**\n\n"
+                f"Você é o destaque do mês! Merecia mesmo! ✨"
+            ),
+            color=discord.Color.gold()
         )
         
-        await member.send(mensagem_celebracao)
+        embed_celebracao.set_image(url="https://cdn.discordapp.com/emojis/1471217810897113281.png")
+        embed_celebracao.set_footer(text="🎨 Artista do Mês - Parabéns!")
+        
+        await member.send(embed=embed_celebracao)
         logging.info(f"📩 Mensagem de celebração enviada para {member.display_name}!")
         
         # Aguardar um pouco para garantir que o cargo seja propagado
