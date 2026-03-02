@@ -855,15 +855,7 @@ elif DATABASE == os.getenv("DB_VIPS"):
             ORDER BY ano, mes;
             """
         
-        # Conexão MySQL direta para evitar SQLAlchemy
-        conn = mysql.connector.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_VIPS
-        )
-        df_mensal = pd.read_sql(query_mensal, conn)
-        conn.close()
+        df_mensal = pd.read_sql(query_mensal, DB_URL)
 
         # Criar nome do mês em português
         meses_portugues = {
