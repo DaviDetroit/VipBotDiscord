@@ -841,3 +841,131 @@ elif DATABASE == os.getenv("DB_VIPS"):
                 <p style="font-size: 1.1em; opacity: 0.9;">Seja o primeiro a votar no seu personagem favorito! ✨</p>
             </div>
             """, unsafe_allow_html=True)
+
+
+        st.subheader("📈 Votos por Mês - Análise Comparativa")
+
+        query_mensal = """
+            SELECT
+            YEAR(CONVERT_TZ(data_voto, '+00:00', '-03:00')) AS ano,
+            MONTH(CONVERT_TZ(data_voto, '+00:00', '-03:00')) AS mes,
+            COUNT(*) AS total_votos
+            FROM votos_anime
+            GROUP BY ano, mes
+            ORDER BY ano, mes;
+            """
+        
+        df_mensal = pd.read_sql(query_mensal, DB_URL)
+
+        # Criar nome do mês em português
+        meses_portugues = {
+            1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+            5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+            9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+        }
+
+        df_mensal['nome_mes'] = df_mensal['mes'].map(meses_portugues)
+        df_mensal['data'] = pd.to_datetime(
+            dict(year=df_mensal['ano'], month=df_mensal['mes'], day=1)
+        )
+
+        # Criar coluna de comparação (mês anterior)
+        df_mensal['votos_mes_anterior'] = df_mensal['total_votos'].shift(1)
+        df_mensal['diferenca'] = df_mensal['total_votos'] - df_mensal['votos_mes_anterior']
+        df_mensal['variacao_percentual'] = (df_mensal['diferenca'] / df_mensal['votos_mes_anterior'] * 100).round(1)
+
+        # Formatar exibição
+        df_mensal['variacao_texto'] = df_mensal['variacao_percentual'].apply(
+            lambda x: f"📈 +{x}%" if x > 0 else f"📉 {x}%" if x < 0 else "➡️ 0%"
+        )
+
+        # Gráfico principal com comparações
+        fig = px.line(
+            df_mensal,
+            x='data',
+            y='total_votos',
+            markers=True,
+            title='📊 Evolução de Votos por Mês',
+            labels={
+                'data': 'Mês',
+                'total_votos': 'Total de Votos'
+            },
+            hover_data={
+                'nome_mes': True,
+                'total_votos': True,
+                'variacao_texto': True
+            }
+        )
+
+        # Personalizar cores baseado na variação
+        colors = ['green' if x > 0 else 'red' if x < 0 else 'gray' for x in df_mensal['variacao_percentual']]
+        fig.update_traces(
+            marker=dict(size=8, color=colors),
+            line=dict(width=3)
+        )
+
+        fig.update_layout(
+            title_font_size=20,
+            title_x=0.5,
+            hoverlabel=dict(bgcolor="white", font_size=12)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Tabela comparativa detalhada
+        st.subheader("📋 Tabela Comparativa Detalhada")
+
+        # Preparar dados para exibição
+        df_exibicao = df_mensal[['nome_mes', 'ano', 'mes', 'total_votos', 'variacao_texto']].copy()
+        df_exibicao.columns = ['Mês', 'Ano', 'Mes_Num', 'Total de Votos', 'Variação vs Mês Anterior']
+        df_exibicao = df_exibicao.sort_values(['Ano', 'Mes_Num'], ascending=False)
+        df_exibicao = df_exibicao.drop('Mes_Num', axis=1)  # Remover coluna auxiliar
+
+        st.dataframe(
+            df_exibicao,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Estatísticas rápidas
+        st.subheader("📈 Estatísticas Rápidas")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            total_meses = len(df_mensal)
+            st.metric("📅 Total de Meses", total_meses)
+
+        with col2:
+            media_votos = df_mensal['total_votos'].mean().round(1)
+            st.metric("📊 Média de Votos/Mês", media_votos)
+
+        with col3:
+            if not df_mensal.empty:
+                maior_votos = df_mensal.loc[df_mensal['total_votos'].idxmax()]
+                st.metric("🏆 Maior Votação", f"{maior_votos['total_votos']} ({maior_votos['nome_mes']}/{maior_votos['ano']})")
+
+        with col4:
+            if not df_mensal.empty:
+                menor_votos = df_mensal.loc[df_mensal['total_votos'].idxmin()]
+                st.metric("📉 Menor Votação", f"{menor_votos['total_votos']} ({menor_votos['nome_mes']}/{menor_votos['ano']})")
+
+        # Insight automático
+        st.subheader("💡 Insights Automáticos")
+
+        if len(df_mensal) >= 2:
+            ultimo_mes = df_mensal.iloc[-1]
+            mes_anterior = df_mensal.iloc[-2]
+            
+            if ultimo_mes['total_votos'] > mes_anterior['total_votos']:
+                st.success(f"🎈 **Tendência de Alta!** {ultimo_mes['nome_mes']}/{ultimo_mes['ano']} teve {ultimo_mes['total_votos']} votos, "
+                          f"{ultimo_mes['total_votos'] - mes_anterior['total_votos']} a mais que {mes_anterior['nome_mes']}/{mes_anterior['ano']}")
+            elif ultimo_mes['total_votos'] < mes_anterior['total_votos']:
+                st.warning(f"📉 **Tendência de Baixa!** {ultimo_mes['nome_mes']}/{ultimo_mes['ano']} teve {ultimo_mes['total_votos']} votos, "
+                          f"{mes_anterior['total_votos'] - ultimo_mes['total_votos']} a menos que {mes_anterior['nome_mes']}/{mes_anterior['ano']}")
+            else:
+                st.info("➡️ **Estabilidade!** O número de votos se manteve igual ao mês anterior")
+        elif len(df_mensal) == 1:
+            st.info(f"📊 **Apenas um mês registrado:** {df_mensal.iloc[0]['nome_mes']}/{df_mensal.iloc[0]['ano']} com {df_mensal.iloc[0]['total_votos']} votos")
+        else:
+            st.info("📝 **Nenhum dado disponível** para análise comparativa")

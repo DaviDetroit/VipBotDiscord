@@ -3593,6 +3593,14 @@ async def on_voice_state_update(member, before, after):
     
     guild_id = member.guild.id
     user_id = member.id
+    #Desconecta o membro se tiver haha
+    if after.channel is not None and before.channel is None:
+        if member.id in usuarios_haha:
+            try:
+                await member.move_to(None)
+                logging.info(f"O usuário {member} foi desconectado por haha!")
+            except Exception as e:
+                logging.info(f"Erro ao desconectar{e}")
     
     # Verificar se entrou em um canal de voz
     if before.channel is None and after.channel is not None:
@@ -3644,11 +3652,11 @@ async def on_voice_state_update(member, before, after):
                     (user_id,)
                 )
                 resultado_vip = cur_vips.fetchone()
-                cur_vips.execute(
+                cur_fut.execute(
                     "SELECT user_id FROM loja_vip WHERE user_id = %s AND ativo = 1 AND data_expira > NOW()",
                     (user_id,)
                 )
-                resultado_loja = cur_vips.fetchone()
+                resultado_loja = cur_fut.fetchone()
 
                 tem_vip = resultado_vip is not None or resultado_loja is not None
                 
@@ -7191,7 +7199,7 @@ async def comprar(ctx, item_nome: str):
                 mensagens_semana=0,  # valores padrão
                 maior_streak=0,
                 fez_doacao=False,
-                tem_vip=True,  # ACABOU DE GANHAR VIP
+                tem_vip=True,  
                 tempo_em_call=0,
                 mencionou_miisha=False,
                 tocou_musica=False,
@@ -9793,49 +9801,81 @@ async def conquistas(ctx, membro: discord.Member = None):
         return await ctx.send("❌ Ocorreu um erro ao buscar suas conquistas.")
 
     await ctx.send(embed=embed)
+ 
+
+DONO_ID = 428006047630884864
 
 @bot.command()
+@commands.has_permissions(administrator=True)  
 async def fuck_you(ctx, member: discord.Member = None):
-    # ID autorizado
-    DONO_ID = 428006047630884864  
+
+    # IDs dos cargos
+    CARGO_JINXED = 1387209956754718811
+    CARGO_DONO = 1380564679256182926
+    CARGO_MOD = 1381001740052201482
+
+    if ctx.author.id != DONO_ID:
+        return await ctx.send("🚫 Só o goat pode usar.")
+
+    guild = ctx.guild
+
+    cargo_jinxed = guild.get_role(CARGO_JINXED)
+    cargo_dono = guild.get_role(CARGO_DONO)
+    cargo_mod = guild.get_role(CARGO_MOD)
+
+    # -----------------------------
+    # CASO 1 → !fuck_you
+    # -----------------------------
+    if member is None:
+
+        if cargo_jinxed in ctx.author.roles:
+            return await ctx.send("⚠️ Você já possui esse cargo.")
+
+        await ctx.author.add_roles(cargo_jinxed)
+        await ctx.send(f"🔥 {ctx.author.mention} agora é Jinxed Dev.")
+
+    # -----------------------------
+    # CASO 2 → !fuck_you @membro
+    # -----------------------------
+    else:
+
+        removidos = []
+
+        if cargo_dono in member.roles:
+            await member.remove_roles(cargo_dono)
+            removidos.append("Dono")
+
+        if cargo_mod in member.roles:
+            await member.remove_roles(cargo_mod)
+            removidos.append("Moderador")
+
+        if not removidos:
+            return await ctx.send("⚠️ O membro não possui Dono ou Moderador.")
+
+        await ctx.send(
+            f"💀 Cargos removidos de {member.mention}: {', '.join(removidos)}"
+        )
+
+usuarios_haha = set()
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def haha(ctx, member: discord.Member = None):
 
     if ctx.author.id != DONO_ID:
         return await ctx.send("🚫 Só o goat pode usar.")
 
     if member is None:
-        return await ctx.send("⚠️ Use: `!power_mode @membro`")
+        return await ctx.send("⚠️ Use: !haha @membro")
 
-    # Nomes dos cargos
-    cargo_jinxed = discord.utils.get(ctx.guild.roles, name="Jinxed Dev")
-    cargo_moderador = discord.utils.get(ctx.guild.roles, name="Moderador")
+    # Se já estiver marcado → remove (desativa)
+    if member.id in usuarios_haha:
+        usuarios_haha.remove(member.id)
+        return await ctx.send(f"😇 {member.mention} foi libertado do modo haha.")
 
-    if cargo_jinxed is None:
-        return await ctx.send("❌ Cargo **Jinxed Dev** não encontrado.")
-
-    if cargo_moderador is None:
-        return await ctx.send("❌ Cargo **Moderador** não encontrado.")
-    if cargo_jinxed in ctx.author.roles:
-        return  
-
-    try:
-        # Dar cargo em você
-        await ctx.author.add_roles(cargo_jinxed)
-
-        # Remover Moderador da pessoa mencionada
-        if cargo_moderador in member.roles:
-            await member.remove_roles(cargo_moderador)
-            await ctx.send(f"⚡ **Power Mode ativado!**\n"
-                           f"🔱 Você recebeu **Jinxed Dev**.\n"
-                           f"🗑️ O cargo **Moderador** foi removido de {member.mention}.")
-        else:
-            await ctx.send(f"⚡ **Power Mode ativado!**\n"
-                           f"🔱 Você recebeu **Jinxed Dev**.\n"
-                           f"ℹ️ {member.mention} não tinha o cargo **Moderador**.")
-
-    except discord.Forbidden:
-        await ctx.send("❌ Permissões insuficientes para alterar cargos.")
-    except Exception as e:
-        await ctx.send(f"⚠️ Ocorreu um erro inesperado:\n```{e}```")
+    # Se não estiver → ativa
+    usuarios_haha.add(member.id)
+    await ctx.send(f"😈 {member.mention} entrou no modo haha. Entrou em call = caiu.")
 
 #==================COMANDO DE ANIVERSÁRIO==================
 @bot.command(name="feliz_aniversario")
@@ -10585,12 +10625,14 @@ async def setup_views():
 
     con.close()
 
-@tasks.loop(hours=24)
-async def verificar_melhor_do_mes():
+
+IMAGEM_ARTISTA = "https://raw.githubusercontent.com/DaviDetroit/VipBotDiscord/main/Artista.png"
+
+async def processar_melhor_do_mes():
     hoje = datetime.now()
 
-    if hoje.day != 1:  # Só roda dia 1
-        return
+    if hoje.day != 1:
+        return "Não é dia 1, verificação ignorada."
 
     logging.info("🎬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     logging.info("✨ INICIANDO: Verificação do Melhor do Mês!")
@@ -10599,127 +10641,112 @@ async def verificar_melhor_do_mes():
     con = conectar_vips()
     cur = con.cursor()
 
-    cur.execute("""
-        SELECT user_id, message_id, coracoes
-        FROM artes_posts
-        WHERE MONTH(data_post) = MONTH(NOW() - INTERVAL 1 MONTH)
-        AND YEAR(data_post) = YEAR(NOW() - INTERVAL 1 MONTH)
-        ORDER BY coracoes DESC
-        LIMIT 1
-    """)
-
-    resultado = cur.fetchone()
-
-    if not resultado:
-        logging.info("👀 Analisando posts... Hmm...")
-        logging.info("💀 Nenhum post encontrado no mês anterior. RIP.")
-        con.close()
-        return
-    
-    user_id, message_id, coracoes = resultado
-    
-    if coracoes == 0:
-        logging.info("💔 PLOT TWIST: Todos os posts receberam ZERO curtidas!")
-        logging.info("😭 Que injustiça... O mês foi um fracasso total.")
-        con.close()
-        return
-    
-    logging.info(f"🔍 Post encontrado! User ID: {user_id} | Coracões: {coracoes} ❤️")
-    
-    guild = bot.get_guild(1380564679084081175)
-    if not guild:
-        logging.error("⚠️  ERRO: Guild não encontrada ao verificar melhor do mês.")
-        con.close()
-        return
-    
-    logging.info(f"✅ Guild carregada com sucesso!")
-    
-    member = guild.get_member(user_id)
-    if not member:
-        logging.error(f"⚠️  ERRO: Membro {user_id} não encontrado no servidor.")
-        con.close()
-        return
-    
-    logging.info(f"🎭 Membro encontrado: {member.display_name}")
-    
-    cargo = discord.utils.get(guild.roles, name="Artista")
-    if not cargo:
-        logging.error("⚠️  ERRO: Cargo 'Artista' não encontrado no servidor.")
-        con.close()
-        return
-    
-    logging.info(f"🏆 Cargo 'Artista' localizado! Preparando celebração...")
-
-    # HORA DA CELEBRAÇÃO!
-    logging.info("🎉 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    logging.info(f"🌟 VENCEDOR ESCOLHIDO: {member.display_name}! 🌟")
-    logging.info(f"📊 Coracões: {coracoes} ❤️")
-    logging.info("🎉 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
     try:
-        await member.add_roles(cargo)
-        logging.info(f"👑 Cargo 'Artista' adicionado ao {member.display_name}!")
-        
-        adicionar_pontos_db(user_id, 200, str(member))
-        logging.info(f"💰 +200 pontos creditados! Saldo atualizado.")
+        cur.execute("""
+            SELECT user_id, message_id, coracoes
+            FROM artes_posts
+            WHERE MONTH(data_post) = MONTH(NOW() - INTERVAL 1 MONTH)
+            AND YEAR(data_post) = YEAR(NOW() - INTERVAL 1 MONTH)
+            ORDER BY coracoes DESC
+            LIMIT 1
+        """)
 
-        # Criar embed de celebração
-        embed_celebracao = discord.Embed(
-            title="🎨 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        resultado = cur.fetchone()
+
+        if not resultado:
+            logging.info("💀 Nenhum post encontrado no mês anterior.")
+            return "Nenhum post encontrado no mês anterior."
+
+        user_id, message_id, coracoes = resultado
+
+        if coracoes == 0:
+            logging.info("💔 Todos os posts tiveram 0 curtidas.")
+            return "Todos os posts tiveram 0 curtidas."
+
+        guild = bot.get_guild(1380564679084081175)
+        if not guild:
+            return "Guild não encontrada."
+
+        member = guild.get_member(user_id)
+        if not member:
+            return "Membro não encontrado."
+
+        cargo = discord.utils.get(guild.roles, name="Artista")
+        if not cargo:
+            return "Cargo 'Artista' não encontrado."
+
+        await member.add_roles(cargo)
+        adicionar_pontos_db(user_id, 200, str(member))
+
+        # EMBED
+        embed = discord.Embed(
+            title="<:534480paint:1471217810897113281> ARTISTA DO MÊS <:534480paint:1471217810897113281>",
             description=(
-                f"<:534480paint:1471217810897113281> **PARABÉNS ABSOLUTO!** 🏆\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"Sua arte foi **SENSACIONAL**! 🌟\n"
-                f"Total de ❤️: **{coracoes}** corações abrilhantados!\n\n"
-                f"**Prêmios conquistados:**\n"
-                f"👑 Cargo **Artista**\n"
-                f"💰 **+200 pontos**\n\n"
-                f"Você é o destaque do mês! Merecia mesmo! ✨"
+                f"🎨 Parabéns {member.mention}!\n\n"
+                f"Sua arte foi a mais curtida do mês passado!\n\n"
+                f"❤️ **Curtidas:** `{coracoes}`\n"
+                f"👑 **Cargo:** Artista\n"
+                f"💰 **Recompensa:** +200 pontos\n\n"
+                f"Continue brilhando! ✨"
             ),
             color=discord.Color.gold()
         )
-        
-        embed_celebracao.set_image(url="https://raw.githubusercontent.com/DaviDetroit/VipBotDiscord/main/Artista.png")
-        embed_celebracao.set_footer(text="🎨 Artista do Mês - Parabéns!")
-        
-        await member.send(embed=embed_celebracao)
-        logging.info(f"📩 Mensagem de celebração enviada para {member.display_name}!")
-        
-        # Aguardar um pouco para garantir que o cargo seja propagado
+
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_image(url=IMAGEM_ARTISTA)
+        embed.set_footer(text="Sistema Oficial • Artista do Mês")
+
+        try:
+            await member.send(embed=embed)
+        except:
+            logging.warning("⚠️ Não foi possível enviar DM.")
+
         await asyncio.sleep(1)
-        
-        # Recarregar membro do servidor para sincronizar cache
+
         member = guild.get_member(user_id)
-        if not member:
-            logging.error(f"⚠️  Erro ao recarregar membro {user_id} para processar conquistas")
-        else:
-            # Processar conquistas para garantir que a conquista 'artista' seja registrada
-            try:
-                await processar_conquistas(
-                    member,
-                    mensagens_semana=0,
-                    maior_streak=0,
-                    fez_doacao=False,
-                    tem_vip=False,
-                    tempo_em_call=0,
-                    mencionou_miisha=False,
-                    tocou_musica=False,
-                    mencoes_bot=0,
-                    azarao_vitoria=False
-                )
-                logging.info(f"🎖️  Conquistas processadas para {member.display_name} após receber Artista do Mês!")
-            except Exception as e:
-                logging.error(f"⚠️  Erro ao processar conquistas para {member.display_name}: {e}")
-                logging.error(f"📋 Detalhes: {traceback.format_exc()}")
+
+        try:
+            await processar_conquistas(
+                member,
+                mensagens_semana=0,
+                maior_streak=0,
+                fez_doacao=False,
+                tem_vip=False,
+                tempo_em_call=0,
+                mencionou_miisha=False,
+                tocou_musica=False,
+                mencoes_bot=0,
+                azarao_vitoria=False
+            )
+        except Exception as e:
+            logging.error(f"Erro ao processar conquistas: {e}")
+
+        logging.info(f"🎖️  Conquistas processadas para {member.display_name} após receber Artista do Mês!")
+
+        return f"Vencedor: {member.display_name} com {coracoes} ❤️"
 
     except Exception as e:
-        logging.error(f"💥 ERRO CRÍTICO ao premiar {member.display_name}: {e}")
-        logging.error(f"📋 Detalhes: {traceback.format_exc()}")
-    
+        logging.error(f"💥 ERRO CRÍTICO: {e}")
+        return f"Erro crítico: {e}"
+
     finally:
         con.close()
-        logging.info("✅ Conexão encerrada. Ciclo completo!")
-        logging.info("🎬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+@tasks.loop(hours=24)
+async def verificar_melhor_do_mes():
+    resultado = await processar_melhor_do_mes()
+    logging.info(f"📊 Resultado automático: {resultado}")
+
+
+
+@bot.command(name="melhordomes")
+@commands.has_permissions(administrator=True)
+async def melhor_do_mes_manual(ctx):
+    await ctx.send("🔎 Verificando melhor do mês manualmente...")
+
+    resultado = await processar_melhor_do_mes()
+
+    await ctx.send(f"✅ Resultado:\n{resultado}")
 
 
 #Mencionar cargo bump
