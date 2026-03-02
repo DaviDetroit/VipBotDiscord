@@ -1539,6 +1539,9 @@ async def on_ready():
 
     if not bump_loop.is_running():
         bump_loop.start()
+
+    if not verificar_melhor_do_mes.is_running():
+        verificar_melhor_do_mes.start()
         
 
     conn = conectar_vips()
@@ -1692,7 +1695,7 @@ async def on_reaction_add(reaction, user):
 
     tipo = "up" if emoji == "👍" else "down"
 
-    conexao = conectar_vips()
+    conexao = conectar_futebol()
     cursor = conexao.cursor()
 
     try:
@@ -2973,7 +2976,8 @@ async def on_message(message):
 
     if message.content.startswith(("m!play", "m!p")):
 
-        # Verifica se o usuário é VIP
+        # Verifica se o usuário é VIP (banco OU cargo)
+        tem_vip_banco = False
         try:
             conn_vip = conectar_vips()
             c_vip = conn_vip.cursor()
@@ -2981,28 +2985,36 @@ async def on_message(message):
             "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
             (message.author.id,)
             )
-            tem_vip = c_vip.fetchone() is not None
+            tem_vip_banco = c_vip.fetchone() is not None
             c_vip.close()
             conn_vip.close()
         except Exception as e:
-            logging.error(f"Erro ao verificar VIP: {e}")
-            tem_vip = False
+            logging.error(f"Erro ao verificar VIP no banco: {e}")
+
+        # Verificar cargos VIP (sempre executar)
+        vip_roles = ["Jinxed Vip", "Jinxed Booster"]
+        tem_vip_cargo = any(role.name in vip_roles for role in message.author.roles)
+        
+        # VIP é válido se tiver banco OU cargo
+        tem_vip = tem_vip_banco or tem_vip_cargo
 
     # Se não é VIP e está em canal não autorizado
         if not tem_vip and message.channel.id not in CANAIS_MUSICAS_LIBERADO:
             try:
                 await message.delete()
-                await message.channel.send(
+                msg_resposta = await message.channel.send(
                     f"🎵 Use apenas nos canais <#1380564681093156940> ou <#1380564681093156941>\n"
                     f"💎 Ou adquira VIP em <#{CANAL_SEJA_VIP}>!"
                 )
                 await asyncio.sleep(3)
-                await message.delete()
+                await msg_resposta.delete()
                 logging.info(
                     f"Tentativa de usar m!play em {message.channel.id} por {message.author.id} (sem VIP)"
                 )
             except discord.Forbidden:
                 logging.warning("Sem permissão para deletar/enviar mensagens")
+            except discord.NotFound:
+                logging.warning("Mensagem já foi deletada por outro bot/moderador")
             return
 
         # ===== CONQUISTA DJ SARAH PARA VIPs =====
@@ -3983,7 +3995,7 @@ FUSO_HORARIO = timezone(timedelta(hours=-3)) # Horário de Brasília
 # =========================
 PERSONAGENS = [
     {"nome": "Griffith", "emoji": "<:43807griffith:1472351278733459669>", "forca": 87},
-    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 55},
+    {"nome": "Guts", "emoji": "<:fc_berserk_guts_laugh12:1448787375714074644>", "forca": 80},
 
 # =========================
 # DRAGON BALL
@@ -3997,7 +4009,7 @@ PERSONAGENS = [
 # =========================
 # NARUTO
 # =========================
-    {"nome": "Naruto", "emoji": "<a:narutoharukakanataezgif:1474858993032892467>", "forca": 84},
+    {"nome": "Naruto", "emoji": "<a:narutoharukakanataezgif:1474858993032892467>", "forca": 90},
     {"nome": "Madara", "emoji": "<a:madara57_:1448785361391063213>", "forca": 87},
     {"nome": "Pain", "emoji": "<a:pain:1448785603272507412>", "forca": 79},
     {"nome": "Itachi", "emoji": "<:itachi74:1408188776211025990>", "forca": 77},
@@ -4005,52 +4017,52 @@ PERSONAGENS = [
 # =========================
 # BLEACH
 # =========================
-    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 92},
-    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 93},
+    {"nome": "Ichigo", "emoji": "<:ichigo_hollificado:1408189507702100150>", "forca": 94},
+    {"nome": "Aizen", "emoji": "<:_aizen_:1448785979275083856>", "forca": 92},
     {"nome": "Zaraki Kenpachi", "emoji": "<:Zaraki:1466974469976231987>", "forca": 89},
 
 # =========================
 # JUJUTSU KAISEN
 # =========================
-    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 85},
+    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 91},
     {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 88},
-    {"nome": "Toji", "emoji": "<a:tojifushigurotojiezgif:1475838270729617418>", "forca": 62},
+    {"nome": "Toji", "emoji": "<a:tojifushigurotojiezgif:1475838270729617418>", "forca": 83},
 
 # =========================
 # ONE PIECE
 # =========================
-    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 84},
-    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 78},
-    {"nome": "Shanks", "emoji": "<a:onepieceshanksezgif:1475839084726321234>", "forca": 85},
+    {"nome": "Luffy", "emoji": "<a:Luffyhaki:1448782807026499786>", "forca": 87},
+    {"nome": "Zoro", "emoji": "<a:Zoro:1448783106424307884>", "forca": 77},
+    {"nome": "Shanks", "emoji": "<a:onepieceshanksezgif:1475839084726321234>", "forca": 93},
 
 # =========================
 # ONE PUNCH MAN
 # =========================
-    {"nome": "Saitama", "emoji": "<:onepunchmanlounysezgif:1474857609226879040>", "forca": 99},
-    {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 88},
+    {"nome": "Saitama", "emoji": "<:onepunchmanlounysezgif:1474857609226879040>", "forca": 101},
+    {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 94},
     {"nome": "Garou", "emoji": "<a:garouonepunchmangarouezgif:1475310369747501066>", "forca": 97},
     {"nome": "Genos", "emoji": "<a:onepunchmangenosezgif:1475310739311951994>", "forca": 75},
 
 # =========================
 # ATTACK ON TITAN
 # =========================
-    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 60},
-    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 55},
-    {"nome": "Mikasa", "emoji": "<a:ES_mikasaSmile:1472366438491623465>", "forca": 54},
+    {"nome": "Eren", "emoji": "<a:eren_titan_laugh:1408190415814922400>", "forca": 77},
+    {"nome": "Levi", "emoji": "<a:levi_bomb:1448785881262460938>", "forca": 52},
+    {"nome": "Mikasa", "emoji": "<a:ES_mikasaSmile:1472366438491623465>", "forca": 61},
 
 # =========================
 # DEMON SLAYER
 # =========================
-    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 64},
-    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 68},
-    {"nome": "Muzan Kibutsuji", "emoji": "<a:mudzanpfpezgif:1475314842285113374>", "forca": 71},
-    {"nome": "Rengoku Kyojuro", "emoji": "<a:kyojurokyojurorengokuezgif:1475314647942041600>", "forca": 65},
+    {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 68},
+    {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 72},
+    {"nome": "Muzan Kibutsuji", "emoji": "<a:mudzanpfpezgif:1475314842285113374>", "forca": 85},
+    {"nome": "Rengoku Kyojuro", "emoji": "<a:kyojurokyojurorengokuezgif:1475314647942041600>", "forca": 71},
 
 # =========================
 # BLACK CLOVER
 # =========================
     {"nome": "Asta", "emoji": "<a:blackcloverheartkingdomarcezgif:1474904524434051247>", "forca": 78},
-    {"nome": "Yuno", "emoji": "<a:yunoezgif:1475315176797638726>", "forca": 83},
+    {"nome": "Yuno", "emoji": "<a:yunoezgif:1475315176797638726>", "forca": 81},
     {"nome": "Yami Sukehiro", "emoji": "<a:yamisukehirolaughezgif:1475315328115282062>", "forca": 86},
 
 # =========================
@@ -4063,7 +4075,7 @@ PERSONAGENS = [
 # NANATSU NO TAIZAI
 # =========================
     {"nome": "Meliodas", "emoji": "<a:meliodas_rage:1448784457501773855>", "forca": 83},
-    {"nome": "Escanor", "emoji": "<a:escanorezgif:1474860078933868676>", "forca": 86},
+    {"nome": "Escanor", "emoji": "<a:escanorezgif:1474860078933868676>", "forca": 89},
     {"nome": "Ban", "emoji": "<a:animesevendeadlysinsezgif:1475905684397752420>", "forca": 74},
 
 # =========================
@@ -4102,7 +4114,7 @@ PERSONAGENS = [
 # =========================
 # HELLSING
 # =========================
-    {"nome": "Alucard", "emoji": "<:11945alucarddark:1474850114685374560>", "forca": 89},
+    {"nome": "Alucard", "emoji": "<:11945alucarddark:1474850114685374560>", "forca": 93},
     {"nome": "Integra Hellsing", "emoji": "<:Integra_Hellsingezgif:1474850823245795429>", "forca": 30},
     {"nome": "Seras Victoria", "emoji": "<:serasvictoriaisoneofmyfavanimech:1474851133464776725>", "forca": 75},
 
@@ -4117,9 +4129,9 @@ PERSONAGENS = [
 # =========================
 # SHUMATSU
 # =========================
-    {"nome": "Adam", "emoji": "<:9465adan01:1474851374830194810>", "forca": 83},
-    {"nome": "Zeus", "emoji": "<a:zeusanimeezgif:1474851870953574400>", "forca": 84},
-    {"nome": "Qin Shi Huang", "emoji": "<:F74r6BUWwAAGpqdezgif:1474852272503656580>", "forca": 85},
+    {"nome": "Adam", "emoji": "<:9465adan01:1474851374830194810>", "forca": 85},
+    {"nome": "Zeus", "emoji": "<a:zeusanimeezgif:1474851870953574400>", "forca": 86},
+    {"nome": "Qin Shi Huang", "emoji": "<:F74r6BUWwAAGpqdezgif:1474852272503656580>", "forca": 87},
     {"nome": "Jack the Ripper", "emoji": "<a:JackTheRipper:1474855039427285032>", "forca": 78},
 ]
 
@@ -4431,7 +4443,7 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
     
     # Se foi azarão, verificar conquista para cada ganhador
     if foi_azarao:
-        guild = bot.get_guild(1380564680552091789)  # ID do servidor
+        guild = bot.get_guild(1380564679084081175)  # ID do servidor
         if guild:
             logging.info(f"🎯 Processando conquista de azarão para {len(ganhadores_ids)} ganhadores")
             for uid in ganhadores_ids:
@@ -10575,7 +10587,7 @@ async def setup_views():
 
 @tasks.loop(hours=24)
 async def verificar_melhor_do_mes():
-    hoje = datetime.datetime.now()
+    hoje = datetime.now()
 
     if hoje.day != 1:  # Só roda dia 1
         return
@@ -10667,7 +10679,7 @@ async def verificar_melhor_do_mes():
             color=discord.Color.gold()
         )
         
-        embed_celebracao.set_image(url="https://cdn.discordapp.com/emojis/1471217810897113281.png")
+        embed_celebracao.set_image(url="https://raw.githubusercontent.com/DaviDetroit/VipBotDiscord/main/Artista.png")
         embed_celebracao.set_footer(text="🎨 Artista do Mês - Parabéns!")
         
         await member.send(embed=embed_celebracao)
