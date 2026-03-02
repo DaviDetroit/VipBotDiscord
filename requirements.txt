@@ -7,4 +7,6 @@ aiomysql
 streamlit
 pandas
 plotly
+sqlalchemy
+pymysql
 
