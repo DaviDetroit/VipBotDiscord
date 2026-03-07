@@ -1491,6 +1491,11 @@ async def on_ready():
 
     bot.add_view(VipView())
     
+    # Inicia loop automático de parada
+    if not verificar_parada_automatica.is_running():
+        verificar_parada_automatica.start()
+        logging.info("🔄 Loop de parada automática iniciado")
+    
     await setup_views()
     
     doacao_data = get_mensagem_doacao()
@@ -3079,10 +3084,14 @@ async def on_message(message):
                         "Se repetir, receberá mute automático de 3 horas."
                     )
                     semana_atual = datetime.now(timezone.utc).isocalendar()[1]
+                    data_hora_atual = datetime.now(timezone.utc)
                     c.execute(
-                        "INSERT INTO atividade (user_id, nome_discord, mensagens, semana) VALUES (%s, %s, %s, %s) "
-                        "ON DUPLICATE KEY UPDATE mensagens = mensagens + 1",
-                        (user_id, f"{message.author.name}#{message.author.discriminator}", 1, semana_atual)
+                        "INSERT INTO atividade (user_id, nome_discord, mensagens, semana, data_mensagem) VALUES (%s, %s, %s, %s, %s) "
+                        "ON DUPLICATE KEY UPDATE "
+                        "mensagens = CASE WHEN semana = %s THEN mensagens + 1 ELSE 1 END, "
+                        "semana = %s, "
+                        "data_mensagem = %s",
+                        (user_id, f"{message.author.name}#{message.author.discriminator}", 1, semana_atual, data_hora_atual, semana_atual, semana_atual, data_hora_atual)
                     )
                     conn.commit()
                     # Segundo aviso → Mute automático
@@ -3287,14 +3296,16 @@ async def on_message(message):
     cursor = conexao.cursor(dictionary=True)
 
     try:
+        data_hora_atual = datetime.now(timezone.utc)
         cursor.execute("""
-            INSERT INTO atividade (user_id, nome_discord, mensagens, semana)
-            VALUES (%s, %s, 1, %s)
+            INSERT INTO atividade (user_id, nome_discord, mensagens, semana, data_mensagem)
+            VALUES (%s, %s, 1, %s, %s)
             ON DUPLICATE KEY UPDATE 
-                mensagens = mensagens + 1,
+                mensagens = CASE WHEN semana = %s THEN mensagens + 1 ELSE 1 END,
                 nome_discord = %s,
-                semana = %s
-        """, (user_id, nome, semana_atual, nome, semana_atual))
+                semana = %s,
+                data_mensagem = %s
+        """, (user_id, nome, semana_atual, data_hora_atual, semana_atual, nome, semana_atual, data_hora_atual))
 
         conexao.commit()
     except Exception as e:
@@ -3741,6 +3752,7 @@ async def enviar_top_ativos_semanal_once(semana_atual, canal):
     conexao = conectar_vips()
     cursor = conexao.cursor(dictionary=True)
 
+    # Busca mensagens da semana atual (acumuladas)
     cursor.execute("""
         SELECT nome_discord, mensagens
         FROM atividade
@@ -3755,14 +3767,14 @@ async def enviar_top_ativos_semanal_once(semana_atual, canal):
 
     if resultados:
         embed = discord.Embed(
-            title="<:Jinx_Cool:1406660820602978374> Top 5 Usuários Mais Ativos da Semana",
+            title=f"<:Jinx_Cool:1406660820602978374> Top 5 Usuários Mais Ativos - Semana {semana_atual}",
             color=0xFFD700
         )
 
         for i, user in enumerate(resultados, start=1):
             embed.add_field(
                 name=f"{i}º - {user['nome_discord']}",
-                value=f"Mensagens: {user['mensagens']}",
+                value=f"Mensagens esta semana: {user['mensagens']}",
                 inline=False
             )
 
@@ -3773,18 +3785,10 @@ async def enviar_top_ativos_semanal_once(semana_atual, canal):
 async def resetar_ativos_semanal():
     agora = datetime.now(fuso_br)
 
-    # Segunda-feira = 0
+    # Domingo às 15:00 (horário BR) - apenas registra que a semana mudou
     if agora.weekday() == 6 and agora.hour == 15 and agora.minute == 0:
-        conn = conectar_vips()
-        cursor = conn.cursor()
-
-        cursor.execute("TRUNCATE TABLE atividade")
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        logging.info("Atividade semanal resetada com sucesso")
+        # Não reseta mais a tabela - apenas loga a mudança de semana
+        logging.info("Nova semana iniciada - mantendo contagem acumulada de mensagens")
 
 
 
@@ -4010,8 +4014,9 @@ PERSONAGENS = [
 # =========================
     {"nome": "Goku", "emoji": "<a:Goku:1448782376670068766>", "forca": 100},
     {"nome": "Vegeta", "emoji": "<a:laughingdyingezgif:1474859474358636565>", "forca": 98},
-    {"nome": "Cell", "emoji": "<a:3549cellthink:1450487722094362817>", "forca": 93},
+    {"nome": "Cell", "emoji": "<a:3549cellthink:1450487722094362817>", "forca": 90},
     {"nome": "Chi-Chi", "emoji": "<a:chichiexcitedezgif:1475906434913931529>", "forca": 54},
+    {"nome": "Broly", "emoji": "<a:brolyezgif:1478530985598652416>", "forca": 97},
     
 
 # =========================
@@ -4032,9 +4037,9 @@ PERSONAGENS = [
 # =========================
 # JUJUTSU KAISEN
 # =========================
-    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 91},
-    {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 88},
-    {"nome": "Toji", "emoji": "<a:tojifushigurotojiezgif:1475838270729617418>", "forca": 83},
+    {"nome": "Gojo", "emoji": "<a:gojobowow:1448783798400450590>", "forca": 88},
+    {"nome": "Sukuna", "emoji": "<:sukuna:1408189731916878035>", "forca": 85},
+    {"nome": "Toji", "emoji": "<a:tojifushigurotojiezgif:1475838270729617418>", "forca": 80},
 
 # =========================
 # ONE PIECE
@@ -4046,7 +4051,7 @@ PERSONAGENS = [
 # =========================
 # ONE PUNCH MAN
 # =========================
-    {"nome": "Saitama", "emoji": "<:onepunchmanlounysezgif:1474857609226879040>", "forca": 101},
+    {"nome": "Saitama", "emoji": "<:onepunchmanlounysezgif:1474857609226879040>", "forca": 99},
     {"nome": "Mob", "emoji": "<a:ascending70:1448786880526028971>", "forca": 94},
     {"nome": "Garou", "emoji": "<a:garouonepunchmangarouezgif:1475310369747501066>", "forca": 97},
     {"nome": "Genos", "emoji": "<a:onepunchmangenosezgif:1475310739311951994>", "forca": 75},
@@ -4063,7 +4068,7 @@ PERSONAGENS = [
 # =========================
     {"nome": "Tanjiro", "emoji": "<:tanjirodisgusted:1448783352734810183>", "forca": 68},
     {"nome": "Nezuko", "emoji": "<:tt_nezuko_stare:1448783485828595986>", "forca": 72},
-    {"nome": "Muzan Kibutsuji", "emoji": "<a:mudzanpfpezgif:1475314842285113374>", "forca": 85},
+    {"nome": "Muzan Kibutsuji", "emoji": "<a:mudzanpfpezgif:1475314842285113374>", "forca": 82},
     {"nome": "Rengoku Kyojuro", "emoji": "<a:kyojurokyojurorengokuezgif:1475314647942041600>", "forca": 71},
 
 # =========================
@@ -4108,9 +4113,9 @@ PERSONAGENS = [
 # =========================
 # DEVIL MAY CRY
 # =========================
-    {"nome": "Dante", "emoji": "<a:devilmaycrydanteezgif:1474902237238001876>", "forca": 80},
-    {"nome": "Vergil", "emoji": "<a:petafarbarpetrfarbarezgif:1474903335302860973>", "forca": 82},
-    {"nome": "Lady", "emoji": "<a:Lady:1474857276278968490>", "forca": 58},
+    {"nome": "Dante", "emoji": "<a:devilmaycrydanteezgif:1474902237238001876>", "forca": 90},
+    {"nome": "Vergil", "emoji": "<a:petafarbarpetrfarbarezgif:1474903335302860973>", "forca": 92},
+    {"nome": "Lady", "emoji": "<a:Lady:1474857276278968490>", "forca": 45},
 
 # =========================
 # JOJO'S BIZARRE ADVENTURE
@@ -4481,7 +4486,7 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
     
     # Criar embed bonito
     embed = discord.Embed(
-        title="<a:105382toro:1454984271897825405> VITÓRIA NA BATALHA DE ANIME!" if not foi_azarao else "⚡ VITÓRIA DE AZARÃO!",
+        title="<a:105382toro:1454984271897825405> VITÓRIA NA BATALHA DE ANIME!" if not foi_azarao else "🐗 VITÓRIA DE AZARÃO!",
         description=(
             f"🏆 **{vencedor['nome']}** venceu a batalha épica!\n\n"
             f"💰 **Sua recompensa:** **+{pontos_premio} pontos**\n"
@@ -4498,9 +4503,10 @@ async def enviar_mensagem_vitoria_dm(ganhadores_ids, vencedor, perdedor, pontos_
         "Rengoku Kyojuro": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Rengoku.gif",
         "Goku":"https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-goku.gif",
         "Cell": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/cell-dragon-ball.gif",
+        "Chi-Chi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Chi%20Chi.gif",
+        "Broly": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Broly%20Super.gif",
         "Griffith": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/grifith-berserk.gif",
         "Guts": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/guts-berserk-berserk.gif",
-        "Chi-Chi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Chi%20Chi.gif",
         "Itachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lol-itachi.gif",
         "Naruto": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/naruto.gif",
         "Ichigo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ichigo.gif",
@@ -4658,8 +4664,11 @@ async def anunciar_resultado(canal, vencedor, perdedor, ganhadores_ids, chance_p
         GIFS_VITORIA = {
             "Goku":"https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-goku.gif",
             "Cell": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/cell-dragon-ball.gif",
-            "Griffith": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/grifith-berserk.gif",
+            "Chi-Chi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Chi%20Chi.gif",
+            "Broly": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/Broly%20Super.gif",
+            "Vegeta": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/dragon-ball-z-majin-vegeta.gif",
             "Guts": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/guts-berserk-berserk.gif",
+            "Griffith": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/grifith-berserk.gif",
             "Itachi": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/lol-itachi.gif",
             "Naruto": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/naruto.gif",
             "Ichigo": "https://raw.githubusercontent.com/DaviDetroit/gifs-anime/main/GifsVitoria/ichigo.gif",
@@ -5261,17 +5270,131 @@ async def jogos_ao_vivo():
 #   Ligar o loop e agendar
 tz_br = pytz.timezone("America/Sao_Paulo")
 
+async def tem_jogo_hoje():  
+    conexao = conectar_futebol()
+    cursor = conexao.cursor()
+    
+    cursor.execute("""
+        SELECT data_jogo
+        FROM jogos_pendentes
+        WHERE data_jogo >= CURDATE()
+        ORDER BY data_jogo ASC
+        LIMIT 1
+    """)
+    
+    resultado = cursor.fetchone()
+    cursor.close()
+    conexao.close()
+    
+    return resultado[0] if resultado else None
+
+
+@tasks.loop(minutes=1)
+async def verificar_inicio_jogos():
+    proximo_jogo = await tem_jogo_hoje()
+    if not proximo_jogo:
+        return
+    
+    agora = datetime.now(tz_br)
+    
+    
+    if isinstance(proximo_jogo, str):
+        proximo_jogo = datetime.fromisoformat(proximo_jogo.replace('Z', '+00:00'))
+        proximo_jogo = proximo_jogo.astimezone(tz_br)
+    
+    # Se já estiver acompanhando, não faz nada
+    if acompanhando:
+        return
+    
+    # "Essa data já aconteceu? Não? Então vou retornar"
+    if agora < proximo_jogo:
+        return
+    
+    
+    if agora >= proximo_jogo:
+        global acompanhando, placares
+        
+        acompanhando = True  
+        placares.clear()
+
+        if not verificar_gols.is_running() and not verificar_jogos_automaticamente.is_running():
+            verificar_gols.start()
+            verificar_jogos_automaticamente.start()
+        
+        logging.info(f"🟢 Monitoramento iniciado automaticamente! Jogo: {proximo_jogo}")
+
+
+async def tem_jogo_final():
+    conexao = conectar_futebol()
+    cursor = conexao.cursor()
+    
+    cursor.execute("""
+        SELECT data_jogo
+        FROM jogos_pendentes
+        WHERE data_jogo >= CURDATE()
+        ORDER BY data_jogo DESC
+        LIMIT 1
+    """)
+    
+    resultado = cursor.fetchone()
+    cursor.close()
+    conexao.close()
+    
+    return resultado[0] if resultado else None
+
+
+@tasks.loop(minutes=5)
+async def verificar_parada_automatica():
+    if not acompanhando:
+        return  
+    
+    ultimo_jogo = await tem_jogo_final()
+    if not ultimo_jogo:
+        return  
+    
+    agora = datetime.now(tz_br)
+    
+    
+    if isinstance(ultimo_jogo, str):
+        ultimo_jogo = datetime.fromisoformat(ultimo_jogo.replace('Z', '+00:00'))
+        ultimo_jogo = ultimo_jogo.astimezone(tz_br)
+    
+   
+    limite_parada = ultimo_jogo + timedelta(hours=3)
+    
+    
+    if agora < limite_parada:
+        return
+    
+   
+    if agora >= limite_parada:
+        global acompanhando
+        acompanhando = False
+        
+        logging.info(f"🔴 Monitoramento parado automaticamente! Último jogo: {ultimo_jogo} | Limite: {limite_parada}")
+        
+        # Para os loops se estiverem rodando
+        if verificar_gols.is_running():
+            verificar_gols.stop()
+        if verificar_jogos_automaticamente.is_running():
+            verificar_jogos_automaticamente.stop()
+
+
+
 @commands.has_permissions(administrator=True)
 @bot.command()
-async def apistart(ctx, horario: str = None):
+async def apistart(ctx, horario: str = None, data: str = None):
+
     if ctx.author.id != ADM_BRABO:
         return await ctx.send("Só amorreba the gostoso pode usar este comando! <:Galo:1425991683690074212>")
 
     global acompanhando, placares
 
-    # -----------------------------------------------------
-    # MODO 1 — SEM PARÂMETRO (INÍCIO MANUAL)
-    # -----------------------------------------------------
+    agora = datetime.now(tz_br)
+
+    # ----------------------------------------
+    # MODO MANUAL (sem nada)
+    # ----------------------------------------
     if horario is None:
         acompanhando = True
         placares.clear()
@@ -5282,33 +5405,63 @@ async def apistart(ctx, horario: str = None):
         if not verificar_jogos_automaticamente.is_running():
             verificar_jogos_automaticamente.start()
 
-        logging.info("Monitoramento iniciado MANUALMENTE.")
-        return await ctx.send("🔵 **Monitoramento iniciado manualmente! Jogos ao vivo em andamento!**")
+        return await ctx.send("🔵 Monitoramento iniciado manualmente!")
 
-    # -----------------------------------------------------
-    # MODO 2 — COM PARÂMETRO (AGENDADO)
-    # -----------------------------------------------------
-    agora = datetime.now(tz_br)
+    # ----------------------------------------
+    # VALIDA HORÁRIO
+    # ----------------------------------------
     try:
         if ":" in horario:
-            h, m = horario.split(":", 1)
+            h, m = horario.split(":")
             hour = int(h)
             minute = int(m)
         else:
             hour = int(horario)
             minute = 0
-        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-            return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
-    except Exception:
-        return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
-    horario_agendado = agora.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    except:
+        return await ctx.send("⚠️ Use HH ou HH:MM.")
 
-    # Se o horário já passou → agenda para o próximo dia
+    
+    if data:
+        try:
+            dia, mes = data.split("/")
+            dia = int(dia)
+            mes = int(mes)
+
+            horario_agendado = datetime(
+                year=agora.year,
+                month=mes,
+                day=dia,
+                hour=hour,
+                minute=minute,
+                second=0,
+                microsecond=0,
+                tzinfo=tz_br
+            )
+
+        except:
+            return await ctx.send("⚠️ Use a data no formato DD/MM.")
+    else:
+        # se não tiver data → comportamento antigo
+        horario_agendado = agora.replace(
+            hour=hour,
+            minute=minute,
+            second=0,
+            microsecond=0
+        )
+
+        if horario_agendado <= agora:
+            horario_agendado += timedelta(days=1)
+
+    # ----------------------------------------
+    # SE JÁ PASSOU
+    # ----------------------------------------
     if horario_agendado <= agora:
-        horario_agendado += timedelta(days=1)
+        return await ctx.send("⚠️ Essa data/horário já passou.")
 
-    await ctx.send(f"🟡 **Monitoramento será iniciado às {horario_agendado.strftime('%H:%M')} (horário de Brasília).**")
-    logging.info(f"Monitoramento AGENDADO para {horario_agendado.strftime('%H:%M:%S')}")
+    await ctx.send(
+        f"🟡 Monitoramento agendado para {horario_agendado.strftime('%d/%m às %H:%M')}"
+    )
 
     async def iniciar_no_horario():
         await discord.utils.sleep_until(horario_agendado)
@@ -5323,8 +5476,9 @@ async def apistart(ctx, horario: str = None):
         if not verificar_jogos_automaticamente.is_running():
             verificar_jogos_automaticamente.start()
 
-        logging.info("Monitoramento iniciado AUTOMATICAMENTE no horário agendado.")
-        await ctx.send(f"🟢 **Monitoramento iniciado automaticamente às {horario_agendado.strftime('%H:%M')}!**")
+        await ctx.send(
+            f"🟢 Monitoramento iniciado automaticamente!"
+        )
 
     bot.loop.create_task(iniciar_no_horario())
 
@@ -5332,7 +5486,7 @@ async def apistart(ctx, horario: str = None):
           
 @commands.has_permissions(administrator=True)
 @bot.command()
-async def apistop(ctx, horario: str = None):
+async def apistop(ctx, horario: str = None, data: str = None):
     if ctx.author.id != ADM_BRABO:
         return await ctx.send("Só amorreba the gostoso pode usar este comando! <:Galo:1425991683690074212>")
 
@@ -5343,43 +5497,83 @@ async def apistop(ctx, horario: str = None):
     # -----------------------------------------------------
     if horario is None:
         acompanhando = False
-
         logging.info("Monitoramento PARADO manualmente.")
         return await ctx.send("🔴 **Monitoramento pausado manualmente! Nenhum request será feito.**")
 
-    # -----------------------------------------------------
-    # MODO 2 — PARADA AGENDADA
-    # -----------------------------------------------------
     agora = datetime.now(tz_br)
+
+    # -----------------------------------------------------
+    # VALIDA HORÁRIO
+    # -----------------------------------------------------
     try:
         if ":" in horario:
-            h, m = horario.split(":", 1)
+            h, m = horario.split(":")
             hour = int(h)
             minute = int(m)
         else:
             hour = int(horario)
             minute = 0
+
         if hour < 0 or hour > 23 or minute < 0 or minute > 59:
             return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
-    except Exception:
+    except:
         return await ctx.send("⚠️ Formato inválido. Use HH ou HH:MM.")
-    horario_agendado = agora.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
+    # -----------------------------------------------------
+    # VALIDA DATA (se existir)
+    # -----------------------------------------------------
+    if data:
+        try:
+            dia, mes = data.split("/")
+            dia = int(dia)
+            mes = int(mes)
+
+            horario_agendado = datetime(
+                year=agora.year,
+                month=mes,
+                day=dia,
+                hour=hour,
+                minute=minute,
+                second=0,
+                microsecond=0,
+                tzinfo=tz_br
+            )
+        except:
+            return await ctx.send("⚠️ Use a data no formato DD/MM.")
+    else:
+        horario_agendado = agora.replace(
+            hour=hour,
+            minute=minute,
+            second=0,
+            microsecond=0
+        )
+
+        if horario_agendado <= agora:
+            horario_agendado += timedelta(days=1)
+
+    # -----------------------------------------------------
+    # SE JÁ PASSOU
+    # -----------------------------------------------------
     if horario_agendado <= agora:
-        horario_agendado += timedelta(days=1)
+        return await ctx.send("⚠️ Essa data/horário já passou.")
 
-    await ctx.send(f"🟡 **Monitoramento será pausado às {horario_agendado.strftime('%H:%M')} (horário de Brasília).**")
-    logging.info(f"Pausa AGENDADA para {horario_agendado.strftime('%H:%M:%S')}")
+    await ctx.send(
+        f"🟡 **Monitoramento será pausado em {horario_agendado.strftime('%d/%m às %H:%M')} (horário de Brasília).**"
+    )
+
+    logging.info(f"Pausa AGENDADA para {horario_agendado.strftime('%d/%m %H:%M:%S')}")
 
     async def parar_no_horario():
         await discord.utils.sleep_until(horario_agendado)
+
         global acompanhando
         acompanhando = False
+
         logging.info("Monitoramento pausado AUTOMATICAMENTE no horário agendado.")
+
         await ctx.send("🔴 **Monitoramento pausado automaticamente. Nenhum request será feito.**")
 
     bot.loop.create_task(parar_no_horario())
-
 
 
 @bot.command()
@@ -9166,27 +9360,52 @@ async def on_member_remove(member):
         conn = conectar_futebol()
         cursor = conn.cursor()
 
+        # Deletar dados do usuário de outras tabelas
         cursor.execute("DELETE FROM times_usuarios WHERE user_id = %s", (member.id,))
         cursor.execute("DELETE FROM apostas WHERE user_id = %s", (member.id,))
         cursor.execute("DELETE FROM pontuacoes WHERE user_id = %s", (member.id,))
 
-        conn.commit()
-        logging.info(f"Usuário {member.id} removido do banco ao sair do servidor.")
-    except Exception as e:
-        logging.error(f"Erro ao remover o usuário do banco de dados {e}")
-        try:
-            if conn:
-                conn.rollback()
-        except Exception:
-            pass
-    finally:
-        try:
-            if cursor:
-                cursor.close()
-        finally:
-            if conn:
-                conn.close()
+        # Inserir registro de saída no log_membros
+        sql = "INSERT INTO log_membros (user_id, user_name, evento, data_evento) VALUES (%s, %s, %s, %s)"
+        valores = (member.id, str(member), 'SAIU', datetime.now(timezone.utc))
+        cursor.execute(sql, valores)
 
+        conn.commit()
+        logging.info(f"Usuário {member.id} removido do banco ao sair do servidor e registrado no log.")
+    except Exception as e:
+        logging.error(f"Erro ao remover o usuário do banco de dados: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+@bot.event
+async def on_member_join(member):
+    conn = None
+    cursor = None
+    try:
+        conn = conectar_futebol()
+        cursor = conn.cursor()
+
+        # Inserir registro de entrada no log_membros
+        sql = "INSERT INTO log_membros (user_id, user_name, evento, data_evento) VALUES (%s, %s, %s, %s)"
+        valores = (member.id, str(member), 'ENTROU', datetime.now(timezone.utc))
+        cursor.execute(sql, valores)
+
+        conn.commit()
+        logging.info(f"Usuário {member.id} entrou no servidor e foi registrado no log.")
+    except Exception as e:
+        logging.error(f"Erro ao registrar a entrada do usuário no banco de dados: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # ----- CÓDIGO PARA VER TODOS OS COMANDOS ADMIN -----
 @bot.tree.command(name="admin", description="Painel de comandos administrativos")
@@ -9958,6 +10177,16 @@ async def feliz_aniversario(ctx, membro: discord.Member):
         "🎉 É hora, é hora!\n"
         "🎉 Rá-tim-bum!"
     )
+    await asyncio.sleep(15)
+    await ctx.send(f"Com quem será, com quem será, com quem será que {membro.mention} vai casaaar, vai depender, vai depender, vai depender se o ciclano vai querer")
+    #Remoção do cargp depois de 24 horas
+    await asyncio.sleep(86400)
+    
+    await membro.remove_roles(cargo)
+    logging.info(f"Remoção do cargo de aniversariante de {membro} depois das 24horas")
+    membro.send("Feliz aniversáriooo, seu cargo de aniversáriante foi removido! Te desejo tudo de bom para hoje <3, vou te dar 30 pontos de presente 📬")
+
+    adicionar_pontos_db(membro.id,30)
     
 
 
