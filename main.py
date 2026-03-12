@@ -1656,12 +1656,13 @@ async def on_reaction_add(reaction, user):
             cur = conn.cursor()
 
             cur.execute("""
-                INSERT INTO votos_anime (user_id, message_id, personagem)
-                VALUES (%s, %s, %s)
+                INSERT INTO votos_anime (user_id, nome_discord, message_id, personagem)
+                VALUES (%s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
+                    nome_discord = VALUES(nome_discord),
                     personagem = VALUES(personagem),
                     data_voto = CURRENT_TIMESTAMP
-            """, (user.id, message.id, personagem_votado))
+            """, (user.id, user.name, message.id, personagem_votado))
 
             conn.commit()
             cur.close()
@@ -5270,6 +5271,12 @@ async def jogos_ao_vivo():
 #   Ligar o loop e agendar
 tz_br = pytz.timezone("America/Sao_Paulo")
 
+
+def normalizar_para_tz_br(dt):
+    if dt.tzinfo is None:
+        return tz_br.localize(dt)
+    return dt.astimezone(tz_br)
+
 async def tem_jogo_hoje():  
     conexao = conectar_futebol()
     cursor = conexao.cursor()
@@ -5277,7 +5284,7 @@ async def tem_jogo_hoje():
     cursor.execute("""
         SELECT data_jogo
         FROM jogos_pendentes
-        WHERE data_jogo >= CURDATE()
+        WHERE data_jogo >= CONVERT_TZ(NOW(), '+00:00', '-03:00')
         ORDER BY data_jogo ASC
         LIMIT 1
     """)
@@ -5291,16 +5298,14 @@ async def tem_jogo_hoje():
 
 @tasks.loop(minutes=1)
 async def verificar_inicio_jogos():
+    global acompanhando, placares 
+    
     proximo_jogo = await tem_jogo_hoje()
     if not proximo_jogo:
         return
-    
+
     agora = datetime.now(tz_br)
-    
-    
-    if isinstance(proximo_jogo, str):
-        proximo_jogo = datetime.fromisoformat(proximo_jogo.replace('Z', '+00:00'))
-        proximo_jogo = proximo_jogo.astimezone(tz_br)
+    proximo_jogo = normalizar_para_tz_br(proximo_jogo)
     
     # Se já estiver acompanhando, não faz nada
     if acompanhando:
@@ -5312,8 +5317,6 @@ async def verificar_inicio_jogos():
     
     
     if agora >= proximo_jogo:
-        global acompanhando, placares
-        
         acompanhando = True  
         placares.clear()
 
@@ -5331,7 +5334,7 @@ async def tem_jogo_final():
     cursor.execute("""
         SELECT data_jogo
         FROM jogos_pendentes
-        WHERE data_jogo >= CURDATE()
+        WHERE data_jogo >= CONVERT_TZ(NOW(), '+00:00', '-03:00')
         ORDER BY data_jogo DESC
         LIMIT 1
     """)
@@ -5345,30 +5348,25 @@ async def tem_jogo_final():
 
 @tasks.loop(minutes=5)
 async def verificar_parada_automatica():
+    global acompanhando  
+    
     if not acompanhando:
         return  
     
     ultimo_jogo = await tem_jogo_final()
     if not ultimo_jogo:
         return  
-    
+
     agora = datetime.now(tz_br)
-    
-    
-    if isinstance(ultimo_jogo, str):
-        ultimo_jogo = datetime.fromisoformat(ultimo_jogo.replace('Z', '+00:00'))
-        ultimo_jogo = ultimo_jogo.astimezone(tz_br)
-    
-   
-    limite_parada = ultimo_jogo + timedelta(hours=3)
-    
+    ultimo_jogo = normalizar_para_tz_br(ultimo_jogo)
+
+    # Para cerca de 2h30 após o horário do último jogo
+    limite_parada = ultimo_jogo + timedelta(hours=2, minutes=30)
     
     if agora < limite_parada:
         return
     
-   
     if agora >= limite_parada:
-        global acompanhando
         acompanhando = False
         
         logging.info(f"🔴 Monitoramento parado automaticamente! Último jogo: {ultimo_jogo} | Limite: {limite_parada}")
@@ -5582,6 +5580,51 @@ async def meuspontos(ctx):
         pontos = pegar_pontos(ctx.author.id)
         await ctx.send(f"<a:565724creditcard:1467671052053254235> {ctx.author.mention}, você tem **{pontos} pontos**!")
         logging.info(f"Usuário {ctx.author.name} ({ctx.author.id}) solicitou os pontos.")
+
+
+@bot.command()
+async def dar_pontos(ctx, user_destino: discord.Member, valor: int):
+
+    if ctx.channel.id != CANAL_PERMITIDO_ID:
+        await ctx.send("❌ Não é permitido usar esse comando aqui!")
+        return
+
+    user_origem = ctx.author
+
+    if valor <= 0:
+        await ctx.send("⚠️ O valor precisa ser maior que 0.")
+        return
+
+    if user_destino.id == user_origem.id:
+        await ctx.send("⚠️ Você não pode transferir pontos para si mesmo.")
+        return
+
+    try:
+        conn = conectar_futebol()
+        cur = conn.cursor()
+
+        cur.execute(
+            "CALL transferir_pontos(%s, %s, %s)",
+            (user_origem.id, user_destino.id, valor)
+        )
+
+        conn.commit()
+
+        logging.info(
+            f"✅ {valor} pontos transferidos de {user_origem.id} para {user_destino.id}"
+        )
+
+        await ctx.send(
+            f"💰 {user_origem.mention} transferiu **{valor} pontos** para {user_destino.mention}!"
+        )
+
+    except Exception as e:
+        logging.error(f"Erro na transferência de pontos: {e}")
+        await ctx.send("❌ Ocorreu um erro ao transferir os pontos.")
+
+    finally:
+        cur.close()
+        conn.close()
         
 
 
@@ -6262,6 +6305,12 @@ MAPEAMENTO_TIMES = {
     "napoli": "napoli",
     "atletico de madrid": "atletico de madrid",
     "atlético de madrid": "atletico de madrid",
+    "atletico madrid": "atletico de madrid",
+    "atlético madrid": "atletico de madrid",
+    "atletico": "atletico de madrid",
+    "atlético": "atletico de madrid",
+    "atleti": "atletico de madrid",
+    "atletico de bilbao": "atletico de madrid",
     "milan": "milan",
     "ac milan": "milan",
     "juventus": "juventus",
@@ -6281,11 +6330,17 @@ MAPEAMENTO_TIMES = {
     "west ham united": "west_ham",
     "westham": "west_ham",
     "west-ham": "west_ham",
+    "westham": "west_ham",
+    "west-ham": "west_ham",
     "arsenal": "arsenal",
     "chelsea": "chelsea",
     "liverpool": "liverpool",
-    "bayern munich": "bayern munich",
-    "fc bayern": "bayern munich",
+    "bayern munich": "bayern_munich",
+    "bayern münchen": "bayern_munich",
+    "fc bayern": "bayern_munich",
+    "bayern": "bayern_munich",
+    "munique": "bayern_munich",
+    "bayern_munich": "bayern_munich",
     "barcelona": "barcelona",
     "real madrid": "real madrid",
 
@@ -6527,7 +6582,7 @@ GIFS_VITORIA_TIME = {
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Fluminense/cano-fluminense.gif",
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Fluminense/nathan-fluminense.gif"
     ],
-    "atlético mineiro": [
+    "galo": [
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Galo/atletico-mineiro-aê.gif",
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Galo/atletico-mineiro-dancinha-do-tik-tok.gif",
         "https://raw.githubusercontent.com/DaviDetroit/arenas-bot/master/Comemoracao/Galo/atletico-paulinho.gif",
@@ -6575,7 +6630,7 @@ GIFS_VITORIA_TIME = {
 }
 
 FALAS_BOT = {
-    "atlético mineiro": [
+    "galo": [
         "EU FALEI PORRA!!! AQUI É GALO!!! 🐓🔥",
         "GALOOOOOOOO ATÉ MORRER!!! 🖤🤍",
         "RESPEITA O MAIOR DE MINAS!!! 🏆",
@@ -8196,7 +8251,7 @@ async def processar_jogo(fixture_id, ctx=None, automatico=False):
                         value=(
                             "<:apchikabounce:1408193721907941426> **!meuspontos**\n"
                             "<a:9612_aMCenchantedbook:1449948971916202125> **!info**\n"
-                           "<a:522143costco:1473869986773733396> **!loja** compre comemoração, caixa surpresa vip e mais!\n"
+                           "<a:522143costco:1473869986773733396> **!loja** compre comemoração, caixa surpresa, vip e mais!\n"
                             "<a:17952trophycoolbrawlstarspin:1457784734074535946> **!conquistas**"
                         ),
                         inline=False
@@ -8861,6 +8916,84 @@ async def dar_vip_slash(interaction: discord.Interaction, membro: discord.Member
 
 
 
+@bot.tree.command(
+    name="dar_pontos",
+    description="Transfere pontos para outro usuário."
+)
+@app_commands.describe(
+    user_destino="Usuário que receberá os pontos",
+    valor="Quantidade de pontos a transferir"
+)
+@app_commands.guild_only()
+async def dar_pontos_slash(
+    interaction: discord.Interaction,
+    user_destino: discord.Member,
+    valor: int
+):
+
+    if interaction.channel_id != CANAL_PERMITIDO_ID:
+        await interaction.response.send_message(
+            "❌ Não é permitido usar esse comando aqui!",
+            ephemeral=True
+        )
+        return
+
+    user_origem = interaction.user
+
+    if valor <= 0:
+        await interaction.response.send_message(
+            "⚠️ O valor precisa ser maior que 0.",
+            ephemeral=True
+        )
+        return
+
+    if user_destino.id == user_origem.id:
+        await interaction.response.send_message(
+            "⚠️ Você não pode transferir pontos para si mesmo.",
+            ephemeral=True
+        )
+        return
+
+    try:
+        conn = conectar_futebol()
+        cur = conn.cursor()
+
+        cur.execute(
+            "CALL transferir_pontos(%s, %s, %s)",
+            (user_origem.id, user_destino.id, valor)
+        )
+
+        conn.commit()
+
+        logging.info(
+            f"💰 Transferência | {user_origem.id} -> {user_destino.id} | {valor} pontos"
+        )
+
+        await interaction.response.send_message(
+            f"💰 {user_origem.mention} transferiu **{valor} pontos** para {user_destino.mention}!"
+        )
+
+    except Exception as e:
+        logging.error(f"Erro na transferência de pontos: {e}")
+
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "❌ Ocorreu um erro ao transferir os pontos.",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                "❌ Ocorreu um erro ao transferir os pontos.",
+                ephemeral=True
+            )
+
+    finally:
+        try:
+            cur.close()
+            conn.close()
+        except:
+            pass
+
 @bot.tree.command(name="remover_vip", description="Remove o cargo VIP de um membro.")
 @app_commands.checks.has_permissions(administrator=True)
 async def remover_vip(interaction: discord.Interaction, membro: discord.Member):
@@ -9361,9 +9494,8 @@ async def on_member_remove(member):
         cursor = conn.cursor()
 
         # Deletar dados do usuário de outras tabelas
-        cursor.execute("DELETE FROM times_usuarios WHERE user_id = %s", (member.id,))
-        cursor.execute("DELETE FROM apostas WHERE user_id = %s", (member.id,))
-        cursor.execute("DELETE FROM pontuacoes WHERE user_id = %s", (member.id,))
+        cursor.execute("DELETE FROM usuarios WHERE user_id = %s", (member.id,))
+        
 
         # Inserir registro de saída no log_membros
         sql = "INSERT INTO log_membros (user_id, user_name, evento, data_evento) VALUES (%s, %s, %s, %s)"
@@ -9390,17 +9522,29 @@ async def on_member_join(member):
         conn = conectar_futebol()
         cursor = conn.cursor()
 
-        # Inserir registro de entrada no log_membros
-        sql = "INSERT INTO log_membros (user_id, user_name, evento, data_evento) VALUES (%s, %s, %s, %s)"
+        # Garantir que o usuário existe na tabela usuarios
+        await asyncio.sleep(1)
+        cursor.execute("""
+            INSERT IGNORE INTO usuarios (user_id, user_name)
+            VALUES (%s, %s)
+        """, (member.id, str(member)))
+
+        # Inserir registro de entrada no log
+        sql = """
+        INSERT INTO log_membros (user_id, user_name, evento, data_evento)
+        VALUES (%s, %s, %s, %s)
+        """
         valores = (member.id, str(member), 'ENTROU', datetime.now(timezone.utc))
         cursor.execute(sql, valores)
 
         conn.commit()
         logging.info(f"Usuário {member.id} entrou no servidor e foi registrado no log.")
+
     except Exception as e:
         logging.error(f"Erro ao registrar a entrada do usuário no banco de dados: {e}")
         if conn:
             conn.rollback()
+
     finally:
         if cursor:
             cursor.close()
@@ -10130,65 +10274,72 @@ async def feliz_aniversario(ctx, membro: discord.Member):
     await ctx.send(embed=embed)
 
     await asyncio.sleep(3)
-    await ctx.send("🎤 **Vamos cantar juntos!**")
+    await ctx.send("🎤 **Vamos cantar juntos, galera!**")
 
     await asyncio.sleep(2)
-    await ctx.send("🎶 Hoje vai ser uma festa")
+    await ctx.send("🎶 Hoje vai ser uma festa, bolo, refri e alegria!")
 
     await asyncio.sleep(2)
-    await ctx.send("🎶 Bolo e guaraná")
+    await ctx.send("🎶 Bolo, guaraná e muitos doces pra você 🍰")
 
     await asyncio.sleep(2)
-    await ctx.send("🎶 Muito doce pra você")
-
-    await asyncio.sleep(2)
-    await ctx.send("🎶 É o seu aniversário 🎂")
+    await ctx.send("🎶 Hoje é o seu aniversário, aproveita muito! 🎂")
 
     await asyncio.sleep(3)
-    await ctx.send("🎤 Vamos festejar e os amigos receber")
+    await ctx.send("🎤 Vamos festejar e os amigos vão te receber com muito carinho 💖")
 
     await asyncio.sleep(2)
     await ctx.send(
         "🎶 Mil felicidades e amor no coração\n"
-        "🎶 Que a sua vida seja sempre doce e emoção"
+        "🎶 Que a sua vida seja sempre doce e cheia de emoção"
     )
 
     await asyncio.sleep(2)
     await ctx.send(
-        "🎶 Bate, bate palma\n"
-        "🎶 Que é hora de cantar"
-    )
-
-    await asyncio.sleep(2)
-    await ctx.send(
-        "🎶 Parabéns, parabéns!\n"
-        "🎶 Hoje é o seu dia, que dia mais feliz"
+        "👏 Bate, bate palma,\n"
+        "🎶 Que agora é hora de cantar!"
     )
 
     await asyncio.sleep(2)
     await ctx.send(
         "🎶 Parabéns, parabéns!\n"
-        "🎶 Cante novamente que a gente pede bis 🎉"
+        "🎶 Hoje é o seu dia, que dia mais feliz! 🥳"
+    )
+
+    await asyncio.sleep(2)
+    await ctx.send(
+        "🎶 Parabéns, parabéns!\n"
+        "🎶 Canta bem alto que a gente pede bis! 🎉"
     )
 
     await asyncio.sleep(4)
     await ctx.send(
         "🎉 É big, é big, é big!\n"
         "🎉 É hora, é hora!\n"
-        "🎉 Rá-tim-bum!"
+        "🎉 RÁ-TIM-BUM!!!"
     )
-    await asyncio.sleep(15)
-    await ctx.send(f"Com quem será, com quem será, com quem será que {membro.mention} vai casaaar, vai depender, vai depender, vai depender se o ciclano vai querer")
-    #Remoção do cargp depois de 24 horas
+
+    await asyncio.sleep(10)
+    await ctx.send(
+        f"💘 Com quem será, com quem será, com quem será que {membro.mention} vai casar?\n"
+        "💌 Vai depender, vai depender, vai depender de quem quiser amar!"
+    )
+
+    # Remoção do cargo depois de 24 horas
     await asyncio.sleep(86400)
     
     await membro.remove_roles(cargo)
-    logging.info(f"Remoção do cargo de aniversariante de {membro} depois das 24horas")
-    membro.send("Feliz aniversáriooo, seu cargo de aniversáriante foi removido! Te desejo tudo de bom para hoje <3, vou te dar 30 pontos de presente 📬")
+    logging.info(f"Remoção do cargo de aniversariante de {membro} depois de 24 horas")
+    await membro.send(
+        "🎂 Feliz aniversário!\n\n"
+        "Seu cargo de **aniversariante** foi removido, mas a comemoração continua! 🥳\n"
+        "Te desejo tudo de melhor hoje e sempre, com muita saúde, sucesso e alegria! 💖\n\n"
+        "Como presente, você ganhou **30 pontos** no sistema do bot! 📬"
+    )
 
-    adicionar_pontos_db(membro.id,30)
+    adicionar_pontos_db(membro.id, 30)
     
-
+    
 
 @bot.command()
 async def troll(ctx, member: discord.Member):
