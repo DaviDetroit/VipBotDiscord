@@ -68,11 +68,11 @@ def consulta(sql, database_name: str | None = None):
 if DATABASE == os.getenv("DB_FUTEBOL"):
     st.markdown("## 🏆 Ranking de Mitos (Maiores Streaks)")
 
-    # SQL CORRIGIDO: Agrupa por usuário e pega o maior valor de cada um
+    
     sql_streak = """
-    SELECT nome_discord, MAX(maior_streak) AS recorde_streak 
+    SELECT user_id, MAX(nome_discord) as nome_discord, MAX(maior_streak) AS recorde_streak 
     FROM apostas 
-    GROUP BY nome_discord
+    GROUP BY user_id
     ORDER BY recorde_streak DESC 
     LIMIT 5;
     """
@@ -104,10 +104,12 @@ if DATABASE == os.getenv("DB_FUTEBOL"):
         for i, row in df_streak.iterrows():
             # Ícone baseado na posição
             icon = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "👤"
+
+            nome = row['nome_discord'].replace("#0", "")
             
             st.markdown(f"""
                 <div class="leaderboard-row">
-                    <span class="user-id">{icon} Apostador: {row['nome_discord']}</span>
+                    <span class="user-id">{icon} Apostador: {nome}</span>
                     <span class="streak-val">{row['recorde_streak']}🔥</span>
                 </div>
             """, unsafe_allow_html=True)

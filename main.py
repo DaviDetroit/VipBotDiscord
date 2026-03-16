@@ -465,7 +465,54 @@ async def slash_time(interaction: discord.Interaction, nome: app_commands.Choice
         f"❌ Cargo do time **{cargo_nome}** não encontrado no servidor.",
         ephemeral=True
     )
-    
+
+@bot.tree.command(
+    name="comemorar",
+    description="Agende uma comemoração caso seu time vença"
+)
+@app_commands.describe(time="Selecione o time para comemorar")
+@app_commands.choices(
+    time=[app_commands.Choice(name=v, value=k) for k, v in DISPLAY_NOMES.items()]
+)
+async def comemorar(interaction: discord.Interaction, time: app_commands.Choice[str]):
+
+    user_id = interaction.user.id
+    chave_time = time.value  
+
+    # Verifica se o usuário comprou o item
+    con = conectar_futebol()
+    cur = con.cursor()
+
+    cur.execute(
+        "SELECT COUNT(*) FROM loja_pontos WHERE user_id = %s AND item = 'comemoracao' AND ativo = 1",
+        (user_id,)
+    )
+
+    comprado = cur.fetchone()[0]
+
+    if comprado == 0:
+        con.close()
+        return await interaction.response.send_message(
+            "❌ Você precisa comprar o item **Comemoração** primeiro usando `/comprar comemoracao`.",
+            ephemeral=True
+        )
+
+    cur.execute(
+        "INSERT INTO comemoracoes (user_id, team_key) VALUES (%s, %s)",
+        (user_id, chave_time)
+    )
+
+    con.commit()
+    con.close()
+
+    emoji = EMOJI_TIMES.get(chave_time, "⚽")
+
+    await interaction.response.send_message(
+        f"🎉 **Agendado!** Se o **{DISPLAY_NOMES[chave_time]}** {emoji} ganhar o próximo jogo, vou soltar o GIF de vitória em sua homenagem!"
+    )
+
+    logging.info(f"🎊 O usuário {interaction.user.name} comprou comemoração")
+
 
 @bot.tree.command(name="lista_times", description="Veja todos os times disponíveis")
 async def slash_lista_times(interaction: discord.Interaction):
@@ -508,6 +555,7 @@ async def slash_lista_times(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
     logging.info(f"Usuário {interaction.user} solicitou a lista de times.")
+
 
 @bot.tree.command(name="sair_time", description="Saia do seu time de torcedores")
 async def slash_sair_time(interaction: discord.Interaction):
@@ -764,7 +812,7 @@ EMOJI_TIMES = {
     "flamengo": "<:Flamengo:1425990044623044659>",
     "palmeiras": "<:Palmeiras:1425989650513662044>",
     "lanus": "<:Lanus:1441436509281718383>",
-    "atletico paranaense": "<:Athletico_Paranaense__Logo_2019_:1476340287461920859>",
+    "atletico_paranaense": "<:Athletico_Paranaense__Logo_2019_:1476340287461920859>",
     "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
     "remo": "<:Remo:1443399201655492708>",
     "chapecoense": "<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
@@ -1518,11 +1566,11 @@ async def on_ready():
     if not ranking_mensal.is_running():
         ranking_mensal.start()
 
-    if not verificar_vips.is_running():
-        verificar_vips.start()
+    if not verificar_inicio_jogos.is_running():
+        verificar_inicio_jogos.start()
 
-    if not verificar_vips_expirados.is_running():
-        verificar_vips_expirados.start()
+    
+
 
     if not sincronizar_reacoes.is_running():
         sincronizar_reacoes.start()
@@ -1951,7 +1999,7 @@ def _sincronizar_reacoes_sync(posts):
 
 @tasks.loop(hours=24)
 async def ranking_mensal():
-    agora = datetime.utcnow()
+    agora = datetime.now(timezone.utc)
 
     # Só roda no dia 1
     if agora.day != 1:
@@ -2612,71 +2660,71 @@ async def remover_vip(ctx, membro: discord.Member):
         await ctx.send("❌ Erro ao remover VIP do banco de dados.")
         logging.error(f"Erro ao remover VIP: {e}")
 
-@tasks.loop(minutes=10)
+
+@tasks.loop(minutes=30)
 async def verificar_vips():
-    agora = datetime.now(timezone.utc)
-    
+
+    conn = None
+    cur = None
+
     try:
-        # Recomenda-se criar o pool no on_ready e usar bot.db_pool
-        conn = await aiomysql.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            db=os.getenv("DB_VIPS"),
-            autocommit=True
-        )
+        conn = conectar_vips()
+        cur = conn.cursor(dictionary=True)
 
-        async with conn.cursor(aiomysql.DictCursor) as cursor:
-            await cursor.execute("SELECT id, data_fim, avisado7d FROM vips")
-            vips = await cursor.fetchall()
+        cur.execute("""
+            SELECT id, nome_discord
+            FROM vips
+            WHERE data_fim <= NOW()
+            AND data_envio IS NULL
+        """)
 
-            for vip in vips:
-                user_id = int(vip['id'])
-                data_fim = vip['data_fim'].replace(tzinfo=timezone.utc) if vip['data_fim'].tzinfo is None else vip['data_fim']
-                
-                # Tenta pegar do cache primeiro (mais rápido)
-                user = bot.get_user(user_id) or await bot.fetch_user(user_id)
-                if not user:
+        vips = cur.fetchall()
+
+        for vip in vips:
+
+            vip_id = vip["id"]
+
+            try:
+                user_id = int(vip["nome_discord"])
+            except:
+                logging.warning(f"Registro inválido: {vip}")
+                continue
+
+            user = bot.get_user(user_id)
+
+            if not user:
+                try:
+                    user = await bot.fetch_user(user_id)
+                except:
+                    logging.warning(f"Usuário {user_id} não encontrado")
                     continue
 
-                dias_restantes = (data_fim - agora).days
+            try:
+                await user.send(
+                    "👑 Seu VIP expirou. Caso queira renovar, procure a staff."
+                )
 
-                # --- LÓGICA DE AVISO (7 DIAS) ---
-                if 0 < dias_restantes <= 7 and not vip['avisado7d']:
-                    try:
-                        channel = bot.get_channel(1387107714525827152)
-                        if channel:
-                            await channel.send(f"⚠️ O VIP de {user.mention} está acabando!")
-                        
-                        await user.send("📢 Seu VIP está acabando! Faltam 7 dias!")
-                        await cursor.execute("UPDATE vips SET avisado7d = 1 WHERE id = %s", (user_id,))
-                    except:
-                        pass
+                cur.execute("""
+                    UPDATE vips
+                    SET data_envio = NOW()
+                    WHERE id = %s
+                """, (vip_id,))
 
-                # --- LÓGICA DE REMOÇÃO (EXPIRADO) ---
-                elif dias_restantes <= 0:
-                    for guild in bot.guilds:
-                        membro = guild.get_member(user_id)
-                        if membro:
-                            cargo_vip = discord.utils.get(guild.roles, name="Jinxed Vip")
-                            if cargo_vip and cargo_vip in membro.roles:
-                                try:
-                                    await membro.remove_roles(cargo_vip)
-                                    await user.send("⏰ Seu VIP expirou e foi removido.")
-                                except:
-                                    pass
+                logging.info(f"VIP expirado avisado: {user_id}")
 
-                    await cursor.execute("DELETE FROM vips WHERE id = %s", (user_id,))
+            except Exception as e:
+                logging.error(f"Erro ao enviar DM para {user_id}: {e}")
 
-        conn.close()
+        conn.commit()
 
     except Exception as e:
-        
-        if 'conn' in locals() and conn:
+        logging.error(f"Erro ao verificar VIPs: {e}")
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
             conn.close()
-
-
-
 
 
 CANAL_TOP_ID = 1380564680552091789
@@ -3321,9 +3369,7 @@ async def on_message(message):
         conexao.close()
 
 
-#=========================Conquista=========================
-# Na função on_message, substitua o bloco de conquistas por:
-#=========================Conquista=========================
+
     conexao = None
     cursor = None
     try:
@@ -3340,11 +3386,11 @@ async def on_message(message):
         resultado = cursor.fetchone()
         msgs_db = resultado['total_mensagens'] if resultado else 0
     
-        # Buscar acertos consecutivos (ajuste conforme sua lógica)
-        acertos_db = 0  # Defina a lógica correta aqui
+       
+        acertos_db = 0  
     
-        # Verificar se fez doação (ajuste conforme sua lógica)
-        doacao_db = False  # Defina a lógica correta aqui
+        
+        doacao_db = False 
     
         # Verificar se tem VIP
         cursor.execute("""
@@ -3378,9 +3424,16 @@ async def on_message(message):
         ID_DA_MIISHA = 1272457532434153472 
         marcou_a_miisha = any(user.id == ID_DA_MIISHA for user in message.mentions)
     try:
-    
+        
+        if not message.guild:
+            return
+
+        member = message.guild.get_member(message.author.id)
+        if not member:
+            return
+
         desbloqueadas, bloqueadas = await processar_conquistas(
-            member=message.author,
+            member=member,
             mensagens_semana=msgs_db,
             maior_streak=acertos_db,
             fez_doacao=doacao_db,
@@ -3599,10 +3652,58 @@ async def verificar_usuarios_em_call_inicial():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    # ===== RESTRIÇÃO DO BOT DE MÚSICA (antes do return para bots) =====
+    if member and member.id == BOT_MUSICA_PROIBIDO and after and after.channel:
+        canal_id = after.channel.id
+        if canal_id not in CANAIS_MUSICAS_LIBERADO:
+            try:
+                membros_do_canal = [m for m in after.channel.members if not m.bot]
+                nao_vip_encontrado = False
+                if membros_do_canal:
+                    conn = conectar_vips()
+                    cursor = conn.cursor()
+                    try:
+                        for m in membros_do_canal:
+                            try:
+                                cursor.execute(
+                                    "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
+                                    (m.id,)
+                                )
+                                tem_vip = cursor.fetchone() is not None
+                                if not tem_vip:
+                                    nao_vip_encontrado = True
+                                    break
+                            except Exception as e:
+                                logging.error(f"Erro ao verificar VIP no canal de música: {e}")
+                    finally:
+                        cursor.close()
+                        conn.close()
+                else:
+                    # Canal só com bots: silencia mesmo assim
+                    nao_vip_encontrado = True
+
+                if nao_vip_encontrado:
+                    try:
+                        await member.edit(mute=True, deafen=True, reason="Canal não permitido para não VIP")
+                        logging.info(f"Bot de música {BOT_MUSICA_PROIBIDO} silenciado no canal {canal_id}")
+                    except discord.Forbidden as e:
+                        logging.error(f"Sem permissão para silenciar o bot de música: {e}")
+                    except Exception as e:
+                        logging.error(f"Erro ao silenciar bot de música: {e}")
+                    try:
+                        await after.channel.send(
+                            "🔇 Bot de música está silenciado.\n"
+                            "❌ Apenas VIP pode usar música fora dos canais permitidos."
+                        )
+                    except Exception as e:
+                        logging.error(f"Erro ao enviar mensagem no canal de voz: {e}")
+            except Exception as e:
+                logging.error(f"Erro ao aplicar restrição do bot de música: {e}")
+
     # ===== RASTREAMENTO DE TEMPO EM CALL =====
     if member.bot:
         return
-    
+
     guild_id = member.guild.id
     user_id = member.id
     #Desconecta o membro se tiver haha
@@ -3695,57 +3796,6 @@ async def on_voice_state_update(member, before, after):
             except Exception as e:
                 logging.error(f"Erro ao processar conquistas após saída de call: {e}")
     
-    # ===== RESTRIÇÃO DO BOT DE MÚSICA =====
-    if member and member.id == BOT_MUSICA_PROIBIDO:
-        if after and after.channel:
-            canal_id = after.channel.id
-
-            #Se entrou em canal não permitido
-            if canal_id not in CANAIS_MUSICAS_LIBERADO:
-                try:
-                    membros_do_canal = [
-                        m for m in after.channel.members
-                        if not m.bot
-
-                    ]
-                    nao_vip_encontrado = False
-                    conn = conectar_vips()
-                    cursor = conn.cursor()
-                    try:
-                        for m in membros_do_canal:
-                            try:
-                                cursor.execute(
-                                    "SELECT id FROM vips WHERE id = %s AND data_fim > NOW()",
-                                    (m.id,)
-                                )
-                                tem_vip = cursor.fetchone() is not None
-                                if not tem_vip:
-                                    nao_vip_encontrado = True
-                                    break
-                            except Exception as e:
-                                logging.error(f"Erro ao verificar VIP: {e}")
-                    finally:
-                        cursor.close()
-                        conn.close()
-                    
-                    if nao_vip_encontrado:
-                        await member.edit(
-                            mute=True,
-                            deafen=True,
-                            reason="Canal não permitido para não VIP"
-                        )
-
-                        try:
-                            await after.channel.send(
-                                "🔇 Bot de música está silenciado.\n"
-                                "❌ Apenas VIP pode usar música fora dos canais permitidos."
-                            )
-                        except:
-                            pass
-                except Exception as e:
-                    logging.error(f"Erro ao aplicar restrição: {e}")    
-
-
 # ======================================
 #  FUNÇÃO PARA ENVIAR TOP ATIVOS SEMANAL
 # ======================================
@@ -3847,7 +3897,7 @@ async def on_presence_update(before, after):
             jogando[jogo_atual].append(user.id)
 
         # Verifica cooldown (10 minutos)
-        agora = datetime.utcnow()
+        agora = datetime.now(timezone.utc)
         if jogo_atual in ultimo_envio:
             tempo_desde_ultimo = agora - ultimo_envio[jogo_atual]
             if tempo_desde_ultimo < timedelta(minutes=10):
@@ -4866,136 +4916,270 @@ async def ticket_mensagem(ctx):
     return
 
 @bot.command()
-async def ticket (ctx):
+async def ticket(ctx):
+    # Verificação de canal
     if ctx.channel.id != ID_CANAL_TICKET:
         return await ctx.send("❌ Este comando só pode ser usado no canal de tickets.")
+    
     logging.info("Comando ticket executado por %s", ctx.author)
-    if ctx.channel.id == ID_CANAL_TICKET:
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-
+    
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+    
     user = ctx.author
+    
+    # Tenta enviar DM
     try:
         dm = await user.create_dm()
-        await dm.send(
-            "Olá! Vi que você solicitou o seu ticket.\n\n"
-            "O que você deseja?\n"
-            "Digite o número da opção:\n"
-            "<:44273helpids:1451964392202567731>| <:62797minecraftblue1:1451965466833846292> Ajuda do servidor\n"
-            "<:85946supportids:1451964721006641265> | <:43507minecraftblue2:1451965468889059478> Recuperar cargo perdido\n"
-            "<:18181report:1451965090851979457>| <:74240minecraftblue3:1451965470390358046> Denúncia"
+        
+        # Embed do menu principal
+        embed_menu = discord.Embed(
+            title="📋 Sistema de Tickets",
+            description="Olá! Vi que você solicitou o seu ticket.\n\n"
+                       "**O que você deseja?**\n"
+                       "Digite o número da opção abaixo:",
+            color=discord.Color.blue()
         )
+        embed_menu.add_field(
+            name="1️⃣ Ajuda do servidor",
+            value="<:44273helpids:1451964392202567731> <:62797minecraftblue1:1451965466833846292>",
+            inline=False
+        )
+        embed_menu.add_field(
+            name="2️⃣ Recuperar cargo perdido",
+            value="<:85946supportids:1451964721006641265> <:43507minecraftblue2:1451965468889059478>",
+            inline=False
+        )
+        embed_menu.add_field(
+            name="3️⃣ Denúncia",
+            value="<:18181report:1451965090851979457> <:74240minecraftblue3:1451965470390358046>",
+            inline=False
+        )
+        embed_menu.set_footer(text="Você tem 2 minutos para responder")
+        
+        await dm.send(embed=embed_menu)
     except:
         return await ctx.send("❌ Não consegui enviar DM. Ative sua DM para continuar.")
-
-    def check (m):
-        return m.author.id == user.id and isinstance (m.channel, discord.DMChannel)
+    
+    # Check para mensagens DM
+    def check(m):
+        return m.author.id == user.id and isinstance(m.channel, discord.DMChannel)
+    
+    # Aguarda opção principal
     try:
         msg = await bot.wait_for("message", check=check, timeout=120)
         opcao = msg.content.strip()
+        
         if opcao not in {"1", "2", "3"}:
-            await dm.send("⚠️ Opção inválida. Use 1, 2 ou 3.")
+            embed_erro = discord.Embed(
+                title="❌ Opção Inválida",
+                description="Use apenas as opções: **1**, **2** ou **3**.",
+                color=discord.Color.red()
+            )
+            await dm.send(embed=embed_erro)
             return
     except asyncio.TimeoutError:
-        return await ctx.send("❌ Você demorou muito para responder.")
+        embed_timeout = discord.Embed(
+            title="⏰ Tempo Esgotado",
+            description="Você demorou muito para responder. Execute o comando novamente.",
+            color=discord.Color.red()
+        )
+        await dm.send(embed=embed_timeout)
+        return
+    
     logging.info("Opção escolhida por %s: %s", ctx.author, opcao)
-
+    
+    # Conexão com banco de dados
     conn = conectar_vips()
     c = conn.cursor()
-    sql = "INSERT INTO tickets (user_id, nome_discord, tipo) VALUES (%s, %s, %s)"
-    c.execute(sql, (user.id, f"{ctx.author.name}#{ctx.author.discriminator}", int(opcao)))
+    
+    # Cria ticket na tabela denuncias
+    sql = "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, %s)"
+    c.execute(sql, (0, user.id, user.id, int(opcao)))
     conn.commit()
     ticket_id = c.lastrowid
     
-    if opcao == "1":
-        await dm.send("Seu pedido de ajuda foi registrado! Em breve um staff irá te atender.")
-        try:
-            admins = [428006047630884864, 614476239683584004, 1136342425820987474]
-            for admin_id in admins:
-                admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
-                if admin:
-                    await admin.send(
-                        "📩 Novo ticket de ajuda\n\n"
-                        f"🧑 Solicitante: <@{user.id}> ({ctx.author.name}#{ctx.author.discriminator})\n"
-                        f"🆔 Ticket: #{ticket_id}\n"
-                        "✅ Verifique no painel/banco e atenda quando possível."
-                    )
-            logging.info("Notificação de ticket de ajuda enviada aos admins: %s", admins)
-        except Exception as e:
-            logging.error("Falha ao notificar admins sobre ticket de ajuda: %s", e)
-    elif opcao == "2":
-        await dm.send("Seu pedido de recuperação de cargo foi registrado! Em breve um staff irá te atender.")
-        try:
-            admins = [428006047630884864, 614476239683584004, 1102837164863148062]
-            for admin_id in admins:
-                admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
-                if admin:
-                    await admin.send(
-                        "📩 Novo ticket de ajuda\n\n"
-                        f"🧑 Solicitante: <@{user.id}> ({ctx.author.name}#{ctx.author.discriminator}) pediu ajuda com cargo\n"
-                        f"🆔 Ticket: #{ticket_id}\n"
-                        "✅ Verifique no painel/banco e atenda quando possível."
-                    )
-
-                    logging.info("Notificação de ticket de recuperação de cargo enviada aos admins: %s", admins)
-        except Exception as e:
-            logging.error("Falha ao notificar admins sobre ticket de recuperação de cargo: %s", e)
-    elif opcao == "3":
-        await dm.send(
-            "Qual o tipo de denúncia?\n"
-            "1️⃣ Abuso de moderação\n"
-            "2️⃣ Perturbação / Cyberbullying"
+    # Configurações de admins por tipo
+    admin_configs = {
+        "1": {
+            "admins": [428006047630884864, 614476239683584004, 1136342425820987474],
+            "titulo": "📩 Novo Ticket de Ajuda",
+            "descricao": "Pedido de ajuda no servidor"
+        },
+        "2": {
+            "admins": [428006047630884864, 614476239683584004, 1102837164863148062],
+            "titulo": "📩 Novo Ticket de Recuperação",
+            "descricao": "Pedido de recuperação de cargo"
+        }
+    }
+    
+    # Processa opções 1 e 2
+    if opcao in ["1", "2"]:
+        config = admin_configs[opcao]
+        
+        embed_user = discord.Embed(
+            title="✅ Ticket Registrado",
+            description=f"Seu pedido foi registrado com sucesso!\n"
+                       f"🆔 **Ticket:** #{ticket_id}\n\n"
+                       f"Em breve um staff irá te atender.",
+            color=discord.Color.green()
         )
+        await dm.send(embed=embed_user)
+        
+        # Notifica admins
+        for admin_id in config["admins"]:
+            try:
+                admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
+                if admin:
+                    embed_admin = discord.Embed(
+                        title=config["titulo"],
+                        color=discord.Color.gold()
+                    )
+                    embed_admin.add_field(
+                        name="👤 Solicitante",
+                        value=f"<@{user.id}> ({ctx.author.name}#{ctx.author.discriminator})",
+                        inline=False
+                    )
+                    embed_admin.add_field(
+                        name="🆔 Ticket",
+                        value=f"#{ticket_id}",
+                        inline=True
+                    )
+                    embed_admin.add_field(
+                        name="📋 Tipo",
+                        value=config["descricao"],
+                        inline=True
+                    )
+                    embed_admin.set_footer(text="✅ Verifique no painel/banco e atenda quando possível.")
+                    
+                    await admin.send(embed=embed_admin)
+            except Exception as e:
+                logging.error(f"Falha ao notificar admin {admin_id}: {e}")
+        
+        logging.info(f"Notificação de ticket enviada aos admins: {config['admins']}")
+    
+    # Processa opção 3 (Denúncia)
+    elif opcao == "3":
+        # Pergunta tipo de denúncia
+        embed_tipo = discord.Embed(
+            title="📝 Tipo de Denúncia",
+            description="Qual o tipo de denúncia?\n\n"
+                       "1️⃣ Abuso de moderação\n"
+                       "2️⃣ Perturbação / Cyberbullying",
+            color=discord.Color.orange()
+        )
+        await dm.send(embed=embed_tipo)
+        
         msg2 = await bot.wait_for("message", check=check)
         tipo_denuncia = msg2.content.strip()
+        
+        if tipo_denuncia == "1":
+            await processar_denuncia_abuso(ctx, bot, dm, user, c, conn, ticket_id)
+        elif tipo_denuncia == "2":
+            await processar_denuncia_perturbacao(ctx, bot, dm, user, c, conn, ticket_id)
+        else:
+            embed_erro = discord.Embed(
+                title="❌ Opção Inválida",
+                description="Use 1 ou 2 para o tipo de denúncia.",
+                color=discord.Color.red()
+            )
+            await dm.send(embed=embed_erro)
     
-    if opcao == "3" and tipo_denuncia == "1":
-        await dm.send("Envie o ID exato do moderador que abusou da moderação:")
+    c.close()
+    conn.close()
 
-        msg3 = await bot.wait_for("message", check=check)
-        id_moderador = msg3.content.strip()
+async def processar_denuncia_abuso(ctx, bot, dm, user, c, conn, ticket_id):
+    """Processa denúncia por abuso de moderação"""
+    
+    embed_id = discord.Embed(
+        title="🔍 Identificação do Moderador",
+        description="Envie o **ID exato** do moderador que abusou da moderação:",
+        color=discord.Color.orange()
+    )
+    await dm.send(embed=embed_id)
+    
+    msg3 = await bot.wait_for("message", check=lambda m: m.author.id == user.id and isinstance(m.channel, discord.DMChannel))
+    id_moderador = msg3.content.strip()
+    
+    try:
         guild = ctx.guild
         membro = guild.get_member(int(id_moderador))
-
+        
         if not membro:
-            return await dm.send("<:3894307:1443956354698969149> ID do moderador inválido.")
+            embed_erro = discord.Embed(
+                title="<:3894307:1443956354698969149> ID Inválido",
+                description="O ID informado não corresponde a nenhum membro do servidor.",
+                color=discord.Color.red()
+            )
+            await dm.send(embed=embed_erro)
+            return
+        
         if user.id == membro.id:
-            await dm.send("❌ Você não pode denunciar a si mesmo.")
-            c.close(); conn.close(); return
-        if not (membro.guild_permissions.kick_members or membro.guild_permissions.ban_members or membro.guild_permissions.manage_messages or membro.guild_permissions.administrator):
-            await dm.send("⚠️ O ID informado não pertence a um moderador.")
-            c.close(); conn.close(); return
-
-        # salvar denúncia antes de qualquer lógica (atomicidade)
+            embed_erro = discord.Embed(
+                title="❌ Auto-Denúncia",
+                description="Você não pode denunciar a si mesmo.",
+                color=discord.Color.red()
+            )
+            await dm.send(embed=embed_erro)
+            return
+        
+        # Verifica se é moderador
+        if not any([membro.guild_permissions.kick_members, 
+                   membro.guild_permissions.ban_members,
+                   membro.guild_permissions.manage_messages,
+                   membro.guild_permissions.administrator]):
+            embed_erro = discord.Embed(
+                title="⚠️ Não é Moderador",
+                description="O ID informado não pertence a um moderador do servidor.",
+                color=discord.Color.red()
+            )
+            await dm.send(embed=embed_erro)
+            return
+        
+        # Verifica se já denunciou antes
         c.execute(
             "SELECT 1 FROM denuncias WHERE denunciante_id=%s AND denunciado_id=%s AND tipo_denuncia=1 LIMIT 1",
             (user.id, membro.id)
         )
         if c.fetchone():
-            await dm.send("⚠️ Denúncia já registrada anteriormente para este moderador.")
-            c.close(); conn.close(); return
+            embed_erro = discord.Embed(
+                title="⚠️ Denúncia Duplicada",
+                description="Você já registrou uma denúncia para este moderador anteriormente.",
+                color=discord.Color.red()
+            )
+            await dm.send(embed=embed_erro)
+            return
+        
+        # Registra denúncia
         c.execute(
             "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, 1)",
             (ticket_id, user.id, membro.id)
         )
         conn.commit()
-
+        
+        # Adiciona cargo avisado
         cargo_avisado = guild.get_role(CARGO_AVISADO)
         if cargo_avisado:
             await membro.add_roles(cargo_avisado, reason="Denunciado por abuso de moderação")
-            logging.info("Cargo avisado adicionado a %s", membro)
-
+            logging.info(f"Cargo avisado adicionado a {membro}")
+        
+        # Notifica denunciado
         try:
             dm_denunciado = await membro.create_dm()
-            await dm_denunciado.send(
-                "⚠️ Você recebeu uma denúncia por abuso de moderação. "
-                "Seu comportamento será monitorado pela equipe de administração. "
-                "Caso receba mais denúncias, poderá ter seus cargos de moderação removidos."
+            embed_alerta = discord.Embed(
+                title="⚠️ Alerta de Moderação",
+                description="Você recebeu uma denúncia por **abuso de moderação**.\n\n"
+                           "Seu comportamento será monitorado pela equipe de administração.\n"
+                           "Caso receba mais denúncias, poderá ter seus cargos de moderação removidos.",
+                color=discord.Color.red()
             )
+            await dm_denunciado.send(embed=embed_alerta)
         except:
             pass
+        
+        # Registra na tabela avisados
         sql = """
             INSERT INTO avisados (user_id, nome, denunciante_id) 
             VALUES (%s, %s, %s) 
@@ -5004,99 +5188,121 @@ async def ticket (ctx):
                 nome=VALUES(nome)
         """
         c.execute(sql, (membro.id, str(membro), user.id))
-        conn.commit()
-
-        # evita duplicidade de alerta ativo
+        
+        # Registra alerta de moderador
         c.execute(
             "SELECT 1 FROM moderador_alertas WHERE denunciante_id=%s AND moderador_id=%s LIMIT 1",
-            (ctx.author.id, int(id_moderador))
+            (user.id, int(id_moderador))
         )
         if not c.fetchone():
             sql = "INSERT INTO moderador_alertas (denunciante_id, moderador_id) VALUES (%s, %s)"
-            c.execute(sql, (ctx.author.id, int(id_moderador)))
+            c.execute(sql, (user.id, int(id_moderador)))
+        
         conn.commit()
-
+        
+        # Verifica quantidade de denúncias
         c.execute(
-            "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, 1)",
-            (ticket_id, user.id, int(id_moderador))
+            "SELECT COUNT(DISTINCT denunciante_id) FROM moderador_alertas WHERE moderador_id = %s",
+            (int(id_moderador),)
         )
-        conn.commit()
-
-        sql = """
-            SELECT COUNT(DISTINCT denunciante_id)
-            FROM moderador_alertas
-            WHERE moderador_id = %s
-            """
-        c.execute(sql, (int(id_moderador),))
         qtd = c.fetchone()[0]
-        if qtd >= 5:
-            if membro.id == ctx.guild.owner_id:
-                logging.warning("Tentativa de punição no dono do servidor ignorada.")
-                return
-            try:
-                cargos_mod = ["Dono", "Moderador"]
-                cargos_para_remover = [
-                    role for role in membro.roles 
-                    if role.name in cargos_mod
-                ]
-                if cargos_para_remover:
-                    await membro.remove_roles(
-                        *cargos_para_remover,
-                        reason="5 denúncias distintas por abuso de moderação"
-                    )
-                    logging.warning(
-                        "Cargos %s removidos de %s (ID: %s) após %s denúncias",
-                        cargos_mod, membro, membro.id, qtd
-                    )
-                    alertar = [428006047630884864, 614476239683584004]
-                    for admin_id in alertar:
-                        admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
-                        if admin:
-                            await admin.send(
-                            "🚨 **Ação automática aplicada**\n\n"
-                            f"O moderador <@{membro.id}> recebeu **5 denúncias distintas**.\n"
-                            "❌ Seus cargos de moderação/administração foram **removidos automaticamente**.\n\n"
-                            "🔎 Verifique o caso no painel / banco de dados."
-                        )
-            except discord.Forbidden:
-                logging.error(
-                    "Não foi possível remover cargos de %s (ID: %s) - permissões insuficientes",
-                    membro, membro.id
-                )
-            except Exception as e:
-                logging.error(
-                    "Erro ao remover cargos de %s (ID: %s): %s",
-                    membro, membro.id, str(e)
-                )
+        
+        if qtd >= 5 and membro.id != ctx.guild.owner_id:
+            await aplicar_punicao_moderador(ctx, bot, membro, qtd)
+        
+        embed_sucesso = discord.Embed(
+            title="✅ Denúncia Registrada",
+            description="Sua denúncia foi enviada com sucesso. A equipe será notificada.",
+            color=discord.Color.green()
+        )
+        await dm.send(embed=embed_sucesso)
+        
+    except ValueError:
+        embed_erro = discord.Embed(
+            title="❌ ID Inválido",
+            description="Por favor, envie apenas números (ID do usuário).",
+            color=discord.Color.red()
+        )
+        await dm.send(embed=embed_erro)
 
+async def processar_denuncia_perturbacao(ctx, bot, dm, user, c, conn, ticket_id):
+    """Processa denúncia por perturbação/cyberbullying"""
+    
+    embed_ids = discord.Embed(
+        title="👥 Identificação dos Usuários",
+        description="Envie os **IDs** das pessoas que te perturbam (separados por espaço):",
+        color=discord.Color.orange()
+    )
+    await dm.send(embed=embed_ids)
+    
+    msg3 = await bot.wait_for("message", check=lambda m: m.author.id == user.id and isinstance(m.channel, discord.DMChannel))
+    ids = msg3.content.strip().split()
+    
+    for denunciado_id in ids:
+        try:
+            c.execute(
+                "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, 2)",
+                (ticket_id, user.id, int(denunciado_id))
+            )
+        except ValueError:
+            continue
+    
+    conn.commit()
+    
+    embed_sucesso = discord.Embed(
+        title="✅ Denúncia Registrada",
+        description=f"Foram registradas **{len(ids)}** denúncia(s) por perturbação/cyberbullying.\n"
+                   f"A equipe analisará o caso.",
+        color=discord.Color.green()
+    )
+    await dm.send(embed=embed_sucesso)
+
+async def aplicar_punicao_moderador(ctx, bot, membro, qtd):
+    """Aplica punição ao moderador com 5+ denúncias"""
+    
+    try:
+        cargos_mod = ["Dono", "Moderador"]
+        cargos_para_remover = [
+            role for role in membro.roles 
+            if role.name in cargos_mod
+        ]
+        
+        if cargos_para_remover:
+            await membro.remove_roles(
+                *cargos_para_remover,
+                reason="5 denúncias distintas por abuso de moderação"
+            )
+            
+            logging.warning(
+                f"Cargos {cargos_mod} removidos de {membro} (ID: {membro.id}) após {qtd} denúncias"
+            )
+            
+            # Notifica admins sobre punição
             alertar = [428006047630884864, 614476239683584004]
             for admin_id in alertar:
-                admin = bot.get_user(admin_id)
-                if admin:
-                    await admin.send(
-                        "⚠️ Alerta de possível abuso de moderação\n\n"
-                        f"O moderador <@{id_moderador}> recebeu denúncias de 5 usuários diferentes.\n"
-                        "Verifique o caso no painel / banco de dados."
-                    )
-                    logging.info("Alerta enviado para %s sobre %s denúncias de abuso de moderação", admin, qtd)
-
-        
-        await dm.send("Sua denúncia foi enviada. A equipe será notificada.")
-    elif opcao == "3" and tipo_denuncia == "2":
-        await dm.send("Envie os IDs das pessoas que te perturbam (separados por espaço):")
-
-        msg3 = await bot.wait_for("message", check=check)
-        ids = msg3.content.strip().split()
-
-        for denunciado_id in ids:
-            sql = "INSERT INTO denuncias (ticket_id, denunciante_id, denunciado_id, tipo_denuncia) VALUES (%s, %s, %s, 2)"
-            c.execute(sql, (ticket_id, user.id, int(denunciado_id)))
-        
-        conn.commit()
-
-    c.close()
-    conn.close()
-
+                try:
+                    admin = bot.get_user(admin_id) or await bot.fetch_user(admin_id)
+                    if admin:
+                        embed_punicao = discord.Embed(
+                            title="🚨 Ação Automática Aplicada",
+                            description=f"O moderador <@{membro.id}> recebeu **{qtd} denúncias distintas**.",
+                            color=discord.Color.red()
+                        )
+                        embed_punicao.add_field(
+                            name="❌ Ação Tomada",
+                            value="Cargos de moderação/administração foram **removidos automaticamente**.",
+                            inline=False
+                        )
+                        embed_punicao.set_footer(text="🔎 Verifique o caso no painel / banco de dados")
+                        
+                        await admin.send(embed=embed_punicao)
+                except Exception as e:
+                    logging.error(f"Falha ao notificar admin {admin_id}: {e}")
+                    
+    except discord.Forbidden:
+        logging.error(f"Não foi possível remover cargos de {membro} - permissões insuficientes")
+    except Exception as e:
+        logging.error(f"Erro ao remover cargos de {membro}: {e}")
 
 #-------------------cargo jogo------------
 
@@ -5281,51 +5487,38 @@ async def tem_jogo_hoje():
     conexao = conectar_futebol()
     cursor = conexao.cursor()
     
+    # Buscar TODOS os jogos futuros
     cursor.execute("""
         SELECT data_jogo
         FROM jogos_pendentes
-        WHERE data_jogo >= CONVERT_TZ(NOW(), '+00:00', '-03:00')
+        WHERE data_jogo >= DATE_SUB(NOW(), INTERVAL 1 DAY)
         ORDER BY data_jogo ASC
-        LIMIT 1
     """)
     
-    resultado = cursor.fetchone()
+    resultados = cursor.fetchall()
     cursor.close()
     conexao.close()
     
-    return resultado[0] if resultado else None
-
-
-@tasks.loop(minutes=1)
-async def verificar_inicio_jogos():
-    global acompanhando, placares 
+    if not resultados:
+        return None
     
-    proximo_jogo = await tem_jogo_hoje()
-    if not proximo_jogo:
-        return
-
-    agora = datetime.now(tz_br)
-    proximo_jogo = normalizar_para_tz_br(proximo_jogo)
+    agora = datetime.now(tz_br)  
     
-    # Se já estiver acompanhando, não faz nada
-    if acompanhando:
-        return
-    
-    # "Essa data já aconteceu? Não? Então vou retornar"
-    if agora < proximo_jogo:
-        return
-    
-    
-    if agora >= proximo_jogo:
-        acompanhando = True  
-        placares.clear()
-
-        if not verificar_gols.is_running() and not verificar_jogos_automaticamente.is_running():
-            verificar_gols.start()
-            verificar_jogos_automaticamente.start()
+    for resultado in resultados:
+       
+        data_jogo_utc = resultado[0]
+        if data_jogo_utc.tzinfo is None:
+            # Se não tiver timezone, assume que é UTC
+            data_jogo_utc = data_jogo_utc.replace(tzinfo=timezone.utc)
         
-        logging.info(f"🟢 Monitoramento iniciado automaticamente! Jogo: {proximo_jogo}")
-
+        # Converte UTC para Brasília
+        data_jogo_br = data_jogo_utc.astimezone(tz_br)
+        
+        # Compara com horário de Brasília
+        if data_jogo_br >= agora:
+            return data_jogo_br
+    
+    return None
 
 async def tem_jogo_final():
     conexao = conectar_futebol()
@@ -5334,7 +5527,6 @@ async def tem_jogo_final():
     cursor.execute("""
         SELECT data_jogo
         FROM jogos_pendentes
-        WHERE data_jogo >= CONVERT_TZ(NOW(), '+00:00', '-03:00')
         ORDER BY data_jogo DESC
         LIMIT 1
     """)
@@ -5345,37 +5537,85 @@ async def tem_jogo_final():
     
     return resultado[0] if resultado else None
 
+# Loop para iniciar monitoramento
+ultimo_log = None
 
+@tasks.loop(minutes=1)
+async def verificar_inicio_jogos():
+    global acompanhando, placares, ultimo_log
+
+    try:
+        proximo_jogo = await tem_jogo_hoje()
+        agora = datetime.now(tz_br)
+
+        # LOG A CADA 10 HORAS
+        if not ultimo_log or (agora - ultimo_log).total_seconds() >= 36000:
+            ultimo_log = agora
+
+            logging.info("="*50)
+            logging.info(f"🕐 Horário de Brasília: {agora}")
+            logging.info(f"🕐 Horário UTC: {datetime.now(timezone.utc)}")
+
+            if proximo_jogo:
+                logging.info(f"⚽ Data do jogo (original do banco): {proximo_jogo}")
+            else:
+                logging.info("📭 Nenhum jogo encontrado")
+
+        if proximo_jogo:
+            if proximo_jogo.tzinfo is None:
+                proximo_jogo = proximo_jogo.replace(tzinfo=timezone.utc)
+
+            proximo_jogo_br = proximo_jogo.astimezone(tz_br)
+            diff = proximo_jogo_br - agora
+
+            if abs(diff.total_seconds()) < 300 and not acompanhando:
+                acompanhando = True
+                placares.clear()
+
+                logging.info(f"🟢 Monitoramento iniciado! Jogo: {proximo_jogo_br}")
+
+                if not verificar_gols.is_running():
+                    verificar_gols.start()
+
+                if not verificar_jogos_automaticamente.is_running():
+                    verificar_jogos_automaticamente.start()
+
+    except Exception as e:
+        logging.error(f"Erro no sistema de monitoramento: {e}")
+
+
+
+# Loop de parar monitoramento
 @tasks.loop(minutes=5)
 async def verificar_parada_automatica():
-    global acompanhando  
-    
-    if not acompanhando:
-        return  
-    
-    ultimo_jogo = await tem_jogo_final()
-    if not ultimo_jogo:
-        return  
+    global acompanhando
 
-    agora = datetime.now(tz_br)
-    ultimo_jogo = normalizar_para_tz_br(ultimo_jogo)
+    try:
+        if not acompanhando:
+            return
 
-    # Para cerca de 2h30 após o horário do último jogo
-    limite_parada = ultimo_jogo + timedelta(hours=2, minutes=30)
-    
-    if agora < limite_parada:
-        return
-    
-    if agora >= limite_parada:
-        acompanhando = False
-        
-        logging.info(f"🔴 Monitoramento parado automaticamente! Último jogo: {ultimo_jogo} | Limite: {limite_parada}")
-        
-        # Para os loops se estiverem rodando
-        if verificar_gols.is_running():
-            verificar_gols.stop()
-        if verificar_jogos_automaticamente.is_running():
-            verificar_jogos_automaticamente.stop()
+        ultimo_jogo = await tem_jogo_final()
+        if not ultimo_jogo:
+            return
+
+        agora = datetime.now(tz_br)
+        ultimo_jogo = normalizar_para_tz_br(ultimo_jogo)
+
+        limite_parada = ultimo_jogo + timedelta(hours=2, minutes=30)
+
+        if agora >= limite_parada:
+            acompanhando = False
+
+            logging.info(f"🔴 Monitoramento parado automaticamente! Último jogo: {ultimo_jogo}")
+
+            if verificar_gols.is_running():
+                verificar_gols.stop()
+
+            if verificar_jogos_automaticamente.is_running():
+                verificar_jogos_automaticamente.stop()
+
+    except Exception as e:
+        logging.error(f"Erro no sistema de parada automática: {e}")
 
 
 
@@ -5582,50 +5822,59 @@ async def meuspontos(ctx):
         logging.info(f"Usuário {ctx.author.name} ({ctx.author.id}) solicitou os pontos.")
 
 
-@bot.command()
-async def dar_pontos(ctx, user_destino: discord.Member, valor: int):
-
-    if ctx.channel.id != CANAL_PERMITIDO_ID:
-        await ctx.send("❌ Não é permitido usar esse comando aqui!")
-        return
-
-    user_origem = ctx.author
+@bot.command(name='dar_pontos')
+async def dar_pontos(ctx, membro: discord.Member, valor: int):
 
     if valor <= 0:
-        await ctx.send("⚠️ O valor precisa ser maior que 0.")
+        await ctx.send("❌ O valor deve ser maior que zero!")
         return
 
-    if user_destino.id == user_origem.id:
-        await ctx.send("⚠️ Você não pode transferir pontos para si mesmo.")
+    if membro.id == ctx.author.id:
+        await ctx.send("❌ Você não pode dar pontos para si mesmo!")
         return
 
     try:
-        conn = conectar_futebol()
-        cur = conn.cursor()
+        # Verifica se o autor tem pontos suficientes
+        pontos_origem = pegar_pontos(ctx.author.id)
 
-        cur.execute(
-            "CALL transferir_pontos(%s, %s, %s)",
-            (user_origem.id, user_destino.id, valor)
+        if pontos_origem < valor:
+            await ctx.send("❌ Você não tem pontos suficientes!")
+            return
+
+        # REMOVE pontos de quem enviou
+        adicionar_pontos_db(ctx.author.id, -valor, str(ctx.author))
+
+        # ADICIONA pontos para quem recebeu
+        adicionar_pontos_db(membro.id, valor, str(membro))
+
+        # Pega os novos saldos
+        pontos_destino = pegar_pontos(membro.id)
+        pontos_origem = pegar_pontos(ctx.author.id)
+
+        embed = discord.Embed(
+            title="<a:134172yellowbirdchickgoomy:1454721770946035927> Pontos Transferidos!",
+            description=f"{ctx.author.mention} transferiu **{valor}** pontos para {membro.mention}",
+            color=discord.Color.green()
         )
 
-        conn.commit()
-
-        logging.info(
-            f"✅ {valor} pontos transferidos de {user_origem.id} para {user_destino.id}"
+        embed.add_field(
+            name="Saldo de quem enviou",
+            value=f"**{pontos_origem}** pontos",
+            inline=True
         )
 
-        await ctx.send(
-            f"💰 {user_origem.mention} transferiu **{valor} pontos** para {user_destino.mention}!"
+        embed.add_field(
+            name="Saldo de quem recebeu",
+            value=f"**{pontos_destino}** pontos",
+            inline=True
         )
+
+        embed.set_footer(text=f"ID do usuário: {membro.id}")
+
+        await ctx.send(embed=embed)
 
     except Exception as e:
-        logging.error(f"Erro na transferência de pontos: {e}")
-        await ctx.send("❌ Ocorreu um erro ao transferir os pontos.")
-
-    finally:
-        cur.close()
-        conn.close()
-        
+        await ctx.send(f"❌ Erro ao adicionar pontos: {str(e)}")
 
 
 
@@ -6019,7 +6268,7 @@ def adicionar_pontos_db(user_id: int, pontos: int, nome_discord: str = None):
             (user_id, nome_discord, pontos)
         )
         con.commit()
-        logging.info(f"✅ Pontos atualizados: user_id={user_id}, pontos={pontos}")
+        logging.info(f"💸 Pontos atualizados: user_id={user_id}, pontos={pontos}")
     except Exception as e:
         logging.error(f"❌ Erro ao adicionar pontos: {e}")
     finally:
@@ -6061,6 +6310,7 @@ def registrar_aposta_db(user_id: int, fixture_id: int, palpite: str) -> bool:
 
     con.commit()
     con.close()
+    logging.info(f"🎲 Usuário {nome_discord} apostou no palpite '{palpite}' para o jogo {fixture_id}")
     return True
 
 def pegar_apostas_fixture(fixture_id: int):
@@ -6720,7 +6970,7 @@ FALAS_BOT = {
     ]
 }
 
-LIGAS_PERMITIDAS = [1, 2, 71, 11, 13] #73copa do brasil remoção temporaria
+LIGAS_PERMITIDAS = [1, 2, 71, 10, 11, 13] #73copa do brasil remoção temporaria
 
 
 # ---------- Integração com verificar_gols 
@@ -6834,7 +7084,7 @@ async def verificar_gols():
             logging.error("❌ Canal de apostas não encontrado.")
             continue
         if status == "1h" and anterior["status"] != "1h":
-            deadline_utc = datetime.utcnow() + timedelta(minutes=10)
+            deadline_utc = datetime.now(timezone.utc) + timedelta(minutes=10)
             try:
                 cargo_futebol = "<@&1437851100878344232>" 
                 embed = discord.Embed(
@@ -7140,36 +7390,6 @@ def atualizar_pontos(user_id: int, valor: int, nome_discord: str = None):
 
 
 
-@tasks.loop(minutes=30)
-async def verificar_vips_expirados():
-    conn = conectar_futebol()
-    cursor = conn.cursor()
-    agora = datetime.utcnow()
-
-    cursor.execute(
-        "SELECT user_id, cargo_id FROM loja_vip WHERE ativo = 1 AND data_expira <= %s",
-        (agora,)
-    )
-    resultados = cursor.fetchall()
-
-    for user_id, cargo_id in resultados:
-        for guild in bot.guilds:
-            member = guild.get_member(user_id)
-            cargo = discord.utils.get(guild.roles, id=cargo_id) 
-            if member and cargo:
-                try:
-                    await member.remove_roles(cargo)
-                    await member.send(f"⏰ Seu VIP **{cargo.name}** expirou e foi removido.")
-                except Exception:
-                    pass
-
-        cursor.execute(
-            "UPDATE loja_vip SET ativo = 0 WHERE user_id = %s AND cargo_id = %s",
-            (user_id, cargo_id)
-        )
-
-    conn.commit()
-    conn.close()
 
 
 
@@ -7312,7 +7532,7 @@ async def executar_compra(member, item, guild):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (member.id, item_lower, pontos_ganhos, datetime.utcnow())
+            (member.id, item_lower, pontos_ganhos, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7332,7 +7552,7 @@ async def executar_compra(member, item, guild):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (member.id, item_lower, preco, datetime.utcnow())
+            (member.id, item_lower, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7345,7 +7565,7 @@ async def executar_compra(member, item, guild):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (member.id, item_lower, preco, datetime.utcnow())
+            (member.id, item_lower, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7358,7 +7578,7 @@ async def executar_compra(member, item, guild):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (member.id, item_lower, preco, datetime.utcnow())
+            (member.id, item_lower, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7371,7 +7591,7 @@ async def executar_compra(member, item, guild):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (member.id, item_lower, preco, datetime.utcnow())
+            (member.id, item_lower, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7384,7 +7604,7 @@ async def executar_compra(member, item, guild):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (member.id, item_lower, preco, datetime.utcnow())
+            (member.id, item_lower, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7431,7 +7651,7 @@ async def comprar(ctx, item_nome: str):
     if item == "jinxed_vip":
         cargo = discord.utils.get(ctx.guild.roles, name="Jinxed Vip")
         if cargo:
-            data_compra = datetime.utcnow()
+            data_compra = datetime.now(timezone.utc)
             data_expira = data_compra + timedelta(days=15)
             con = conectar_futebol()
             cur = con.cursor()
@@ -7477,7 +7697,7 @@ async def comprar(ctx, item_nome: str):
         adicionar_pontos_db(user_id, pontos_sorteados)
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, pontos_sorteados, datetime.utcnow())
+            (user_id, item, pontos_sorteados, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7506,7 +7726,7 @@ async def comprar(ctx, item_nome: str):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, preco, datetime.utcnow())
+            (user_id, item, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7522,7 +7742,7 @@ async def comprar(ctx, item_nome: str):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, preco, datetime.utcnow())
+            (user_id, item, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7534,7 +7754,7 @@ async def comprar(ctx, item_nome: str):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, preco, datetime.utcnow())
+            (user_id, item, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7545,7 +7765,7 @@ async def comprar(ctx, item_nome: str):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, preco, datetime.utcnow())
+            (user_id, item, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -7557,7 +7777,7 @@ async def comprar(ctx, item_nome: str):
         cur = con.cursor()
         cur.execute(
             "INSERT INTO loja_pontos (user_id, item, pontos_gastos, data_compra, ativo) VALUES (%s, %s, %s, %s, 1)",
-            (user_id, item, preco, datetime.utcnow())
+            (user_id, item, preco, datetime.now(timezone.utc))
         )
         con.commit()
         con.close()
@@ -8921,78 +9141,93 @@ async def dar_vip_slash(interaction: discord.Interaction, membro: discord.Member
     description="Transfere pontos para outro usuário."
 )
 @app_commands.describe(
-    user_destino="Usuário que receberá os pontos",
+    membro="Usuário que receberá os pontos",
     valor="Quantidade de pontos a transferir"
 )
-@app_commands.guild_only()
 async def dar_pontos_slash(
     interaction: discord.Interaction,
-    user_destino: discord.Member,
+    membro: discord.Member,
     valor: int
 ):
 
-    if interaction.channel_id != CANAL_PERMITIDO_ID:
-        await interaction.response.send_message(
-            "❌ Não é permitido usar esse comando aqui!",
-            ephemeral=True
-        )
-        return
-
-    user_origem = interaction.user
-
     if valor <= 0:
         await interaction.response.send_message(
-            "⚠️ O valor precisa ser maior que 0.",
+            "❌ O valor deve ser maior que zero!",
             ephemeral=True
         )
         return
 
-    if user_destino.id == user_origem.id:
+    if membro.id == interaction.user.id:
         await interaction.response.send_message(
-            "⚠️ Você não pode transferir pontos para si mesmo.",
+            "❌ Você não pode dar pontos para si mesmo!",
             ephemeral=True
         )
         return
 
     try:
-        conn = conectar_futebol()
-        cur = conn.cursor()
 
-        cur.execute(
-            "CALL transferir_pontos(%s, %s, %s)",
-            (user_origem.id, user_destino.id, valor)
+        # Saldo atual de quem está enviando
+        saldo_origem = pegar_pontos(interaction.user.id)
+
+        if saldo_origem < valor:
+            await interaction.response.send_message(
+                f"❌ Você não tem pontos suficientes. Seu saldo atual é **{saldo_origem}**.",
+                ephemeral=True
+            )
+            return
+
+        # REMOVE pontos de quem enviou
+        adicionar_pontos_db(
+            interaction.user.id,
+            -valor,
+            str(interaction.user)
         )
 
-        conn.commit()
-
-        logging.info(
-            f"💰 Transferência | {user_origem.id} -> {user_destino.id} | {valor} pontos"
+        # ADICIONA pontos para quem recebeu
+        adicionar_pontos_db(
+            membro.id,
+            valor,
+            str(membro)
         )
 
-        await interaction.response.send_message(
-            f"💰 {user_origem.mention} transferiu **{valor} pontos** para {user_destino.mention}!"
+        # Novos saldos
+        novo_saldo_origem = pegar_pontos(interaction.user.id)
+        novo_saldo_destino = pegar_pontos(membro.id)
+
+        embed = discord.Embed(
+            title="<a:134172yellowbirdchickgoomy:1454721770946035927> Pontos Transferidos!",
+            description=f"{interaction.user.mention} transferiu **{valor}** pontos para {membro.mention}",
+            color=discord.Color.green()
         )
+
+        embed.add_field(
+            name="Saldo de quem enviou",
+            value=f"**{novo_saldo_origem}** pontos",
+            inline=True
+        )
+
+        embed.add_field(
+            name="Saldo de quem recebeu",
+            value=f"**{novo_saldo_destino}** pontos",
+            inline=True
+        )
+
+        embed.set_footer(text=f"ID do usuário: {membro.id}")
+
+        await interaction.response.send_message(embed=embed)
 
     except Exception as e:
-        logging.error(f"Erro na transferência de pontos: {e}")
 
-        if not interaction.response.is_done():
-            await interaction.response.send_message(
-                "❌ Ocorreu um erro ao transferir os pontos.",
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                f"❌ Erro ao transferir pontos: {str(e)}",
                 ephemeral=True
             )
         else:
-            await interaction.followup.send(
-                "❌ Ocorreu um erro ao transferir os pontos.",
+            await interaction.response.send_message(
+                f"❌ Erro ao transferir pontos: {str(e)}",
                 ephemeral=True
             )
-
-    finally:
-        try:
-            cur.close()
-            conn.close()
-        except:
-            pass
 
 @bot.tree.command(name="remover_vip", description="Remove o cargo VIP de um membro.")
 @app_commands.checks.has_permissions(administrator=True)
@@ -9037,7 +9272,7 @@ async def remover_vip(interaction: discord.Interaction, membro: discord.Member):
             ephemeral=True
         )
         logging.error(f"Erro ao remover VIP: {e}")
-        
+
 
 @bot.tree.command(name="entregar", description="Entregar pontos de doação a um usuário")
 @app_commands.describe(
@@ -9100,7 +9335,7 @@ async def entregar(interaction: discord.Interaction, membro: discord.Member, val
                     (user_id, item, pontos_gastos, data_compra, ativo)
                     VALUES (%s, %s, %s, %s, 1)
                     """,
-                    (membro.id, 'doacao_50', pontos, datetime.utcnow())
+                    (membro.id, 'doacao_50', pontos, datetime.now(timezone.utc))
                 )
                 conn_do.commit()
                 cur_do.close()
@@ -9934,7 +10169,7 @@ async def entregar(ctx, membro: discord.Member, valor: int):
                     (user_id, item, pontos_gastos, data_compra, ativo)
                     VALUES (%s, %s, %s, %s, 1)
                     """,
-                    (membro.id, 'doacao_50', pontos, datetime.utcnow())
+                    (membro.id, 'doacao_50', pontos, datetime.now(timezone.utc))
                 )
                 conn_do.commit()
                 cur_do.close()
@@ -10344,7 +10579,7 @@ async def feliz_aniversario(ctx, membro: discord.Member):
 @bot.command()
 async def troll(ctx, member: discord.Member):
     user_id = ctx.author.id
-    agora = datetime.utcnow()
+    agora = datetime.now(timezone.utc)
     
     # Verificar cooldown (5 minutos)
     if user_id in ultimo_troll:
