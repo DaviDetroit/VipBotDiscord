@@ -39,19 +39,70 @@ WARN_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB (aviso para arquivos grandes)
 DOWNLOAD_TIMEOUT = 60  # 60 segundos timeout para download
 
 
-def conectar(database_name: str):
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST"),
-        user=os.getenv("DB_USER"),
-        port=os.getenv("DB_PORT"),
-        password=os.getenv("DB_PASSWORD"),
-        database=database_name,
-        ssl_disabled=True,
-        auth_plugin="mysql_native_password",
-        autocommit=True,
-        connection_timeout=10,
-        use_pure=True  
-    )
+def conectar(database_name: str, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            # Verificar se variáveis de ambiente existem
+            db_host = os.getenv("DB_HOST")
+            db_user = os.getenv("DB_USER") 
+            db_port = os.getenv("DB_PORT")
+            db_password = os.getenv("DB_PASSWORD")
+            
+            if not all([db_host, db_user, db_port, db_password]):
+                logging.error("❌ Variáveis de ambiente do banco não configuradas!")
+                logging.error(f"DB_HOST: {db_host}")
+                logging.error(f"DB_USER: {db_user}")
+                logging.error(f"DB_PORT: {db_port}")
+                logging.error(f"DB_PASSWORD: {'***' if db_password else 'None'}")
+                raise ValueError("Configurações do banco de dados ausentes!")
+            
+            # Conexão simples sem pool (evita erro 2013)
+            ssl_disabled_env = os.getenv("DB_SSL_DISABLED", "true").strip().lower()
+            ssl_disabled = ssl_disabled_env in {"1", "true", "yes", "on"}
+
+            conn_args = {
+                "host": db_host,
+                "user": db_user,
+                "port": int(db_port),
+                "password": db_password,
+                "database": database_name,
+                "autocommit": True,
+                "connection_timeout": 30,
+                "use_pure": True,
+            }
+
+            if ssl_disabled:
+                conn_args["ssl_disabled"] = True
+            else:
+                # Use certificados personalizados para conexões seguras se fornecidos
+                ssl_ca = os.getenv("DB_SSL_CA")
+                ssl_cert = os.getenv("DB_SSL_CERT")
+                ssl_key = os.getenv("DB_SSL_KEY")
+                if ssl_ca:
+                    conn_args["ssl_ca"] = ssl_ca
+                if ssl_cert:
+                    conn_args["ssl_cert"] = ssl_cert
+                if ssl_key:
+                    conn_args["ssl_key"] = ssl_key
+
+            return mysql.connector.connect(**conn_args)
+        except mysql.connector.Error as err:
+            if attempt < max_retries - 1:
+                logging.warning(f"⚠️ Tentativa {attempt + 1} falhou. Tentando novamente em 2s... Erro: {err}")
+                time_module.sleep(2)
+                continue
+            else:
+                logging.error(f"❌ Erro de conexão MySQL após {max_retries} tentativas: {err}")
+                logging.error(f"❌ Database: {database_name}")
+                raise
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logging.warning(f"⚠️ Tentativa {attempt + 1} falhou. Tentando novamente em 2s... Erro: {e}")
+                time_module.sleep(2)
+                continue
+            else:
+                logging.error(f"❌ Erro geral na conexão após {max_retries} tentativas: {e}")
+                raise
 
 
 def conectar_vips():
@@ -163,12 +214,22 @@ async def on_command_error(interaction: discord.Interaction, error: discord.app_
             "❌ Você não tem permissão para usar este comando!",
             ephemeral=True
         )
+    elif isinstance(error, discord.NotFound):
+        logging.warning("⚠️ NotFound em slash command: interação desconhecida ou expirada. Ignorando.")
+        return
+    elif isinstance(error, discord.errors.InteractionResponded):
+        logging.warning("⚠️ InteractionResponded em on_command_error: resposta já enviada. Ignorando.")
+        return
     else:
         logging.error(f"Erro em slash command: {error}")
-        await interaction.response.send_message(
-            "❌ Ocorreu um erro ao executar este comando.",
-            ephemeral=True
-        )
+        if not interaction.response.is_done():
+            try:
+                await interaction.response.send_message(
+                    "❌ Ocorreu um erro ao executar este comando.",
+                    ephemeral=True
+                )
+            except Exception as inner_err:
+                logging.error(f"Falha ao enviar mensagem de erro: {inner_err}")
 
 # ============ SLASH COMMANDS PRINCIPAIS ============
 
@@ -761,29 +822,44 @@ async def slash_conquistas(
     interaction: discord.Interaction,
     membro: discord.Member = None
 ):
-
     if interaction.channel.id != CANAL_PERMITIDO_ID:
-        return await interaction.response.send_message(
-            f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
-            ephemeral=True
-        )
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"<:Jinxsip1:1390638945565671495> Este comando só pode ser usado no canal <#{CANAL_PERMITIDO_ID}>.",
+                ephemeral=True
+            )
+        return
+
+    await interaction.response.defer(ephemeral=True)
 
     alvo = membro or interaction.user
 
-    embed = await gerar_conquistas_embed(alvo, interaction.guild)
+    try:
+        embed = await gerar_conquistas_embed(alvo, interaction.guild)
 
-    if not embed:
-        return await interaction.response.send_message(
-            "❌ Erro ao buscar conquistas.",
+        if not embed:
+            await interaction.followup.send(
+                "❌ Erro ao buscar conquistas.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.followup.send(
+            embed=embed,
             ephemeral=True
         )
 
-    await interaction.response.send_message(
-        embed=embed,
-        ephemeral=True
-    )
-
-
+    except Exception as e:
+        print(f"Erro no /conquistas: {e}")
+        await interaction.followup.send(
+            "❌ Ocorreu um erro ao buscar as conquistas.",
+            ephemeral=True
+        )
 
 
 EMOJI_TIMES = {
@@ -869,9 +945,9 @@ EMOJI_TIMES = {
     "barcelona": "<:Barcelona:1447338926548193483>",
     "real_madrid": "<:Real_Madrid:1447338825180381389>",
     "west_ham":"<:EmojiWestHam:1470834951036338218>",
-    "manchester_united": "<:EmojiUnited:1470834899605917696>"
-
-
+    "manchester_united": "<:EmojiUnited:1470834899605917696>",
+    "tottenham": "<:Tottenham_Image:1483927838523654416>",
+    "galatasaray": "<:Galatasaray_Sports_Club_Logo:1483928651551608975>"
 }
 
 
@@ -1543,8 +1619,12 @@ async def on_ready():
     if not verificar_parada_automatica.is_running():
         verificar_parada_automatica.start()
         logging.info("🔄 Loop de parada automática iniciado")
-    
-    await setup_views()
+    try:
+        await asyncio.sleep(5)
+        await setup_views()
+        logging.info("✅ Views configuradas com sucesso.")
+    except Exception as e:
+        logging.error(f"❌ Falha em setup_views(): {e}")
     
     doacao_data = get_mensagem_doacao()
     if doacao_data:
@@ -1937,7 +2017,7 @@ async def sincronizar_reacoes():
     posts_to_update = []
 
     try:
-        async for mensagem in canal.history(limit=100):  # pode ajustar o limite
+        async for mensagem in canal.history(limit=25):  
             # Pega reações atuais
             upvotes = 0
             downvotes = 0
@@ -6366,7 +6446,12 @@ def buscar_jogo_por_fixture(fixture_id: int):
     return row  # None ou (id, message_id, bet_deadline, betting_open, home, away)
 
 # ---------- inicializa tabelas
-garantir_tabelas()
+try:
+    garantir_tabelas()
+    logging.info("✅ Tabelas do banco verificadas com sucesso!")
+except Exception as e:
+    logging.error(f"❌ Erro ao inicializar tabelas: {e}")
+    logging.error("❌ Verifique as configurações do banco de dados!")
 
 def gerar_embed_fogo(acertos_atuais: int, maior_streak: int, nome_usuario: str):
     em_fogo = acertos_atuais >= 3
@@ -6593,6 +6678,8 @@ MAPEAMENTO_TIMES = {
     "bayern_munich": "bayern_munich",
     "barcelona": "barcelona",
     "real madrid": "real madrid",
+    "tottenham": "tottenham",
+    "galatasaray": "galatasaray",
 
     "brazil": "brasil",
     "brasil": "brasil",
@@ -6970,7 +7057,7 @@ FALAS_BOT = {
     ]
 }
 
-LIGAS_PERMITIDAS = [1, 2, 71, 10, 11, 13] #73copa do brasil remoção temporaria
+LIGAS_PERMITIDAS = [1, 2, 71, 10, 11, 13, 73] #73copa do brasil remoção temporaria
 
 
 # ---------- Integração com verificar_gols 
@@ -9165,12 +9252,17 @@ async def dar_pontos_slash(
         return
 
     try:
+        await interaction.response.defer(ephemeral=True)
+    except Exception as e:
+        logging.warning(f"⚠️ Falha ao deferir interação em dar_pontos_slash: {e}")
+
+    try:
 
         # Saldo atual de quem está enviando
         saldo_origem = pegar_pontos(interaction.user.id)
 
         if saldo_origem < valor:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"❌ Você não tem pontos suficientes. Seu saldo atual é **{saldo_origem}**.",
                 ephemeral=True
             )
@@ -9214,7 +9306,7 @@ async def dar_pontos_slash(
 
         embed.set_footer(text=f"ID do usuário: {membro.id}")
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     except Exception as e:
 
