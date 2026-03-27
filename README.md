@@ -3,8 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![Discord.py](https://img.shields.io/badge/Discord.py-2.x-5865F2?logo=discord&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8%2B-4479A1?logo=mysql&logoColor=white)
-![API-Football](https://img.shields.io/badge/API-Football-Integration-green)
-![License](https://img.shields.io/badge/License-MIT-blue)
+![API-Football](https://img.shields.io/badge/API--Football-RapidAPI-00A8E1?logo=rapidapi&logoColor=white)![License](https://img.shields.io/badge/License-MIT-blue)
 
 > **Bot de Discord para gerenciamento de VIP, apostas e jogos de futebol em tempo real com integração MySQL**
 
