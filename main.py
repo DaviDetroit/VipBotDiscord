@@ -892,7 +892,15 @@ EMOJI_TIMES = {
     "coritiba": "<:Coritiba_Foot_Ball_Club_logo:1466193821292564634>",
     "remo": "<:Remo:1443399201655492708>",
     "chapecoense": "<:Escudo_de_2018_da_Chapecoense:1452179787027185766>",
-
+    "boca_juniors": "<:CABJ70:1490668081855594506>",
+    "independiente_del_valle": "<:Escudoindependientedelvalle2023:1490668419488678040>",
+    "barcelona_sc": "<:Escucho_de_Barcelona_SC:1490668656441692301>",
+    "estudiantes": "<:Estudiante:1490669029331963926>",
+    "ldu_quito": "<:LDU:1490669056615780352>",
+    "river_plate": "<:Club_Atltico_River_Plate_logo:1490681315303882842>",
+    "paysandu": "<:PaysanduSC:1493978584501719090>",
+    "goias": "<:Gois_Esporte_Clube_logo:1493979005290942536>",
+    
 
     # =======================
     # 🌍 SELEÇÕES (PAÍSES)
@@ -918,9 +926,12 @@ EMOJI_TIMES = {
     "noruega": "<:noruega:1447019598020087979>",
     "chile": "<:chile:1447019706467749998>",
     "marrocos": "<:marrocos:1447019811132407859>",
-    "coreia do sul": "<:Coreiadosul:1447019914102833152>",
-    "china": "<:china:1447019999305793697>"
-    ,
+    "coreia_do_sul": "<:Coreiadosul:1447019914102833152>",
+    "china": "<:china:1447019999305793697>",
+    "equador" :"<:Ecuador:1516914101954154567>",
+    "colombia": "<:FCFLogo2023:1516917409355923647>",
+    "canada": "<:Logotipo_Seleo_Canad:1517510120182124544>",
+    "suica": "<:SFV_Logo:1517510857620455444>",
     # =======================
     # 🌍 CLUBES INTERNACIONAIS (UEFA)
     # =======================
@@ -1162,8 +1173,8 @@ CONQUISTAS = {
         "cargo": "Veterano de Call"
     },
     "chamando_ajuda": {
-        "nome": "🤖 Alô Miisha?",
-        "descricao": "Mencione a bot Miisha para pedir ajuda.",
+        "nome": "🤖 Alô Kick?",
+        "descricao": "Mencione a bot Kick para pedir ajuda.",
         "condicao": lambda d: d['mencionou_miisha'],
         "cargo": "Amigo da IA"
     },
@@ -1566,16 +1577,16 @@ mensagens_curiosidade = [
 
     # ================= SERVER / BOT =================
 
-    "🤖 O bot **Miisha** pode te ajudar com comandos e informações do servidor — é só chamar!",
-    "⚡ Mencione @Miisha para descobrir funções e dicas rapidamente.",
-    "🆘 Dúvidas sobre o servidor? A Miisha pode te poupar tempo.",
+    "🤖 A i.a **Kick** pode te ajudar com comandos e informações do servidor — é só chamar!",
+    "⚡ Mencione @Kick para descobrir funções e dicas rapidamente.",
+    "🆘 Dúvidas sobre o servidor? A Kick pode te poupar tempo.",
     f"⚽ Você pode apostar no seu time favorito no canal {MENCAO_FUTEBOL}.",
     f"<a:522143costco:1473869986773733396> Confira itens e vantagens usando {slash_mention(bot, 'loja')}.",
     f"💰 Quer ver seus pontos e acertos consecutivos? Use {slash_mention(bot, 'pontos')}.",
     f"⚽ Escolha seu time com {slash_mention(bot, 'time')} e represente ele nas apostas!",
     f"💸 Você pode ganhar pontos ajudando o desenvolvimento do bot! Veja mais em {MENCAO_CANAL_DOACAO}.",
     f"🤑 Quer vantagens exclusivas? Seja VIP! Veja mais em {MENCAO_CANAL_VIP}.",
-    "🏯 Temos apostas de futebol e também de animes — normalmente às sextas e sábados!",
+    "🏯 Temos apostas de futebol e também de animes — normalmente às sextas sábados e domingos!",
     "🤖 Agora eu possuo comandos Slash! Basta apertar `/` e ver todas as opções que posso oferecer.",
     "🎉 Slash commands ativados! Facilito sua vida mostrando resultados e informações sem precisar lembrar comandos antigos!"
 ]
@@ -3500,7 +3511,6 @@ async def on_message(message):
             conexao.close()
     
         
-    
         ID_DA_MIISHA = 1272457532434153472 
         marcou_a_miisha = any(user.id == ID_DA_MIISHA for user in message.mentions)
     try:
@@ -5652,10 +5662,11 @@ async def verificar_inicio_jogos():
                 acompanhando = True
                 placares.clear()
 
-                logging.info(f"🟢 Monitoramento iniciado! Jogo: {proximo_jogo_br}")
+                
 
                 if not verificar_gols.is_running():
                     verificar_gols.start()
+                    logging.info(f"🟢 Monitoramento iniciado! Jogo: {proximo_jogo_br}")
 
                 if not verificar_jogos_automaticamente.is_running():
                     verificar_jogos_automaticamente.start()
@@ -5674,19 +5685,12 @@ async def verificar_parada_automatica():
         if not acompanhando:
             return
 
-        ultimo_jogo = await tem_jogo_final()
-        if not ultimo_jogo:
-            return
-
         agora = datetime.now(tz_br)
-        ultimo_jogo = normalizar_para_tz_br(ultimo_jogo)
 
-        limite_parada = ultimo_jogo + timedelta(hours=2, minutes=30)
-
-        if agora >= limite_parada:
+        if agora.hour >= 23 and agora.minute >= 00:
             acompanhando = False
 
-            logging.info(f"🔴 Monitoramento parado automaticamente! Último jogo: {ultimo_jogo}")
+            logging.info("🔴 Monitoramento parado automaticamente às 23:00!")
 
             if verificar_gols.is_running():
                 verificar_gols.stop()
@@ -5723,6 +5727,7 @@ async def apistart(ctx, horario: str = None, data: str = None):
         if not verificar_jogos_automaticamente.is_running():
             verificar_jogos_automaticamente.start()
 
+        logging.info(f"🔵 Monitoramento iniciado manualmente pelo melhorzin)")
         return await ctx.send("🔵 Monitoramento iniciado manualmente!")
 
     # ----------------------------------------
@@ -5736,7 +5741,8 @@ async def apistart(ctx, horario: str = None, data: str = None):
         else:
             hour = int(horario)
             minute = 0
-    except:
+    except Exception as e:
+        logging.warning(f"apistart: formato de horário inválido '{horario}' solicitado por {ctx.author} ({ctx.author.id}): {e}")
         return await ctx.send("⚠️ Use HH ou HH:MM.")
 
     
@@ -5757,7 +5763,8 @@ async def apistart(ctx, horario: str = None, data: str = None):
                 tzinfo=tz_br
             )
 
-        except:
+        except Exception as e:
+            logging.warning(f"apistart: formato de data inválido '{data}' solicitado por {ctx.author} ({ctx.author.id}): {e}")
             return await ctx.send("⚠️ Use a data no formato DD/MM.")
     else:
         # se não tiver data → comportamento antigo
@@ -5775,11 +5782,18 @@ async def apistart(ctx, horario: str = None, data: str = None):
     # SE JÁ PASSOU
     # ----------------------------------------
     if horario_agendado <= agora:
+        logging.warning(f"apistart: tentativa de agendar para horário passado {horario_agendado.isoformat()} por {ctx.author} ({ctx.author.id})")
         return await ctx.send("⚠️ Essa data/horário já passou.")
+
+    logging.info(
+        f"apistart: agendamento solicitado por {ctx.author} ({ctx.author.id}) para {horario_agendado.isoformat()} "
+        f"(entrada horario={horario} data={data})"
+    )
 
     await ctx.send(
         f"🟡 Monitoramento agendado para {horario_agendado.strftime('%d/%m às %H:%M')}"
     )
+    logging.info(f"🟡 Monitoramento agendado para {horario_agendado.isoformat()}")
 
     async def iniciar_no_horario():
         await discord.utils.sleep_until(horario_agendado)
@@ -5794,6 +5808,7 @@ async def apistart(ctx, horario: str = None, data: str = None):
         if not verificar_jogos_automaticamente.is_running():
             verificar_jogos_automaticamente.start()
 
+        logging.info(f"apistart: agendamento iniciado automaticamente em {horario_agendado.isoformat()}")
         await ctx.send(
             f"🟢 Monitoramento iniciado automaticamente!"
         )
@@ -6619,6 +6634,16 @@ MAPEAMENTO_TIMES = {
     # Remo
     "remo": "remo",
 
+    # Paysandu
+    "paysandu": "paysandu",
+    "paysandu sc": "paysandu",
+    "paysandu sport club": "paysandu",
+
+    # Goiás
+    "goiás": "goias",
+    "goias": "goias",
+    "goias ec": "goias",
+    "goias esporte clube": "goias",
 
     # =======================
     # 🌍 CLUBES INTERNACIONAIS
@@ -6626,6 +6651,57 @@ MAPEAMENTO_TIMES = {
 
     # Lanús (Argentina)
     "lanús": "lanus",
+
+    # Boca Juniors (Argentina)
+    "boca juniors": "boca_juniors",
+    "boca": "boca_juniors",
+    "club atlético boca juniors": "boca_juniors",
+    "boca-juniors": "boca_juniors",
+
+    # Independiente del Valle (Equador)
+    "independiente del valle": "independiente_del_valle",
+    "independiente del valle": "independiente_del_valle",
+    "idv": "independiente_del_valle",
+    "independiente": "independiente_del_valle",
+
+    # Barcelona SC (Equador)
+    "barcelona sc": "barcelona_sc",
+    "barcelona sporting club": "barcelona_sc",
+    "barcelona ecuador": "barcelona_sc",
+    "barcelona": "barcelona_sc",
+
+    # Estudiantes (Argentina)
+    "estudiantes": "estudiantes",
+    "estudiantes de la plata": "estudiantes",
+    "club estudiantes de la plata": "estudiantes",
+    "estudiantes lp": "estudiantes",
+
+    # LDU Quito (Equador)
+    "ldu quito": "ldu_quito",
+    "liga de loja universitaria": "ldu_quito",
+    "liga de quito": "ldu_quito",
+    "ldu": "ldu_quito",
+    "universidad": "ldu_quito",
+    "liga deportiva universitaria": "ldu_quito",
+    "liga universitaria": "ldu_quito",
+    "ldu ecuador": "ldu_quito",
+    "ldu de quito": "ldu_quito",
+    "lduni": "ldu_quito",
+    "liga deportiva": "ldu_quito",
+    "ldu-quito": "ldu_quito",
+    "ldu_quito": "ldu_quito",
+    "lduniversitaria": "ldu_quito",
+    "liga universitaria de quito": "ldu_quito",
+    "ldu sports": "ldu_quito",
+    "ldu ec": "ldu_quito",
+
+    # River Plate (Argentina)
+    "river plate": "river_plate",
+    "river": "river_plate",
+    "club atlético river plate": "river_plate",
+    "club athletic river plate": "river_plate",
+    "river plate athletic club": "river_plate",
+    "carp": "river_plate",
 
     # UEFA — principais clubes
     "villarreal": "villarreal",
@@ -6710,6 +6786,29 @@ MAPEAMENTO_TIMES = {
     "united states": "eua",
     "senegal": "senegal",
     "tunisia": "tunisia",
+    "austria": "austria",
+    "austria": "austria",
+
+    "norway": "noruega",
+    "noruega": "noruega",
+
+    "chile": "chile",
+
+    "morocco": "marrocos",
+    "marrocos": "marrocos",
+    "south korea": "coreia_do_sul",
+    "korea": "coreia_do_sul",
+    "coreia do sul": "coreia_do_sul",
+    "china": "china",
+    "ecuador": "equador",
+    "equador": "equador",
+    "colombia": "colombia",
+    "colômbia": "colombia",
+    "canada": "canada",
+    "canadá": "canada",
+    "switzerland": "suica",
+    "suiça": "suica",
+    "suíça": "suica",
 }
 
 def get_estadio_time_casa(nome_time_api: str):
@@ -6864,6 +6963,7 @@ PALAVRAS_GOL = {
     "lanus":       "🟤 GOOOOOOOL DO GRANATE!!!",
     "santos":      "🐬 GOOOOOOOOOL DO PEIXÃO!!!",
     "chapecoense": "💚⚪ GOOOOOOOL DA CHAPE!!!",
+    
     "brasil":     "🇧🇷 GOOOOOOOL DO BRASIL!!!",
     "argentina":  "🇦🇷 GOOOOOOOL DA ARGENTINA!!!",
     "frança":     "🇫🇷 GOOOOOOOL DA FRANÇA!!!",
@@ -6880,7 +6980,17 @@ PALAVRAS_GOL = {
     "japao":      "🇯🇵 GOOOOOOOL DO JAPÃO!!!",
     "eua":        "🇺🇸 GOOOOOOOL DOS EUA!!!",
     "senegal":    "🇸🇳 GOOOOOOOL DO SENEGAL!!!",
-    "tunisia":    "🇹🇳 GOOOOOOOL DA TUNÍSIA!!!"
+    "tunisia":    "🇹🇳 GOOOOOOOL DA TUNÍSIA!!!",
+    "austria":    "🇦🇹 GOOOOOOOL DA ÁUSTRIA!!!",
+    "noruega":    "🇳🇴 GOOOOOOOL DA NORUEGA!!!",
+    "chile":      "🇨🇱 GOOOOOOOL DO CHILE!!!",
+    "marrocos":   "🇲🇦 GOOOOOOOL DO MARROCOS!!!",
+    "coreia_do_sul":  "🇰🇷 GOOOOOOOL DA COREIA DO SUL!!!",
+    "china":          "🇨🇳 GOOOOOOOL DA CHINA!!!",
+    "equador":        "🇪🇨 GOOOOOOOL DO EQUADOR!!!",
+    "colombia":       "🇨🇴 GOOOOOOOL DA COLÔMBIA!!!",
+    "canada": "🇨🇦 GOOOOOOOL DO CANADÁ!!!",
+    "suica": "🇨🇭 GOOOOOOOL DA SUÍÇA!!!"
 }
 
 GIFS_VITORIA_TIME = {
@@ -7057,7 +7167,8 @@ FALAS_BOT = {
     ]
 }
 
-LIGAS_PERMITIDAS = [1, 2, 71, 10, 11, 13, 73] #73copa do brasil remoção temporaria
+LIGAS_PERMITIDAS = [1,71] #[1, 2, 71, 11, 13, 73] 1-copamundo 2-champions 71 brasileirao 
+#11-sula 13-liberta 73 - copa
 
 
 # ---------- Integração com verificar_gols 
@@ -7096,6 +7207,9 @@ async def verificar_gols():
 
                 if "response" in ft_liga and ft_liga["response"]:
                     data_ft["response"].extend(ft_liga["response"])
+                
+                # Delay entre requisições de ligas
+                await asyncio.sleep(1)
 
         logging.info("✅ Request de jogos finalizados (todas ligas) concluída!")
     except Exception as e:
@@ -7209,7 +7323,7 @@ async def verificar_gols():
                 if partida["league"]["id"] == 1:
                     await canal_apostas.send(
                         "**APOSTAS ABERTAS PARA A COPA DO MUNDO!**\n"
-                        "https://tenor.com/view/world-cup-fifa2018-flames-%E5%A4%A7%E5%8A%9B%E7%A5%9E%E6%9D%AF-gif-12061955"
+                        "https://cdn.discordapp.com/attachments/1262222499106652170/1514716798602182717/fifa-world-cup-2026-fifa.gif?ex=6a2db2f2&is=6a2c6172&hm=6dcac578313d5bcbfcc14584ef54e58df072203f5e9b5f676a0cf505b6d3b46c&"
                     )
                 if partida["league"]["id"] == 2:
                     await canal_apostas.send(
@@ -10352,6 +10466,13 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
         )
         tem_vip = cur_vips.fetchone() is not None
 
+        # Fechar conexão VIP antes de abrir nova conexão
+        cur_vips.close()
+        con_vips.close()
+
+        # Delay para evitar rate limiting
+        await asyncio.sleep(0.3)
+
         # --- FUTEBOL / APOSTAS ---
         con_fut = conectar_futebol()
         cur_fut = con_fut.cursor(dictionary=True)
@@ -10368,6 +10489,9 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
         )
         maior_streak = (cur_fut.fetchone() or {}).get("maior_streak", 0)
 
+        # Delay para evitar rate limiting
+        await asyncio.sleep(0.3)
+
         cur_fut.execute(
             """
             SELECT id FROM loja_pontos
@@ -10383,9 +10507,7 @@ async def gerar_conquistas_embed(alvo: discord.Member, guild: discord.Guild):
         if tempo_em_call is None:
             tempo_em_call = 0
 
-        # Fechar conexões
-        cur_vips.close()
-        con_vips.close()
+        # Fechar conexão football
         cur_fut.close()
         con_fut.close()
 
