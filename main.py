@@ -932,6 +932,9 @@ EMOJI_TIMES = {
     "colombia": "<:FCFLogo2023:1516917409355923647>",
     "canada": "<:Logotipo_Seleo_Canad:1517510120182124544>",
     "suica": "<:SFV_Logo:1517510857620455444>",
+    "australia": "<:Australia_national_football_team:1517513264336994315>",
+    "turquia": "<:Roundel_flag_of_Turkey:1517513770593685626>",
+    "haiti": "<:Federation_Haitienne_de_Football:1517514318055342292>",
     # =======================
     # 🌍 CLUBES INTERNACIONAIS (UEFA)
     # =======================
@@ -6809,6 +6812,14 @@ MAPEAMENTO_TIMES = {
     "switzerland": "suica",
     "suiça": "suica",
     "suíça": "suica",
+    "australia": "australia",
+    "austrália": "australia",
+    "turkey": "turquia",
+    "turquia": "turquia",
+    "turquia": "turquia",
+    "haiti": "haiti",
+    "haití": "haiti"
+
 }
 
 def get_estadio_time_casa(nome_time_api: str):
@@ -6990,7 +7001,10 @@ PALAVRAS_GOL = {
     "equador":        "🇪🇨 GOOOOOOOL DO EQUADOR!!!",
     "colombia":       "🇨🇴 GOOOOOOOL DA COLÔMBIA!!!",
     "canada": "🇨🇦 GOOOOOOOL DO CANADÁ!!!",
-    "suica": "🇨🇭 GOOOOOOOL DA SUÍÇA!!!"
+    "suica": "🇨🇭 GOOOOOOOL DA SUÍÇA!!!",
+    "australia": "🇦🇺 GOOOOOOOL DA AUSTRÁLIA!!!",
+    "turquia": "🇹🇷 GOOOOOOOL DA TURQUIA!!!",
+    "haiti": "🇭🇹 GOOOOOOOL DO HAITI!!!",
 }
 
 GIFS_VITORIA_TIME = {
